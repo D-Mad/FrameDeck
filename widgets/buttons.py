@@ -48,6 +48,10 @@ class ForwardButton(IconButton):
     name = "forward"
 
 
+class HelpButton(IconButton):
+    name = "help"
+
+
 class LoopButton(QtWidgets.QToolButton):
     name = "loop"
 

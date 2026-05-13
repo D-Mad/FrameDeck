@@ -4,9 +4,9 @@ import logger
 
 from PySide6 import QtCore
 
+from playback.cache import FrameCache1
 from playback.reader import VideoReader
 from playback.reader import SequenceReader
-from playback.frame_cache import FrameCache
 
 LOGGER = logger.getLogger(__name__)
 
@@ -26,20 +26,24 @@ class MediaPlayer(QtCore.QObject):
         self.view = None
 
         self.reader = None
+        self.playbutton = None
 
         self.fps = None
 
-        self.current_frame = 0
+        self.current_frame = 1
         self.frame_count = 0
 
         self.loop_enabled = False
         self.is_playing = False
 
-        self.cache = FrameCache(max_size=200)
+        self.cache = FrameCache1(max_size=200)
 
         self.timer = QtCore.QTimer()
 
         self.timer.timeout.connect(self.next_frame)
+
+    def set_playbutton(self, playbutton):
+        self.playbutton = playbutton
 
     def load(self, path):
         extension = os.path.splitext(path)[1].lower()
@@ -52,10 +56,11 @@ class MediaPlayer(QtCore.QObject):
 
         self.frame_count = self.reader.frame_count()
 
-        self.current_frame = 0
-        self.start_frame = 0
-        self.end_frame = self.frame_count - 1
+        self.current_frame = 1
+        self.start_frame = 1
+        self.end_frame = self.frame_count # - 1
 
+        self.cache.clear()
         self.update_frame()
 
     def toggle_play_pause(self):
@@ -91,9 +96,15 @@ class MediaPlayer(QtCore.QObject):
 
         self.is_playing = True
 
+        if self.playbutton:
+            self.playbutton.switch(True)
+
     def stop(self):
         self.timer.stop()
         self.is_playing = False
+
+        if self.playbutton:
+            self.playbutton.switch(False)
 
     def set_loop(self, enabled):
         self.loop_enabled = enabled
@@ -104,7 +115,6 @@ class MediaPlayer(QtCore.QObject):
 
     def next_frame(self):
         self.current_frame += 1
-
         if self.current_frame >= self.frame_count:
 
             if self.loop_enabled:
@@ -116,11 +126,16 @@ class MediaPlayer(QtCore.QObject):
         self.update_frame()
 
     def update_frame(self):
-        frame = self.reader.get_frame(self.current_frame)
-        self.cache.add(self.current_frame, frame)
+
+        if self.cache.chunks and self.current_frame-1 in self.cache.chunks:
+            frame = self.cache.chunks[self.current_frame-1]
+        else:
+            frame = self.reader.get_frame(self.current_frame-1)
+
+        self.cache.add(self.current_frame-1, frame)
 
         self.frame_ready.emit(frame)
-        self.frame_changed.emit(self.current_frame)
+        self.frame_changed.emit(self.current_frame-1)
 
     def _update_frame(self):
         frame = self.reader.get_frame(self.current_frame)
@@ -145,26 +160,26 @@ class MediaPlayer(QtCore.QObject):
         self.frame_ready.emit(frame)
         self.frame_changed.emit(self.current_frame)
 
-    def previous_frame(self):
+    def backword_frame(self):
         if not self.reader:
             return
 
         self.current_frame -= 1
 
-        if self.current_frame < 0:
-            self.current_frame = self.frame_count - 1
+        if self.current_frame < 1:
+            self.current_frame = self.frame_count
 
         self.update_frame()
 
-    def next_frame_manual(self):
+    def forward_frame(self):
 
         if not self.reader:
             return
 
         self.current_frame += 1
 
-        if self.current_frame >= self.frame_count:
-            self.current_frame = 0
+        if self.current_frame > self.frame_count:
+            self.current_frame = 1
 
         self.update_frame()
 

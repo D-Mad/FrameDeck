@@ -16,6 +16,7 @@ from widgets.viewer import ViewerWidget
 from widgets.pixmaps import NamePixmapIcon
 from widgets.timeline import TimelineWidget
 
+from widgets.buttons import HelpButton
 from widgets.buttons import OpenButton
 from widgets.buttons import LoopButton
 from widgets.buttons import ForwardButton
@@ -82,6 +83,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.combobox = QtWidgets.QComboBox(self)
         self.horizontallayout_panel.addWidget(self.combobox)
 
+        self.helpButton = HelpButton(self, width=32, height=32)
+        self.horizontallayout_panel.addWidget(self.helpButton)
+
         self.viewer = ViewerWidget(self)
         self.verticallayout_viewer.addWidget(self.viewer)
 
@@ -101,6 +105,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.horizontallayout_controller.addWidget(self.backwordButton)
 
         self.playPauseButton = PlayPauseButton(self, width=42, height=42)
+        self.player.set_playbutton(self.playPauseButton)
         self.horizontallayout_controller.addWidget(self.playPauseButton)
 
         self.forwardButton = ForwardButton(self, width=32, height=32)
@@ -137,11 +142,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player.frame_changed.connect(self.timeline.set_frame)
 
         # self.timeline.frame_changed.connect(self.player.seek)
+        self.timeline.frame_changed.connect(self.seek)
 
-        self.backwordButton.clicked.connect(self.player.previous_frame)
-        self.forwardButton.clicked.connect(self.player.next_frame_manual)
+        self.backwordButton.clicked.connect(self.backword_frame)
+        self.forwardButton.clicked.connect(self.forward_frame)
 
-        # self.fpsCombobox.currentTextChanged.connect(self.update_fps)
+        self.helpButton.clicked.connect(self.help)
+
 
     def setupIcons(self):
         pixmap = NamePixmapIcon(constants.RP_TOOL_ICON)
@@ -163,12 +170,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.reset_video_fps()
 
-        self.timeline.set_range(0, self.player.frame_count - 1)
+        # self.timeline.set_range(1, self.player.frame_count)
+        # self.timeline.set_range(0, self.player.frame_count - 1)
+
+        self.timeline.set_range(1, self.player.frame_count)
 
     def toggle_play_pause(self):
         self.player.toggle_play_pause()
-        self.playPauseButton.switch(self.player.is_playing)
+        # self.playPauseButton.switch(self.player.is_playing)
+        self.reset_video_fps()
 
+    def seek(self):
+        self.player.seek(self.timeline.current_frame)
+        self.reset_video_fps()
+
+    def backword_frame(self):
+        self.player.backword_frame()
+        self.reset_video_fps()
+
+    def forward_frame(self):
+        self.player.forward_frame()
         self.reset_video_fps()
 
     def reset_video_fps(self):
@@ -190,6 +211,12 @@ class MainWindow(QtWidgets.QMainWindow):
         fps = float(context["value"])
 
         self.player.set_fps(fps)
+
+    def help(self):
+        print(list(self.player.cache.cache.keys()))
+
+        print(self.player.cache.cache[0])
+
 
     def build_ui(self):
 

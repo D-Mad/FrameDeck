@@ -13,10 +13,12 @@ class TimelineWidget(QtWidgets.QWidget):
 
         self.setMinimumHeight(60)
 
-        self.start_frame = 0
+        self.timeline_margin = 25
+
+        self.start_frame = 1
         self.end_frame = 100
 
-        self.current_frame = 0
+        self.current_frame = 1
 
         self.setMouseTracking(True)
 
@@ -29,7 +31,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def set_frame(self, frame):
 
-        self.current_frame = frame
+        self.current_frame = frame + self.start_frame
 
         self.update()
 
@@ -47,7 +49,10 @@ class TimelineWidget(QtWidgets.QWidget):
         if total_frames <= 0:
             return
 
-        pixels_per_frame = width / total_frames
+        # pixels_per_frame = width / total_frames
+
+        usable_width = (width - (self.timeline_margin * 2))
+        pixels_per_frame = (usable_width / (total_frames - 1))
 
         # --------------------------------------------------
         # Draw frame ticks
@@ -55,21 +60,17 @@ class TimelineWidget(QtWidgets.QWidget):
 
         for frame in range(self.start_frame, self.end_frame + 1):
 
-            x = int((frame - self.start_frame) * pixels_per_frame)
+            # x = int((frame - self.start_frame) * pixels_per_frame)
+
+            x = int(self.timeline_margin + ((frame - self.start_frame) * pixels_per_frame))
 
             # Major tick every 10 frames
-            if frame % 10 == 0:
-
+            if frame % 10 == 0 or frame in [self.start_frame, self.end_frame]:
                 painter.setPen(QtGui.QColor(180, 180, 180))
-
                 painter.drawLine(x, 0, x, 25)
-
                 painter.drawText(x + 2, 40, str(frame))
-
             else:
-
                 painter.setPen(QtGui.QColor(100, 100, 100))
-
                 painter.drawLine(x, 10, x, 20)
         """
         # --------------------------------------------------
@@ -100,7 +101,9 @@ class TimelineWidget(QtWidgets.QWidget):
         # Draw current frame indicator
         # --------------------------------------------------
 
-        current_x = int((self.current_frame - self.start_frame) * pixels_per_frame)
+        # current_x = int((self.current_frame - self.start_frame) * pixels_per_frame)
+
+        current_x = int(self.timeline_margin + ((self.current_frame - self.start_frame) * pixels_per_frame))
 
         # Playhead line
         painter.setPen(QtGui.QPen(QtGui.QColor(255, 80, 80), 2))
@@ -126,6 +129,7 @@ class TimelineWidget(QtWidgets.QWidget):
         text_y = height - 10
 
         # Background box
+
         rect = QtCore.QRect(
             text_x - padding, text_y - text_height, text_width + padding * 2, text_height + 4
         )
@@ -138,13 +142,10 @@ class TimelineWidget(QtWidgets.QWidget):
         painter.drawText(rect, QtCore.Qt.AlignCenter, frame_text)
 
     def mousePressEvent(self, event):
-
         self.update_frame_from_mouse(event.pos().x())
 
     def mouseMoveEvent(self, event):
-
         if event.buttons() & QtCore.Qt.LeftButton:
-
             self.update_frame_from_mouse(event.pos().x())
 
     def update_frame_from_mouse(self, x):
@@ -156,11 +157,19 @@ class TimelineWidget(QtWidgets.QWidget):
         if width <= 0:
             return
 
-        ratio = x / width
+        # ratio = x / width
 
-        frame = int(self.start_frame + ratio * total_frames)
+        usable_width = (width - (self.timeline_margin * 2))
+        local_x = (x - self.timeline_margin)
+        local_x = max(0, min(local_x, usable_width))
+        ratio = local_x / usable_width
 
-        frame = max(self.start_frame, min(frame, self.end_frame))
+
+        # frame = int(self.start_frame + ratio * total_frames)
+        # frame = max(self.start_frame, min(frame, self.end_frame))
+
+        frame = int(ratio * (total_frames - 1))
+        frame += self.start_frame
 
         self.current_frame = frame
 
