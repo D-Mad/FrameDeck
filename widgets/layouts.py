@@ -74,3 +74,7 @@ class VerticalSpacer(QtWidgets.QSpacerItem):
         super(VerticalSpacer, self).__init__(
             20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
+
+
+if __name__ == "__main__":
+    pass

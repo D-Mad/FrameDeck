@@ -36,6 +36,8 @@ class MediaPlayer(QtCore.QObject):
         self.loop_enabled = False
         self.is_playing = False
 
+        self.current_aov = "rgb"
+
         self.cache = FrameCache1(max_size=200)
 
         self.timer = QtCore.QTimer()
@@ -56,9 +58,9 @@ class MediaPlayer(QtCore.QObject):
 
         self.frame_count = self.reader.frame_count()
 
-        self.current_frame = 1
         self.start_frame = 1
-        self.end_frame = self.frame_count # - 1
+        self.current_frame = self.start_frame
+        self.end_frame = self.frame_count  # - 1
 
         self.cache.clear()
         self.update_frame()
@@ -72,7 +74,7 @@ class MediaPlayer(QtCore.QObject):
     def set_fps(self, fps):
         self.fps = fps
 
-        if self.reader and self.reader.typed == "sequence":
+        if self.reader and self.reader.media_type == "sequence":
             self.reader.set_fps(fps)
 
         # Restart timer if currently playing
@@ -81,6 +83,11 @@ class MediaPlayer(QtCore.QObject):
             self.timer.start(interval)
 
         LOGGER.info(f'Current FPS, has been changed into, "{fps}-FPS"')
+
+    def set_aov(self, aov):
+        self.current_aov = aov
+        self.cache.clear()
+        self.update_frame()
 
     def play(self):
         if not self.reader:
@@ -127,15 +134,15 @@ class MediaPlayer(QtCore.QObject):
 
     def update_frame(self):
 
-        if self.cache.chunks and self.current_frame-1 in self.cache.chunks:
-            frame = self.cache.chunks[self.current_frame-1]
+        if self.cache.chunks and self.current_frame - 1 in self.cache.chunks:
+            frame = self.cache.chunks[self.current_frame - 1]
         else:
-            frame = self.reader.get_frame(self.current_frame-1)
+            frame = self.reader.get_frame(self.current_frame - 1, aov=self.current_aov)
 
-        self.cache.add(self.current_frame-1, frame)
+        self.cache.add(self.current_frame - 1, frame)
 
         self.frame_ready.emit(frame)
-        self.frame_changed.emit(self.current_frame-1)
+        self.frame_changed.emit(self.current_frame - 1)
 
     def _update_frame(self):
         frame = self.reader.get_frame(self.current_frame)
@@ -190,3 +197,7 @@ class MediaPlayer(QtCore.QObject):
         self.display = display
         self.view = view
         self.update_frame()
+
+
+if __name__ == "__main__":
+    pass

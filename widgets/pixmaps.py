@@ -22,3 +22,7 @@ class NamePixmapIcon(QtGui.QIcon):
 
         pixmap = NamePixmap(name)
         self.addPixmap(pixmap, QtGui.QIcon.Normal, QtGui.QIcon.Off)
+
+
+if __name__ == "__main__":
+    pass

@@ -1,9 +1,11 @@
+import utils
 import logger
 import constants
-import qdarktheme
 
+from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
+from ocio import OCIOProcessor
 
 from widgets.playlist import PlaylistGroup
 from widgets.layouts import VerticalLayout
@@ -24,16 +26,13 @@ from widgets.buttons import BackwordButton
 from widgets.buttons import PlayPauseButton
 
 from widgets.comboboxs import FbsCombobox
+from widgets.comboboxs import AovsCombobox
 
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalSplitter
 from widgets.dialogs import OpenMediaDialog
 
 from playback.player import MediaPlayer
-
-from ocio.ocio_processor import OCIOProcessor
-
-from utils import path_utils
 
 LOGGER = logger.getLogger(__name__)
 
@@ -80,10 +79,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.horizontallayout_panel = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
         self.verticallayout_viewer.addLayout(self.horizontallayout_panel)
 
-        self.combobox = QtWidgets.QComboBox(self)
-        self.horizontallayout_panel.addWidget(self.combobox)
+        self.aovsCombobox = AovsCombobox(self)
+        self.horizontallayout_panel.addWidget(self.aovsCombobox)
 
-        self.helpButton = HelpButton(self, width=32, height=32)
+        self.horizontalspacer1 = HorizontalSpacer()
+        self.horizontallayout_panel.addItem(self.horizontalspacer1)
+
+        self.helpButton = HelpButton(self, tooltip="Help and Support", width=32, height=32)
         self.horizontallayout_panel.addWidget(self.helpButton)
 
         self.viewer = ViewerWidget(self)
@@ -95,24 +97,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.horizontallayout_controller = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
         self.verticallayout_viewer.addLayout(self.horizontallayout_controller)
 
-        self.openButton = OpenButton(self, width=32, height=32)
+        self.openButton = OpenButton(self, tooltip="Open Media", width=32, height=32)
         self.horizontallayout_controller.addWidget(self.openButton)
-
-        self.horizontalspacer1 = HorizontalSpacer()
-        self.horizontallayout_controller.addItem(self.horizontalspacer1)
-
-        self.backwordButton = BackwordButton(self, width=32, height=32)
-        self.horizontallayout_controller.addWidget(self.backwordButton)
-
-        self.playPauseButton = PlayPauseButton(self, width=42, height=42)
-        self.player.set_playbutton(self.playPauseButton)
-        self.horizontallayout_controller.addWidget(self.playPauseButton)
-
-        self.forwardButton = ForwardButton(self, width=32, height=32)
-        self.horizontallayout_controller.addWidget(self.forwardButton)
 
         self.horizontalspacer2 = HorizontalSpacer()
         self.horizontallayout_controller.addItem(self.horizontalspacer2)
+
+        self.backwordButton = BackwordButton(self, tooltip="Backword Frame", width=32, height=32)
+        self.horizontallayout_controller.addWidget(self.backwordButton)
+
+        self.playPauseButton = PlayPauseButton(self, tooltip="Play", width=42, height=42)
+        self.player.set_playbutton(self.playPauseButton)
+        self.horizontallayout_controller.addWidget(self.playPauseButton)
+
+        self.forwardButton = ForwardButton(self, tooltip="Forward Frame", width=32, height=32)
+        self.horizontallayout_controller.addWidget(self.forwardButton)
+
+        self.horizontalspacer3 = HorizontalSpacer()
+        self.horizontallayout_controller.addItem(self.horizontalspacer3)
 
         self.loopButton = LoopButton(self, width=42, height=32)
 
@@ -129,6 +131,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.showMaximized()
 
         SetStylesheet(self, theme=constants.DEFAULT_THEME)
+
+        self.aovsCombobox.currentTextChanged.connect(self.player.set_aov)
 
         # self.openButton.clicked.connect(self.open_media)
         self.openButton.clicked.connect(self.openMedia)
@@ -149,13 +153,30 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.helpButton.clicked.connect(self.help)
 
+        # Create the shortcuts
+        self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
+        self.playShortcut.activated.connect(self.toggle_play_pause)
+
+        self.backwordShortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self)
+        self.backwordShortcut.activated.connect(self.backword_frame)
+
+        self.forwardShortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self)
+        self.forwardShortcut.activated.connect(self.forward_frame)
+
+        self.openShortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self)
+        self.openShortcut.activated.connect(self.openMedia)
+
+        self.loopShortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+L"), self)
+        self.loopShortcut.activated.connect(self.set_loop)
+
+        self.helpShortcut = QtGui.QShortcut(QtGui.QKeySequence("F2"), self)
+        self.helpShortcut.activated.connect(self.help)
 
     def setupIcons(self):
         pixmap = NamePixmapIcon(constants.RP_TOOL_ICON)
         self.setWindowIcon(pixmap)
 
     def openMedia(self):
-
         dialog = OpenMediaDialog(self)
 
         if dialog.exec():
@@ -167,13 +188,24 @@ class MainWindow(QtWidgets.QMainWindow):
         LOGGER.info(f"Source filepath, {filepath}")
 
         self.player.load(filepath)
-
         self.reset_video_fps()
+
+        if self.player.reader.media_type == "sequence":
+            self.aovsCombobox.setEnabled(True)
+            self.aovsCombobox.clear()
+            self.aovsCombobox.addItems(self.player.reader.get_available_aovs())
+        else:
+            self.aovsCombobox.clear()
+            self.aovsCombobox.setEnabled(False)
 
         # self.timeline.set_range(1, self.player.frame_count)
         # self.timeline.set_range(0, self.player.frame_count - 1)
 
         self.timeline.set_range(1, self.player.frame_count)
+
+    def set_loop(self):
+        enable = False if self.loopButton.isChecked() else True
+        self.loopButton.setChecked(enable)
 
     def toggle_play_pause(self):
         self.player.toggle_play_pause()
@@ -193,7 +225,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reset_video_fps()
 
     def reset_video_fps(self):
-        if self.player.reader.typed != "video":
+        if not self.player.reader:
+            return
+
+        if self.player.reader.media_type != "video":
             return
 
         fps = self.player.reader.get_fps(rounded=3)
@@ -213,15 +248,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player.set_fps(fps)
 
     def help(self):
-        print(list(self.player.cache.cache.keys()))
-
-        print(self.player.cache.cache[0])
-
+        LOGGER.info(f"Support, {constants.WEBLINK}")
+        utils.openUrl(constants.WEBLINK)
 
     def build_ui(self):
-
         self.viewer = ViewerWidget()
-
         self.timeline = TimelineWidget()
 
         # display
@@ -341,3 +372,7 @@ class MainWindow(QtWidgets.QMainWindow):
         view = self.view_combo.currentText()
 
         self.player.set_ocio(self.ocio, input_space, display, view)
+
+
+if __name__ == "__main__":
+    pass

@@ -68,7 +68,8 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
         super().__init__(parent)
 
         # self.browsepath = kwargs.get("browsepath", QtCore.QDir.homePath())
-        self.browsepath = "/alpha/works/C2C/samples/footage/shot-1001-1/"
+        # self.browsepath = "/alpha/works/C2C/samples/footage/shot-1001-1/"
+        self.browsepath = "/alpha/works/C2C/samples/exr/street/"
 
         self.setDirectory(self.browsepath)
         self.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)
@@ -125,9 +126,4 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
 
 
 if __name__ == "__main__":
-    import sys
-
-    app = QtWidgets.QApplication(sys.argv)
-    dialog = OpenMediaDialog()
-    if dialog.exec():
-        print(f"Files: {dialog.get_full_sequence()}")
+    pass

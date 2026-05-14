@@ -1,53 +1,17 @@
-import PyOpenColorIO as OCIO
-
-"""
-class OCIOProcessor:
-
-    def __init__(self, config_path=None):
-
-        if config_path:
-            self.config = OCIO.Config.CreateFromFile(
-                config_path
-            )
-
-        else:
-            self.config = OCIO.GetCurrentConfig()
-
-    def process_image(
-        self,
-        image,
-        input_space="Linear",
-        display="sRGB",
-        view="Film"
-    ):
-
-        processor = self.config.getProcessor(
-            input_space,
-            display,
-            view
-        )
-
-        cpu = processor.getDefaultCPUProcessor()
-
-        return cpu.applyRGB(image)
-
-"""
+import PyOpenColorIO
 
 
-import PyOpenColorIO as OCIO
-
-
-class OCIOProcessor:
+class OCIOProcessor(object):
 
     def __init__(self, config_path=None):
 
         if config_path:
 
-            self.config = OCIO.Config.CreateFromFile(config_path)
+            self.config = PyOpenColorIO.Config.CreateFromFile(config_path)
 
         else:
 
-            self.config = OCIO.GetCurrentConfig()
+            self.config = PyOpenColorIO.GetCurrentConfig()
 
     # --------------------------------------------------
     # Color spaces
@@ -80,7 +44,7 @@ class OCIOProcessor:
     def _process_image(self, image, input_space, display, view):
 
         processor = self.config.getProcessor(
-            OCIO.DisplayViewTransform(src=input_space, display=display, view=view)
+            PyOpenColorIO.DisplayViewTransform(src=input_space, display=display, view=view)
         )
 
         cpu = processor.getDefaultCPUProcessor()
@@ -89,7 +53,7 @@ class OCIOProcessor:
 
     def process_image(self, image, input_space, display, view):
 
-        transform = OCIO.DisplayViewTransform()
+        transform = PyOpenColorIO.DisplayViewTransform()
 
         transform.setSrc(input_space)
 
@@ -106,3 +70,40 @@ class OCIOProcessor:
         cpu_processor.applyRGB(image)
 
         return image
+
+
+"""
+class OCIOProcessor:
+
+    def __init__(self, config_path=None):
+
+        if config_path:
+            self.config = PyOpenColorIO.Config.CreateFromFile(
+                config_path
+            )
+
+        else:
+            self.config = PyOpenColorIO.GetCurrentConfig()
+
+    def process_image(
+        self,
+        image,
+        input_space="Linear",
+        display="sRGB",
+        view="Film"
+    ):
+
+        processor = self.config.getProcessor(
+            input_space,
+            display,
+            view
+        )
+
+        cpu = processor.getDefaultCPUProcessor()
+
+        return cpu.applyRGB(image)
+
+"""
+
+if __name__ == "__main__":
+    pass

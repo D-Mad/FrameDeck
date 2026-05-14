@@ -35,3 +35,6 @@ FPS_VALUES = [
 DEFULT_FPS = FPS_VALUES[1]
 
 COPYRIGHT_LABEL = "Support, Subin. Gopi (subing85@gmail.com)."  # "Copyright (c) 2026, Motion-Craft Technology All rights reserved."
+
+
+WEBLINK = "https://github.com/subing85/review_player"

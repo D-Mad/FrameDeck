@@ -1,4 +1,3 @@
-
 class FrameCache1(object):
 
     def __init__(self, max_size=100):
@@ -20,3 +19,7 @@ class FrameCache1(object):
 
     def clear(self):
         self.chunks.clear()
+
+
+if __name__ == "__main__":
+    pass

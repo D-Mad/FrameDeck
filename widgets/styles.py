@@ -45,3 +45,7 @@ class Font(QtGui.QFont):
 
         if kwargs.get("family"):
             self.setFamily(kwargs.get("family"))
+
+
+if __name__ == "__main__":
+    pass

@@ -11,6 +11,9 @@ class ContextCombobox(QtWidgets.QComboBox):
         self.key = kwargs.get("key", "code")
         self.contextList = kwargs.get("contextList", list())
 
+        if kwargs.get("tooltip"):
+            self.setToolTip(kwargs["tooltip"])
+
         self.setItems(contextList=None)
 
         self.currentIndexChanged.connect(self.indexChange)
@@ -68,9 +71,33 @@ class FbsCombobox(ContextCombobox):
 
         super(FbsCombobox, self).__init__(parent, **kwargs)
 
+        self.setToolTip("Frame Per Second")
+
         self.setValue(constants.DEFULT_FPS)
 
     def indexChange(self, index):
         super().indexChange(index)
 
         self.fps_changed.emit(self.context)
+
+
+class AovsCombobox(QtWidgets.QComboBox):
+    def __init__(self, parent, **kwargs):
+        super(AovsCombobox, self).__init__(parent)
+
+        self.setToolTip("Source Media Aovs")
+
+        self.setMinimumSize(QtCore.QSize(150, 0))
+        # sizepolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        # self.setSizePolicy(sizepolicy)
+
+    def setAovs(self, aovs):
+        aovs = aovs or list()
+
+        self.clear()
+        self.addItems(aovs)
+        self.setEnabled(True if aovs else False)
+
+
+if __name__ == "__main__":
+    pass

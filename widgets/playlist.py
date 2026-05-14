@@ -11,3 +11,7 @@ class PlaylistGroup(QtWidgets.QGroupBox):
 
         self.setMinimumSize(QtCore.QSize(200, 0))
         self.setMaximumSize(QtCore.QSize(200, 16777215))
+
+
+if __name__ == "__main__":
+    pass

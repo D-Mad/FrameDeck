@@ -51,8 +51,8 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # pixels_per_frame = width / total_frames
 
-        usable_width = (width - (self.timeline_margin * 2))
-        pixels_per_frame = (usable_width / (total_frames - 1))
+        usable_width = width - (self.timeline_margin * 2)
+        pixels_per_frame = usable_width / (total_frames - 1)
 
         # --------------------------------------------------
         # Draw frame ticks
@@ -103,7 +103,9 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # current_x = int((self.current_frame - self.start_frame) * pixels_per_frame)
 
-        current_x = int(self.timeline_margin + ((self.current_frame - self.start_frame) * pixels_per_frame))
+        current_x = int(
+            self.timeline_margin + ((self.current_frame - self.start_frame) * pixels_per_frame)
+        )
 
         # Playhead line
         painter.setPen(QtGui.QPen(QtGui.QColor(255, 80, 80), 2))
@@ -159,11 +161,10 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # ratio = x / width
 
-        usable_width = (width - (self.timeline_margin * 2))
-        local_x = (x - self.timeline_margin)
+        usable_width = width - (self.timeline_margin * 2)
+        local_x = x - self.timeline_margin
         local_x = max(0, min(local_x, usable_width))
         ratio = local_x / usable_width
-
 
         # frame = int(self.start_frame + ratio * total_frames)
         # frame = max(self.start_frame, min(frame, self.end_frame))
@@ -176,3 +177,7 @@ class TimelineWidget(QtWidgets.QWidget):
         self.frame_changed.emit(frame)
 
         self.update()
+
+
+if __name__ == "__main__":
+    pass

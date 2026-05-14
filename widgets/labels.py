@@ -21,3 +21,7 @@ class CopyrightLabel(QtWidgets.QLabel):
         )
         self.setSizePolicy(sizepolicy)
         # self.setStyleSheet(f"background-color: rgb(65, 65, 65);")
+
+
+if __name__ == "__main__":
+    pass

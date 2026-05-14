@@ -1,9 +1,9 @@
-import numpy as np
+import numpy
+
+from OpenGL import GL
 
 from PySide6 import QtWidgets
 from PySide6 import QtOpenGLWidgets
-
-from OpenGL.GL import *
 
 
 class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
@@ -11,7 +11,6 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Expanding)
         sizePolicy = QtWidgets.QSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding
         )
@@ -28,22 +27,22 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
     def initializeGL(self):
 
-        glClearColor(0.1, 0.1, 0.1, 1.0)
+        GL.glClearColor(0.1, 0.1, 0.1, 1.0)
 
     def resizeGL(self, width, height):
 
-        glViewport(0, 0, width, height)
+        GL.glViewport(0, 0, width, height)
 
     def paintGL(self):
 
-        glClear(GL_COLOR_BUFFER_BIT)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
         if self.frame is None:
             return
 
-        image = np.flipud(self.frame)
+        image = numpy.flipud(self.frame)
 
-        image = np.ascontiguousarray(image)
+        image = numpy.ascontiguousarray(image)
 
         image_height, image_width, channels = image.shape
 
@@ -101,26 +100,28 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # Configure 2D projection
         # --------------------------------------------------
 
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glLoadIdentity()
 
-        glOrtho(0, viewport_width, 0, viewport_height, -1, 1)
+        GL.glOrtho(0, viewport_width, 0, viewport_height, -1, 1)
 
-        glMatrixMode(GL_MODELVIEW)
-        glLoadIdentity()
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glLoadIdentity()
 
         # --------------------------------------------------
         # Draw image
         # --------------------------------------------------
 
-        glRasterPos2i(x, y)
+        GL.glRasterPos2i(x, y)
 
-        glPixelZoom(draw_width / image_width, draw_height / image_height)
+        GL.glPixelZoom(draw_width / image_width, draw_height / image_height)
 
-        glDrawPixels(image_width, image_height, GL_RGB, GL_UNSIGNED_BYTE, image)
+        gl_format = GL.GL_RGBA if channels == 4 else GL.GL_RGB
+
+        GL.glDrawPixels(image_width, image_height, gl_format, GL.GL_UNSIGNED_BYTE, image)
 
         # Reset zoom
-        glPixelZoom(1, 1)
+        GL.glPixelZoom(1, 1)
 
 
 """
@@ -153,9 +154,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         if self.frame is None:
             return
 
-        image = np.flipud(self.frame)
+        image = numpy.flipud(self.frame)
 
-        image = np.ascontiguousarray(image)
+        image = numpy.ascontiguousarray(image)
 
         height, width, channels = image.shape
 
@@ -170,3 +171,6 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         )
 
 """
+
+if __name__ == "__main__":
+    pass

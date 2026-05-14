@@ -13,6 +13,6 @@ dirname=$(dirname -- "$0")
 export PYTHONPATH="$LIB_DIR/darkdetect/0.7.1:$LIB_DIR/pyqtdarktheme/2.1.0:$LIB_DIR/OpenImageIO/3.0.4.0:$LIB_DIR/shiboken6/6.9.0:$LIB_DIR/PySide6-Essentials/6.9.0:$LIB_DIR/PySide6-Addons/6.9.0:$LIB_DIR/PyOpenGL/3.1.9:$LIB_DIR/opencolorio/2.5.0:$LIB_DIR/av/17.0.0:$LIB_DIR/numpy/1.26.4:/run/media/batman/ALPHA/works/developments/review_player/:"
 export OCIO="/alpha/works/C2C/devkit/ocio/studio-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio"
 
-"$PYTHON" "/run/media/batman/ALPHA/works/developments/review_player/widgets/dialogs.py"
+"$PYTHON" "/run/media/batman/ALPHA/works/developments/review_player/examples/mov_test_01.py"
 
 

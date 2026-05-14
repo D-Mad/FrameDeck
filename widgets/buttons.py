@@ -15,7 +15,7 @@ class IconButton(QtWidgets.QPushButton):
         self.height = kwargs.get("height", 22)
         self.locked = False if kwargs.get("locked") == False else True
 
-        self.setToolTip(kwargs.get("toolTip", "unknown"))
+        self.setToolTip(kwargs.get("tooltip", "unknown"))
         self.setFlat(True)
 
         icon = NamePixmapIcon(self.name)
@@ -39,9 +39,10 @@ class PlayPauseButton(IconButton):
     name = "play"
 
     def switch(self, value):
-        icon = "pause" if value else self.name
-        icon = NamePixmapIcon(icon)
+        name = "pause" if value else self.name
+        icon = NamePixmapIcon(name)
         self.setIcon(icon)
+        self.setToolTip(name.capitalize())
 
 
 class ForwardButton(IconButton):
@@ -81,5 +82,9 @@ class TextButton(QtWidgets.QToolButton):
 
         self.setText(args[0])
 
-        if kwargs.get("toolTip"):
-            self.setToolTip(kwargs["toolTip"])
+        if kwargs.get("tooltip"):
+            self.setToolTip(kwargs["tooltip"])
+
+
+if __name__ == "__main__":
+    pass
