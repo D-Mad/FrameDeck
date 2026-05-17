@@ -1,3 +1,10 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QLabel wapper module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
 import constants
 
 from PySide6 import QtCore
@@ -20,7 +27,6 @@ class CopyrightLabel(QtWidgets.QLabel):
             QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed
         )
         self.setSizePolicy(sizepolicy)
-        # self.setStyleSheet(f"background-color: rgb(65, 65, 65);")
 
 
 if __name__ == "__main__":

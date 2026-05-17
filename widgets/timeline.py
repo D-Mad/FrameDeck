@@ -1,3 +1,12 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt Custom Timeline widget module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
+import constants
+
 from PySide6 import QtCore
 from PySide6 import QtGui
 from PySide6 import QtWidgets
@@ -8,22 +17,16 @@ class TimelineWidget(QtWidgets.QWidget):
     frame_changed = QtCore.Signal(int)
 
     def __init__(self, parent=None):
-
         super().__init__(parent)
 
         self.setMinimumHeight(60)
 
-        self.timeline_margin = 25
+        self.cache_line = "bar" or "dots"
 
-        self.start_frame = 1
-        self.end_frame = 100
-        self.current_frame = 1
-
-        # self.start_frame = constants.START_FRAME
-        # self.end_frame = constants.START_FRAME + constants.DEFAULT_FRAMES
-        # self.current_frame = constants.START_FRAME
-
-
+        self.timeline_margin = 50
+        self.start_frame = constants.START_FRAME
+        self.end_frame = constants.START_FRAME + constants.DEFAULT_FRAMES
+        self.current_frame = constants.START_FRAME
         self.cached_frames = set()
 
         self.setMouseTracking(True)
@@ -34,7 +37,7 @@ class TimelineWidget(QtWidgets.QWidget):
         self.update()
 
     def set_current_frame(self, frame):
-        self.current_frame = frame + self.start_frame
+        self.current_frame = frame
         self.update()
 
     def set_cached_frames(self, frames):
@@ -91,7 +94,6 @@ class TimelineWidget(QtWidgets.QWidget):
         text_y = height - 10
 
         # Background box
-
         rect = QtCore.QRect(
             text_x - padding, text_y - text_height, text_width + padding * 2, text_height + 4
         )
@@ -102,25 +104,24 @@ class TimelineWidget(QtWidgets.QWidget):
         painter.setPen(QtGui.QColor(20, 20, 20))
         painter.drawText(rect, QtCore.Qt.AlignCenter, frame_text)
 
-        # Draw Cache Dot Bar
-        # cache_y = height - 10
-        # cache_y = 10
-        # for frame in self.cached_frames:
-        #     x = self.frame_to_pos(frame)
-        #     painter.fillRect(int(x), cache_y, 3, 6, QtGui.QColor(255, 170, 0))
+        if self.cache_line == "dots":
+            # Draw Cache Dot Bar
+            cache_y = height - 10
+            cache_y = 10
 
-        # Draw Cache Line Bar
+            for frame in self.cached_frames:
+                x = self.frame_to_pos(frame)
+                painter.fillRect(int(x), cache_y, 3, 6, QtGui.QColor(255, 170, 0))
 
-        ranges = self.build_ranges(self.cached_frames)
-        cache_y = 0  # - 10
+        if self.cache_line == "bar":
+            # Draw Cache Line Bar
+            ranges = self.build_ranges(self.cached_frames)
+            cache_y = 0  # - 10
 
-        # print("\n", ranges)
-
-        for start, end in ranges:
-            x1 = self.frame_to_pos(start)
-            x2 = self.frame_to_pos(end)
-            painter.fillRect(int(x1), cache_y, int(x2 - x1) + 4, 6, QtGui.QColor(255, 170, 0))
-
+            for start, end in ranges:
+                x1 = self.frame_to_pos(start)
+                x2 = self.frame_to_pos(end)
+                painter.fillRect(int(x1), cache_y, int(x2 - x1) + 4, 6, QtGui.QColor(255, 170, 0))
 
     def build_ranges(self, frames):
         if not frames:
@@ -129,32 +130,11 @@ class TimelineWidget(QtWidgets.QWidget):
         frames = sorted(frames)
 
         ranges = []
-        start = frames[0] + 1
-        end = frames[0]
-
-        for frame in frames:
-            end = frame+1
-
-        ranges.append((start, end))
-
-        return ranges
-
-    def build_ranges1(self, frames):
-        if not frames:
-            return []
-        frames = sorted(frames)
-        ranges = []
         start = frames[0]
         end = frames[0]
 
-        for frame in frames[1:]:
-            # contiguous
-            if frame == end + 1:
-                end = frame
-            else:
-                ranges.append((start, end))
-                start = frame
-                end = frame
+        for frame in frames:
+            end = frame
 
         ranges.append((start, end))
 
@@ -182,15 +162,10 @@ class TimelineWidget(QtWidgets.QWidget):
         if width <= 0:
             return
 
-        # ratio = x / width
-
         usable_width = width - (self.timeline_margin * 2)
         local_x = x - self.timeline_margin
         local_x = max(0, min(local_x, usable_width))
         ratio = local_x / usable_width
-
-        # frame = int(self.start_frame + ratio * total_frames)
-        # frame = max(self.start_frame, min(frame, self.end_frame))
 
         frame = int(ratio * (total_frames - 1))
         frame += self.start_frame

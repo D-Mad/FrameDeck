@@ -1,3 +1,9 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QMenu and QAction wapper module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
 
 import constants
 
@@ -8,12 +14,9 @@ from PySide6 import QtWidgets
 from widgets.pixmaps import NamePixmapIcon
 
 
-
 class DisplayMenus(QtWidgets.QMenu):
 
-    # overlay_changed = QtCore.Signal(str, str, bool, str) # key position checked type
-    overlay_changed = QtCore.Signal(bool, str, str, dict)  # key position property
-    # frame_changed = QtCore.Signal(int)
+    overlay_changed = QtCore.Signal(bool, str, str, dict)
 
     def __init__(self, parent, **kwargs):
         super().__init__(parent)
@@ -44,7 +47,11 @@ class DisplayMenus(QtWidgets.QMenu):
                     parameter["opacity"] = context["opacity"]
 
                 action.toggled.connect(
-                    lambda checked, key=context["code"], pos=position, param=parameter: self.overlay_changed.emit(checked, key, pos, param)
+                    lambda checked, key=context[
+                        "code"
+                    ], pos=position, param=parameter: self.overlay_changed.emit(
+                        checked, key, pos, param
+                    )
                 )
 
 

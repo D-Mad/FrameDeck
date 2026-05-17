@@ -1,3 +1,10 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QComboBox wapper module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
 import constants
 
 from PySide6 import QtCore
@@ -65,7 +72,6 @@ class FbsCombobox(ContextCombobox):
     fps_changed = QtCore.Signal(dict)
 
     def __init__(self, parent, **kwargs):
-
         kwargs["key"] = "code"
         kwargs["contextList"] = constants.FPS_VALUES
 
@@ -88,8 +94,9 @@ class AovsCombobox(QtWidgets.QComboBox):
         self.setToolTip("Source Media Aovs")
 
         self.setMinimumSize(QtCore.QSize(150, 0))
-        # sizepolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
-        # self.setSizePolicy(sizepolicy)
+
+        sizepolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        self.setSizePolicy(sizepolicy)
 
     def setAovs(self, aovs):
         aovs = aovs or list()

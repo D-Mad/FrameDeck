@@ -1,6 +1,14 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Player module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
 import os
 
 import logger
+import constants
 
 from PySide6 import QtCore
 
@@ -31,8 +39,11 @@ class MediaPlayer(QtCore.QObject):
 
         self.fps = None
 
-        self.start_frame = 1
-        self.current_frame = 1
+        # self.start_frame = 1
+        # self.current_frame = 1
+
+        self.start_frame = constants.START_FRAME
+        self.current_frame = constants.START_FRAME
         self.frame_count = 0
 
         self.loop_enabled = False
@@ -60,10 +71,9 @@ class MediaPlayer(QtCore.QObject):
 
         self.frame_count = self.reader.frame_count()
 
-        # 1, 1, 24
-        self.start_frame = 1
+        self.start_frame = constants.START_FRAME
         self.current_frame = self.start_frame
-        self.end_frame = self.frame_count  # - 1
+        self.end_frame = constants.START_FRAME + (self.frame_count)  # - 1
 
         self.cache.clear()
         self.cache_changed.emit([])
@@ -76,7 +86,7 @@ class MediaPlayer(QtCore.QObject):
         # Advance
         self.current_frame += 1
 
-        if self.current_frame > self.end_frame:
+        if self.current_frame >= self.end_frame:
             if self.loop_enabled:
                 self.current_frame = self.start_frame
             else:
@@ -84,17 +94,16 @@ class MediaPlayer(QtCore.QObject):
                 self.stop()
 
     def update_frame(self):
-        if self.cache.cache and self.current_frame-1 in self.cache.cache:
-            frame = self.cache.cache[self.current_frame-1]
+        if self.cache.cache and self.current_frame in self.cache.cache:
+            frame = self.cache.cache[self.current_frame]
         else:
-            frame = self.reader.get_frame(self.current_frame-1, aov=self.current_aov)
+            frame = self.reader.get_frame(self.current_frame, aov=self.current_aov)
 
-        self.cache.add(self.current_frame-1, frame)
+        self.cache.add(self.current_frame, frame)
         self.cache_changed.emit(self.cache.cached_frames())
 
         self.frame_ready.emit(frame)
-        self.frame_changed.emit(self.current_frame-1)
-
+        self.frame_changed.emit(self.current_frame)
 
     def toggle_play_pause(self):
         if self.is_playing:
@@ -106,8 +115,8 @@ class MediaPlayer(QtCore.QObject):
         if not self.reader:
             return
 
-        if self.current_frame >= self.end_frame - 1:
-            self.current_frame = self.start_frame - 1
+        if self.current_frame >= self.end_frame:
+            self.current_frame = self.start_frame
 
         fps = self.reader.get_fps()
 
@@ -125,7 +134,6 @@ class MediaPlayer(QtCore.QObject):
 
         if self.playbutton:
             self.playbutton.switch(False)
-
 
     def set_loop(self, enabled):
         self.loop_enabled = enabled

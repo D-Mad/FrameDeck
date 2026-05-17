@@ -1,3 +1,8 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt Custom media viewer widget module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
 import numpy
 
 import constants
@@ -8,6 +13,8 @@ from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 from PySide6 import QtOpenGLWidgets
+
+from widgets.styles import Font
 
 
 class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
@@ -69,7 +76,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # Fit Image
         if image_aspect > viewport_aspect:
             draw_width = viewport_width
-            draw_height = int(x / image_aspect)
+            draw_height = int(draw_width / image_aspect)
 
         else:
             draw_height = viewport_height
@@ -111,7 +118,6 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # Overlay
         self.draw_overlay()
 
-
     def set_overlay_option(self, checked, key, position, context):
         if position not in self.overlay_options:
             self.overlay_options[position] = {}
@@ -130,45 +136,44 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
 
         rect = self.display_rect
-        margin = 20
 
         for position in constants.WATER_MARKS_INPUTS:
-            self.draw_overlay_position(painter, rect, position, margin)
+            self.draw_overlay_position(painter, rect, position)
 
         painter.end()
 
-    def draw_overlay_position(self, painter, rect, position, margin):
+    def draw_overlay_position(self, painter, rect, position):
         overlays = self.overlay_options.get(position, {})
         if not overlays:
             return
 
         metrics = QtGui.QFontMetrics(painter.font())
-        spacing = 25
+        margin, spacing = 20, 20
 
         # START POSITION
         if position == "top_left":
             x = rect.left() + margin
-            y = rect.top() + margin # 40
+            y = rect.top() + margin  # 40
             align = "left"
         elif position == "top_center":
             x = rect.center().x()
-            y = rect.top() + margin # 40
+            y = rect.top() + margin  # 40
             align = "center"
         elif position == "top_right":
             x = rect.right() - margin
-            y = rect.top() + margin # 40
+            y = rect.top() + margin  # 40
             align = "right"
         elif position == "bottom_left":
             x = rect.left() + margin
-            y = rect.bottom() - margin # 40
+            y = rect.bottom() - margin  # 40
             align = "left"
         elif position == "bottom_center":
             x = rect.center().x()
-            y = (rect.bottom() - metrics.descent() - 10)
+            y = rect.bottom() - metrics.descent() - 10
             align = "center"
         elif position == "bottom_right":
             x = rect.right() - margin
-            y = rect.bottom() - margin # 40
+            y = rect.bottom() - margin  # 40
             align = "right"
         elif position == "center":
             x = rect.center().x()
@@ -195,13 +200,13 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
                     draw_x = x
 
                     if align == "center":
-                        draw_x -= (scaled.width() / 2)
+                        draw_x -= scaled.width() / 2
                     elif align == "right":
                         draw_x -= scaled.width()
 
                     # TOP / BOTTOM DIRECTION
                     if reverse_vertical:
-                        draw_y = (y - scaled.height())
+                        draw_y = y - scaled.height()
                     else:
                         draw_y = y
 
@@ -215,7 +220,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
                     # Reset Opacity
                     painter.setOpacity(1.0)
 
-                    offset = (scaled.height() + 10)
+                    offset = scaled.height() + 10
 
                     if reverse_vertical:
                         y -= offset
@@ -226,14 +231,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
                 text = self.get_overlay_text(key)
 
                 # Accurate Text Width
-                font_data = context["font"]
-
-                font = QtGui.QFont()
-                font.setFamily(font_data.get("family", "Arial"))
-                font.setPointSize(font_data.get("size", 10))
-                font.setBold(font_data.get("bold", False))
-                font.setItalic(font_data.get("italic", False))
-                font.setLetterSpacing(QtGui.QFont.AbsoluteSpacing, font_data.get("spacing", 0))
+                font = Font(None, **context["font"])
 
                 path = QtGui.QPainterPath()
                 path.addText(0, 0, font, text)
@@ -245,7 +243,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
                 draw_x = x
 
                 if align == "center":
-                    draw_x -= (text_width / 2)
+                    draw_x -= text_width / 2
                 elif align == "right":
                     draw_x -= text_width
 
@@ -253,30 +251,12 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
                 self.draw_overlay_text(painter, draw_x, y, text, context["font"])
 
                 # Vertical Offset
-                offset = (spacing + context["font"].get("spacing", 0))
+                offset = spacing + context["font"].get("spacing", 0)
 
                 if reverse_vertical:
                     y -= offset
                 else:
                     y += offset
-
-                """
-                text = self.get_overlay_text(key)
-                text_width = metrics.horizontalAdvance(text)
-                draw_x = x
-
-                if align == "center":
-                    draw_x -= (text_width / 2)
-                elif align == "right":
-                    draw_x -= text_width
-
-                self.draw_overlay_text(painter, draw_x, y, text, context["font"])
-
-                if reverse_vertical:
-                    y -= spacing + context["font"]["spacing"]
-                else:
-                    y += spacing + context["font"]["spacing"]
-                """
 
     def get_overlay_pixmap(self, key):
         paths = {
@@ -298,23 +278,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         return self._overlay_pixmaps[key]
 
     def draw_overlay_text(self, painter, x, y, text, font_data):
-        # Font
-        font = QtGui.QFont()
 
-        font.setFamily(font_data.get("family", "Arial"))
-        font.setPointSize(font_data.get("size", 10))
-        font.setBold(font_data.get("bold", False))
-        font.setItalic(font_data.get("italic", False))
-        font.setUnderline(font_data.get("underline", False))
-        font.setOverline(font_data.get("overline", False))
-        font.setStrikeOut(font_data.get("strikeOut", False))
-
-        # Word Spacing
-        font.setWordSpacing(font_data.get("wordSpacing", 0))
-
-        # Letter Spacing
-        font.setLetterSpacing(QtGui.QFont.AbsoluteSpacing, font_data.get("spacing", 0))
-
+        font = Font(None, **font_data)
         painter.setFont(font)
 
         # Colors
@@ -349,10 +314,10 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             "version": "Version: v001",
             "date": f"Date: {QtCore.QDate.currentDate().toString()}",
             "artist": "Artist: Batman Hero",
+            "resolution": f"{'1920'} x {'1080'}",
             "frame": f"Frame: {str(self.current_frame).zfill(constants.FRAME_PADDING)}",
             "copyright": "Support, Subin. Gopi (subing85@gmail.com).",
         }
-
         return values.get(key, key)
 
 

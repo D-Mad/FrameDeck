@@ -1,3 +1,12 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Main Gui module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
+import os
+
 import utils
 import logger
 import constants
@@ -5,18 +14,8 @@ import constants
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
+
 from ocio import OCIOProcessor
-
-from widgets.playlist import PlaylistGroup
-from widgets.layouts import VerticalLayout
-from widgets.layouts import HorizontalLayout
-from widgets.styles import SetStylesheet
-
-from widgets.layouts import HorizontalSplitter
-from widgets.labels import CopyrightLabel
-from widgets.viewer import ViewerWidget
-from widgets.pixmaps import NamePixmapIcon
-from widgets.timeline import TimelineWidget
 
 from widgets.buttons import HelpButton
 from widgets.buttons import OpenButton
@@ -29,9 +28,20 @@ from widgets.buttons import DisplayMenuButton
 from widgets.comboboxs import FbsCombobox
 from widgets.comboboxs import AovsCombobox
 
+from widgets.layouts import VerticalLayout
+from widgets.layouts import HorizontalLayout
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalSplitter
+
+from widgets.styles import SetStylesheet
+from widgets.labels import CopyrightLabel
+from widgets.pixmaps import NamePixmapIcon
 from widgets.dialogs import OpenMediaDialog
+
+from widgets.playlist import PlaylistGroup
+
+from widgets.viewer import ViewerWidget
+from widgets.timeline import TimelineWidget
 
 from playback.player import MediaPlayer
 
@@ -41,14 +51,12 @@ LOGGER = logger.getLogger(__name__)
 class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent=None, **kwargs):
-        # super().__init__()
         super(MainWindow, self).__init__(parent)
+
+        self.browsepath = None
 
         self.ocio = OCIOProcessor()
         self.player = MediaPlayer()
-
-        # self.build_ui()
-        # self.create_connections()
 
         self.setupUi()
         self.setupIcons()
@@ -86,7 +94,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.horizontalspacer1 = HorizontalSpacer()
         self.horizontallayout_panel.addItem(self.horizontalspacer1)
 
-        self.displayMenuButton = DisplayMenuButton(self, tooltip="Water mark display menu", width=32, height=32)
+        self.displayMenuButton = DisplayMenuButton(
+            self, tooltip="Water mark display menu", width=32, height=32
+        )
         self.horizontallayout_panel.addWidget(self.displayMenuButton)
 
         self.helpButton = HelpButton(self, tooltip="Help and Support", width=32, height=32)
@@ -131,19 +141,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.copyrightLabel = CopyrightLabel(self)
         self.verticallayout.addWidget(self.copyrightLabel)
 
-        if constants.MAXIMIZE:
-            self.showMaximized()
-
-        SetStylesheet(self, theme=constants.DEFAULT_THEME)
-
         self.aovsCombobox.currentTextChanged.connect(self.player.set_aov)
 
-        # self.openButton.clicked.connect(self.open_media)
         self.openButton.clicked.connect(self.openMedia)
-
         self.playPauseButton.clicked.connect(self.toggle_play_pause)
-        # self.stop_button.clicked.connect(self.player.stop)
-
         self.loopButton.toggled.connect(self.player.set_loop)
 
         self.player.frame_ready.connect(self.viewer.set_frame)
@@ -151,9 +152,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player.frame_changed.connect(self.viewer.set_current_frame)
         self.player.cache_changed.connect(self.timeline.set_cached_frames)
 
-        # self.player.frame_changed.connect(self.viewer.set_current_frame)
-
-        # self.timeline.frame_changed.connect(self.player.seek)
         self.timeline.frame_changed.connect(self.seek)
 
         self.backwordButton.clicked.connect(self.backword_frame)
@@ -182,22 +180,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.helpShortcut = QtGui.QShortcut(QtGui.QKeySequence("F2"), self)
         self.helpShortcut.activated.connect(self.help)
 
+        if constants.MAXIMIZE:
+            self.showMaximized()
+
+        SetStylesheet(self, theme=constants.DEFAULT_THEME)
+
     def setupIcons(self):
         pixmap = NamePixmapIcon(constants.RP_TOOL_ICON)
         self.setWindowIcon(pixmap)
 
     def openMedia(self):
-        """
-        dialog = OpenMediaDialog(self)
-
+        dialog = OpenMediaDialog(self, browsepath=self.browsepath)
+        filepath = None
         if dialog.exec():
             filepath = dialog.getfile()
-
-        if not filepath:
-            return
-        """
-
-        filepath = "/alpha/works/C2C/samples/footage/shot-1001-1/shot-1001.####.png"
+            self.browsepath = os.path.dirname(filepath)
 
         LOGGER.info(f"Source filepath, {filepath}")
 
@@ -212,10 +209,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.aovsCombobox.clear()
             self.aovsCombobox.setEnabled(False)
 
-        # self.timeline.set_range(1, self.player.frame_count)
-        # self.timeline.set_range(0, self.player.frame_count - 1)
-
-        self.timeline.set_range(1, self.player.frame_count)
+        self.timeline.set_range(
+            constants.START_FRAME, constants.START_FRAME + (self.player.frame_count - 1)
+        )
 
     def set_loop(self):
         enable = False if self.loopButton.isChecked() else True
@@ -264,128 +260,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def help(self):
         LOGGER.info(f"Support, {constants.WEBLINK}")
         utils.openUrl(constants.WEBLINK)
-
-    def build_ui(self):
-        self.viewer = ViewerWidget()
-        self.timeline = TimelineWidget()
-
-        # display
-        # view
-        # input space
-        self.input_combo = QtWidgets.QComboBox()
-        self.display_combo = QtWidgets.QComboBox()
-        self.view_combo = QtWidgets.QComboBox()
-
-        self.input_combo.addItems(self.ocio.get_color_spaces())
-        self.display_combo.addItems(self.ocio.get_displays())
-
-        display = self.display_combo.currentText()
-
-        self.view_combo.addItems(self.ocio.get_views(display))
-
-        self.open_button = QtWidgets.QPushButton("Open")
-        self.play_button = QtWidgets.QPushButton("Play")
-        self.stop_button = QtWidgets.QPushButton("Stop")
-
-        self.open_button = QtWidgets.QPushButton("Open")
-        self.prev_button = QtWidgets.QPushButton("<<")
-        self.play_button = QtWidgets.QPushButton("Play")
-        self.stop_button = QtWidgets.QPushButton("Stop")
-        self.next_button = QtWidgets.QPushButton(">>")
-
-        controls_layout = QtWidgets.QHBoxLayout()
-
-        controls_layout.addWidget(self.open_button)
-        controls_layout.addWidget(self.prev_button)
-        controls_layout.addWidget(self.play_button)
-        controls_layout.addWidget(self.stop_button)
-        controls_layout.addWidget(self.next_button)
-
-        controls_layout.addWidget(self.input_combo)
-        controls_layout.addWidget(self.display_combo)
-        controls_layout.addWidget(self.view_combo)
-
-        main_layout = QtWidgets.QVBoxLayout()
-        main_layout.addWidget(self.viewer)
-        main_layout.addWidget(self.timeline)
-        main_layout.addLayout(controls_layout)
-
-        container = QtWidgets.QWidget()
-        container.setLayout(main_layout)
-
-        sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
-        )
-        self.viewer.setSizePolicy(sizepolicy)
-
-        sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed
-        )
-        self.timeline.setSizePolicy(sizepolicy)
-
-        self.setCentralWidget(container)
-
-        # "dark", "light"
-
-    def create_connections(self):
-
-        self.open_button.clicked.connect(self.open_media)
-
-        self.play_button.clicked.connect(self.player.play)
-
-        self.stop_button.clicked.connect(self.player.stop)
-
-        self.player.frame_ready.connect(self.viewer.set_frame)
-
-        self.player.frame_changed.connect(self.timeline.set_frame)
-
-        self.timeline.frame_changed.connect(self.player.seek)
-
-        self.prev_button.clicked.connect(self.player.previous_frame)
-
-        self.next_button.clicked.connect(self.player.next_frame_manual)
-
-        # self.display_combo.currentTextChanged.connect(self.update_views)
-
-        self.input_combo.currentTextChanged.connect(self.update_ocio)
-        self.display_combo.currentTextChanged.connect(self.update_ocio)
-        self.view_combo.currentTextChanged.connect(self.update_ocio)
-
-    def open_media(self):
-
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Open Media",
-            "/alpha/works/C2C/samples/",
-        )
-
-        if not path:
-            return
-
-        from pprint import pprint
-
-        pprint(path)
-
-        self.player.load(path)
-
-        self.timeline.set_range(0, self.player.frame_count - 1)
-
-    def update_views(self):
-        self.view_combo.clear()
-
-        display = self.display_combo.currentText()
-
-        self.view_combo.addItems(self.ocio.get_views(display))
-
-    def update_ocio(self):
-
-        input_space = self.input_combo.currentText()
-
-        display = self.display_combo.currentText()
-
-        view = self.view_combo.currentText()
-
-        self.player.set_ocio(self.ocio, input_space, display, view)
 
 
 if __name__ == "__main__":

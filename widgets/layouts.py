@@ -1,3 +1,10 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QLayout wrapper module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
@@ -74,7 +81,6 @@ class VerticalSpacer(QtWidgets.QSpacerItem):
         super(VerticalSpacer, self).__init__(
             20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
-
 
 if __name__ == "__main__":
     pass

@@ -1,3 +1,11 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player constants library module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
+
 RP_TOOL_NAME = "MC - Review Player"
 
 RP_TOOL_ICON = "mc-review-player"
@@ -34,8 +42,8 @@ FPS_VALUES = [
 
 DEFULT_FPS = FPS_VALUES[1]
 
-START_FRAME = 1001
-DEFAULT_FRAMES = 100
+START_FRAME = 101
+DEFAULT_FRAMES = 100 - 1
 FRAME_PADDING = 4
 
 WATER_MARKS_INPUTS = {
@@ -170,7 +178,29 @@ WATER_MARKS_INPUTS = {
             },
         },
     ],
-    "top_center": [],
+    "top_center": [
+        {
+            "code": "resolution",
+            "enable": True,
+            "checked": False,
+            "font": {
+                "size": 15,
+                "family": "Noto Sans",  # Times New Roman
+                "fillColor": (255, 255, 255),
+                "bold": True,
+                "italic": False,
+                "spacing": 0,
+                "wordSpacing": 0,
+                "underline": False,
+                "overline": False,
+                "strikeOut": False,
+                "stretch": 0,
+                "stroke": 0,
+                "strokeColor": (0, 0, 0),
+                "capitalization": "mixedCase",  # AllUppercase AllLowercase, SmallCaps, Capitalize
+            },
+        }
+    ],
     "bottom_left": [
         {"code": "Project Logo", "enable": True, "checked": False, "type": "image", "opacity": 0.75}
     ],

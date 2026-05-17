@@ -1,3 +1,10 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QDialog wapper module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
 import os
 import re
 import glob
@@ -67,11 +74,10 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
     def __init__(self, parent, **kwargs):
         super().__init__(parent)
 
-        # self.browsepath = kwargs.get("browsepath", QtCore.QDir.homePath())
-        # self.browsepath = "/alpha/works/C2C/samples/footage/shot-1001-1/"
-        self.browsepath = "/alpha/works/C2C/samples/exr/street/"
+        self.browsepath = kwargs.get("browsepath") or QtCore.QDir.homePath()
 
         self.setDirectory(self.browsepath)
+
         self.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)
 
         # Define the filters
@@ -120,7 +126,7 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
             pattern_name = re.sub(
                 r"\.(\d+)\.", lambda x: "." + ("#" * len(x.group(1))) + ".", basename
             )
-            return os.path.join(dirname, pattern_name)
+            path = os.path.join(dirname, pattern_name)
 
         return path
 

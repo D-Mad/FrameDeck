@@ -1,7 +1,13 @@
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QButton wapper module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+from __future__ import absolute_import
+
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
-
 
 from widgets.menus import DisplayMenus
 from widgets.pixmaps import NamePixmapIcon
@@ -102,23 +108,6 @@ class DisplayMenuButton(ToolButton):
 
     def contextMenu(self):
         self.menu.exec(QtGui.QCursor.pos())
-
-    def values(self):
-        from pprint import pprint
-        pprint(self.menu.values)
-
-
-
-class _TextButton(QtWidgets.QToolButton):
-
-    def __init__(self, parent, *args, **kwargs):
-        super(TextButton, self).__init__(parent)
-
-        self.setText(args[0])
-
-        if kwargs.get("tooltip"):
-            self.setToolTip(kwargs["tooltip"])
-
 
 
 if __name__ == "__main__":
