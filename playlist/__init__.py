@@ -1,6 +1,7 @@
 
+import resources
 
-class Projects():
+class Projects(object):
     """Project data provider."""
 
     @classmethod
@@ -10,46 +11,32 @@ class Projects():
 
         Notes:
             This is example data only. Replace this implementation
-            with database, API, or ShotGrid queries.
+            with database, API, or ShotGrid/FTrack queries.
         """
 
-        result = [
-            {
-                "type": "Project",
-                "id": 193,
-                "code": "TST-1",
-                "name": "Test-01",
-                "created_at": "2026-03-15 12:19:13:AM",
-                "image": "https://example.com/poster-01.jpg",
-                "sg_description": "pipeline test 01 project",
-            },
-            {
-                "type": "Project",
-                "id": 223,
-                "code": "TST-2",
-                "name": "Test Dev Project 2",
-                "created_at": "2026-04-01 11:32:30:PM",
-                "image": "https://example.com/poster_02.jpg",
-                "sg_description": "test 02",
-            },
-            {
-                "type": "Project",
-                "id": 289,
-                "code": "TST-4",
-                "name": "Test Project 4",
-                "created_at": "2026-04-24 08:04:37:PM",
-                "image": "https://example.com/poster_08.jpg",
-                "sg_description": "dev test project",
-            },
-            {
-                "type": "Project",
-                "id": 358,
-                "code": "ATPT-1",
-                "name": "My Animation Project",
-                "created_at": "2026-04-26 10:41:45:PM",
-                "image": None,
-                "sg_description": None,
-            },
-        ]
+        result = resources.getPreset("projects")
+
+
+        return result
+
+
+class Versions(object):
+    """Version data provider."""
+
+    @classmethod
+    def get(cls, project):
+        """
+        Return versions data.
+
+        Notes:
+            This is example data only. Replace this implementation
+            with database, API, or ShotGrid/FTrack queries.
+        """
+
+        versions = resources.getPreset("versions")
+
+        result = list(
+            filter(lambda x: x.get("project") and x["project"]["id"] == project["id"], versions)
+        )
 
         return result

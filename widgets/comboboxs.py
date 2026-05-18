@@ -109,6 +109,9 @@ class AovsCombobox(QtWidgets.QComboBox):
 
 
 class ProjectCombobox(ContextCombobox):
+
+    project_changed = QtCore.Signal(dict)
+
     def __init__(self, parent, **kwargs):
         super(ProjectCombobox, self).__init__(parent, **kwargs)
 
@@ -121,6 +124,10 @@ class ProjectCombobox(ContextCombobox):
         self.setStyleSheet("QComboBox {background: transparent; border: none;}")
 
         self.addItems(["All Project", "TS-1", "TS-2"])
+
+    def indexChange(self, index):
+        super().indexChange(index)
+        self.project_changed.emit(self.context)
 
 
 if __name__ == "__main__":

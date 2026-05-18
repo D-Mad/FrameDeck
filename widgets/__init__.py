@@ -18,6 +18,7 @@ from PySide6 import QtWidgets
 from ocio import OCIOProcessor
 
 from playlist import Projects
+from playlist import Versions
 
 from widgets.buttons import HelpButton
 from widgets.buttons import OpenButton
@@ -62,6 +63,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ocio = OCIOProcessor()
         self.player = MediaPlayer()
 
+        self.projects = Projects.get()
+
         self.setupUi()
         self.setupIcons()
 
@@ -78,7 +81,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.verticallayout.addWidget(self.splitter)
 
         # Playlist
-        self.playlistGroup = PlaylistGroup(self)
+        self.playlistGroup = PlaylistGroup(self, projects=self.projects)
         self.splitter.addWidget(self.playlistGroup)
 
         # Viewer
@@ -145,6 +148,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.copyrightLabel = CopyrightLabel(self)
         self.verticallayout.addWidget(self.copyrightLabel)
 
+        self.playlistGroup.project_changed.connect(self.set_playlist)
+        # self.playlistGroup.set_current_project(self.projects[0])
+
         self.aovsCombobox.currentTextChanged.connect(self.player.set_aov)
 
         self.openButton.clicked.connect(self.openMedia)
@@ -164,6 +170,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.displayMenuButton.menu.overlay_changed.connect(self.viewer.set_overlay_option)
 
         self.helpButton.clicked.connect(self.help)
+
 
         # Create the shortcuts
         self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
@@ -194,6 +201,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def setupIcons(self):
         pixmap = NamePixmapIcon(constants.RP_TOOL_ICON)
         self.setWindowIcon(pixmap)
+
+    def set_playlist(self, project):
+        versions = Versions.get(project)
+        self.playlistGroup.set_versions(versions)
+
 
     def openMedia(self):
         print(self.splitter.sizes())

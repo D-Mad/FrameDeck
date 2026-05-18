@@ -6,7 +6,11 @@
 from __future__ import absolute_import
 
 import os
+import base64
+import urllib
+import requests
 import webbrowser
+
 
 
 def hasPathExists(filepath):
@@ -18,6 +22,37 @@ def hasPathExists(filepath):
 
 def openUrl(path):
     webbrowser.open(path)
+
+
+
+def isUrl(path):
+    """
+    Check whether the given path is a URL.
+
+    Args:
+        path (str): File path or URL.
+
+    Returns:
+        bool
+    """
+
+    result = urllib.parse.urlparse(path)
+
+    return result.scheme in ("http", "https")
+
+
+def getUrlContent(url, encode=False):
+    if not url:
+        return
+
+    content = requests.get(url).content
+
+    if not encode:
+        return content
+
+    encoded = base64.b64encode(content).decode()
+
+    return encoded
 
 
 if __name__ == "__main__":

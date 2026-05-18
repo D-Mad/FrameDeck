@@ -1,6 +1,12 @@
-from PySide6 import QtGui
-from PySide6 import QtCore
+# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+# Author: Subin. Gopi (subing85@gmail.com).
+# Description: Review Player Qt QTreeWidget widget module.
+# WARNING! All changes made in this file will be lost when recompiling source file!
+
+
 from PySide6 import QtWidgets
+
+from widgets.widgetItems import PlaylistWidgetItem
 
 
 class PlaylistTreewidget(QtWidgets.QTreeWidget):
@@ -13,31 +19,18 @@ class PlaylistTreewidget(QtWidgets.QTreeWidget):
 
         self.header().setStretchLastSection(True)
 
-    def findChidItems(self, index=0, checkState=False):
-        checkStates = {
-            True: QtCore.Qt.CheckState.Checked,
-            False: QtCore.Qt.CheckState.Unchecked,
-        }
 
-        widgetItem = self.invisibleRootItem()
-
-        result = list()
-        for count in range(widgetItem.childCount()):
-            item = widgetItem.child(count)
-            currentCheckState = item.checkState(index)
-            if checkState and currentCheckState != QtCore.Qt.CheckState.Checked:
-                continue
-            result.append(item)
-
-        return result
-
-    def revised(self):
+    def setValues(self, versions):
         self.clear()
 
-    def removeItems(self, items):
-        if not isinstance(items, list):
-            items = [items]
+        for version in versions:
+            import json
 
-        widgetItem = self.invisibleRootItem()
-        for item in items:
-            widgetItem.removeChild(item)
+            print(json.dumps(version, indent=4))
+            playlistWidgetItem = PlaylistWidgetItem(self, version)
+            playlistWidgetItem.setValue(context=None)
+
+
+
+if __name__ == "__main__":
+    pass

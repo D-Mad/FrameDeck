@@ -16,31 +16,48 @@ from widgets.labels import ProjectIconLabel
 from widgets.comboboxs import ProjectCombobox
 from widgets.treewidgets import PlaylistTreewidget
 
-class PlaylistGroup(QtWidgets.QGroupBox):
+class PlaylistGroup(QtWidgets.QWidget):
+
+    project_changed = QtCore.Signal(dict)
 
     def __init__(self, parent, *args, **kwargs):
         super(PlaylistGroup, self).__init__(parent)
 
-        # self.setTitle("Playlist")
-
-        self.setFlat(True)
-        self.setMinimumSize(QtCore.QSize(200, 0))
-        # self.setMaximumSize(QtCore.QSize(200, 16777215))
+        self.projects = kwargs.get("projects")
 
         self.verticallayout = VerticalLayout(self, space=10, margins=(0, 0, 0, 0))
 
-        self.horizontallayout = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
-        self.verticallayout.addLayout(self.horizontallayout)
+        self.projectGroupbox = QtWidgets.QGroupBox(self)
+        self.verticallayout.addWidget(self.projectGroupbox)
+
+        self.horizontallayout = HorizontalLayout(self.projectGroupbox, space=10, margins=(10, 10, 10, 10))
 
         self.projectIconLabel = ProjectIconLabel(self)
-        self.projectIconLabel.setThumbnail("/run/media/batman/ALPHA/works/developments/review_player/resources/icons/unknown.png")
         self.horizontallayout.addWidget(self.projectIconLabel)
 
-        self.projectCombobox = ProjectCombobox(self)
+        self.projectCombobox = ProjectCombobox(self, key="name")
+        self.projectCombobox.setItems(contextList=self.projects)
+        self.projectCombobox.project_changed.connect(self.set_project)
+
         self.horizontallayout.addWidget(self.projectCombobox)
 
         self.playlistTreewidget = PlaylistTreewidget(self)
         self.verticallayout.addWidget(self.playlistTreewidget)
+
+        self.set_project(self.projects[0])
+
+    def set_project(self, context):
+        self.projectIconLabel.setThumbnail(context["image"])
+        self.project_changed.emit(context)
+
+    def set_current_project(self, project):
+        self.projectCombobox.setValue(project)
+
+    def set_versions(self, versions):
+        self.playlistTreewidget.setValues(versions)
+
+
+
 
 
 if __name__ == "__main__":

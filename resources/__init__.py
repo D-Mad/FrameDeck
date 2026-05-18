@@ -6,6 +6,7 @@
 from __future__ import absolute_import
 
 import os
+import json
 
 CURRENT_PATH = os.path.dirname(__file__)
 
@@ -13,3 +14,16 @@ CURRENT_PATH = os.path.dirname(__file__)
 def getIconFilepath(name):
     filepath = os.path.abspath(os.path.join(CURRENT_PATH, "icons", f"{name}.png"))
     return filepath
+
+
+def getPreset(name):
+    filepath = os.path.abspath(os.path.join(CURRENT_PATH, "presets", f"{name}.json"))
+    result = readJsonFile(filepath)
+    return result
+
+
+def readJsonFile(filepath):
+    with open(filepath, "r") as target:
+        content = json.load(target)
+        return content
+
