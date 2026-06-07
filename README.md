@@ -6,6 +6,8 @@ This project is designed as a playback and review foundation inspired by interna
 
 The goal of this project is to provide a lightweight, extensible, and production-friendly framework for media playback, image sequence review, OpenEXR workflows, and OCIO-based color management.
 
+<img width="1848" height="958" alt="image" src="https://github.com/user-attachments/assets/c113466d-2739-4dce-abb7-c966797285ee" />
+
 ---
 
 # Features
