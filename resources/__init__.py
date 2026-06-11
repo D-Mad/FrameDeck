@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player resources module..
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides centralized access to project resource files used throughout the Review Player framework.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./resources/__init__.py
+
+Description:
+    This module provides centralized access to project resource files used throughout the Review Player framework.
 
 Responsibilities:
     - Icon path resolution

@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt stylesheet and font wrapper module..
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt styling utilities used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/styles.py
+
+Description:
+    This module provides reusable Qt styling utilities used throughout the Review Player application.
 
 Responsibilities:
     - Apply global application themes

@@ -1,13 +1,16 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QMenu and QAction wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains reusable Qt menu and action wrappers used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/menus.py
+
+Description:
+    This module contains reusable Qt menu and action wrappers used throughout the Review Player application.
 
 The module primarily provides:
-
     - Watermark display menus
     - Overlay visibility controls
     - QAction wrapper utilities

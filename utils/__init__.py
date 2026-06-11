@@ -1,10 +1,14 @@
 """
-# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-# Author: Subin. Gopi (subing85@gmail.com).
-# Description: Review Player utility module.
-# WARNING! All changes made in this file will be lost when recompiling source file!
+Copyright (c) 2026, Motion-Craft Technology All rights reserved.
 
-This module provides common helper utilities used throughout the Review Player framework.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./utils/__init__.py
+
+Description:
+    This module provides common helper utilities used throughout the Review Player framework.
 
 Responsibilities:
     - File/path utilities
@@ -85,10 +89,37 @@ def hasPathExists(filepath):
 
 
 def fileName(filepath, extension=False):
+    """
+    Return the file name from a file path.
+
+    Args:
+        filepath (str):
+            Absolute or relative file path.
+
+        extension (bool, optional):
+            Include file extension in the returned name.
+            Defaults to False.
+
+    Returns:
+        str:
+            File name with or without extension.
+
+    Examples:
+        >>> fileName("/tmp/image.png")
+        'image'
+
+        >>> fileName("/tmp/image.png", extension=True)
+        'image.png'
+    """
+
+    # Extract file name from path
     basename = os.path.basename(filepath)
 
+    # Return with extension
     if extension:
         name = basename
+
+    # Return without extension
     else:
         name = os.path.splitext(basename)[0]
 

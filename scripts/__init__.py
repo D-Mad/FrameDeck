@@ -1,9 +1,13 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player playlist customization module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./scripts/__init__.py
+
+Description:
     - This module provides project and version data providers used by the Review Player playlist system.
     - The playlist module is intentionally designed as a customization layer for studio pipelines.
 

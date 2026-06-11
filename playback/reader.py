@@ -1,11 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player media reader module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides media reading systems used by the
-Review Player playback framework.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./playback/reader.py
+
+Description:
+    This module provides media reading systems used by the Review Player playback framework.
 
 The module supports:
     - Video playback
@@ -199,6 +202,19 @@ class VideoReader(object):
             return image
         except StopIteration:
             return None
+
+    def get_available_aovs(self):
+        """Return available AOV names.
+
+        Returns:
+            list:
+                Available AOV names.
+
+        Example:
+            >>> aovs = reader.get_available_aovs()
+        """
+
+        return list()
 
 
 class SequenceReader(object):

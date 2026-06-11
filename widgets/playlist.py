@@ -1,13 +1,16 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt custom playlist widget module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the primary playlist UI components used by the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
 
-The playlist system is responsible for:
+Module:
+    ./widgets/playlist.py
 
+Description:
+    This module contains the primary playlist UI components used by the Review Player application.
+
+Responsibilities:
     - Displaying project lists
     - Managing version/media playlists
     - Handling project switching
@@ -27,11 +30,57 @@ Features:
     - Signal-driven UI updates
     - Version/media list integration
 
-Widget Architecture:
-    PlaylistGroup
-        ├── ProjectIconLabel
-        ├── ProjectCombobox
-        └── PlaylistTreewidget
+Architecture:
+    PlaylistWidget
+        ↓
+    ProjectsFrame
+        ↓
+    ProjectCombobox
+        ↓
+    User Project Selection
+        ↓
+    set_playlist()
+        ↓
+    Versions.get(project)
+        ↓
+    Version Collection
+        ↓
+    set_versions()
+        ↓
+    PlaylistTreewidget
+        ↓
+    PlaylistWidgetItem
+        ↓
+    User Selection
+        ├── itemClicked
+        │   ↓
+        │   open_media()
+        │   ↓
+        │   select_media(False, context)
+        │
+        └── itemDoubleClicked
+            ↓
+            play_media()
+            ↓
+            select_media(True, context)
+
+    ProjectsFrame
+        ↓
+    Projects.get()
+        ↓
+    Project Dataset
+        ↓
+    ProjectCombobox
+        ↓
+    User Project Selection
+        ↓
+    set_current_project()
+        ↓
+    ProjectIconLabel
+        ↓
+    project_changed Signal
+        ↓
+    Playlist Widget
 
 Signals:
     project_changed:
@@ -47,9 +96,8 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.layouts import VerticalLayout
-from widgets.layouts import HorizontalLayout
-
 from widgets.labels import ProjectIconLabel
+from widgets.layouts import HorizontalLayout
 from widgets.comboboxs import ProjectCombobox
 from widgets.treewidgets import PlaylistTreewidget
 
@@ -199,73 +247,129 @@ class PlaylistWidget(QtWidgets.QWidget):
 
 
 class ProjectsFrame(QtWidgets.QFrame):
+    """
+    Project selection widget.
 
+    Displays the available projects, allows users to select the active project, and emits project change notifications to the application.
+
+    Signals:
+        project_changed(dict):
+            Emitted whenever the active project changes.
+    """
+
+    # Emitted when current project changes
     project_changed = QtCore.Signal(dict)
 
     def __init__(self, parent, *args, **kwargs):
+        """
+        Initialize project frame.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            *args:
+                Additional positional arguments.
+
+            **kwargs:
+                Additional optional arguments.
+        """
+
+        # Initialize QFrame
         super(ProjectsFrame, self).__init__(parent)
 
-        # Store project data
+        # Load available projects
         self.projects = Projects.get()
 
+        # Apply frame appearance
         self.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Raised)
 
+        # Build interface
         self.setupUi()
 
     def setupUi(self):
+        """
+        Build user interface.
 
-        # Header horizontal layout
+        Creates:
+
+            - Project thumbnail preview
+            - Project selection combobox
+
+        Connects project selection signals to the project update handler.
+        """
+
+        # Main horizontal layout
         self.horizontallayout = HorizontalLayout(self, space=10, margins=(10, 10, 10, 10))
 
-        # Project thumbnail preview
+        # --------------------------------------------------
+        # Project Thumbnail
+        # --------------------------------------------------
         self.projectIconLabel = ProjectIconLabel(self)
         self.horizontallayout.addWidget(self.projectIconLabel)
 
-        # Project selector combobox
+        # --------------------------------------------------
+        # Project Combobox
+        # --------------------------------------------------
         self.projectCombobox = ProjectCombobox(self, key="name")
         self.projectCombobox.setItems(contextList=self.projects)
-
         self.horizontallayout.addWidget(self.projectCombobox)
 
+        # Listen for project changes
         self.projectCombobox.project_changed.connect(self.set_current_project)
 
-        # Set initial project
-        # if self.projects:
-        #    self.set_current_project(self.projects[0])
-        #    self.set_current_project(self.projects[1])
-
     def set_default_project(self, index=0):
+        """
+        Set default project.
+
+        Args:
+            index (int, optional):
+                Project index to activate.
+                Defaults to 0.
+        """
+
+        # No projects available
         if not self.projects:
             return
 
+        # Activate project
         self.set_current_project(self.projects[index])
 
     def set_current_project(self, context):
         """
         Set current active project.
 
-        This updates:
+        Updates:
 
             - Project thumbnail
             - Current project context
-            - UI project state
+            - Project preview image
+
+        Emits:
+            project_changed(dict)
 
         Args:
             context (dict):
                 Project context dictionary.
 
         Example:
-            >>> widget.set_project(project)
+            >>> widget.set_current_project(project)
         """
 
-        # Update project thumbnail
+        # --------------------------------------------------
+        # Update Thumbnail
+        # --------------------------------------------------
         self.projectIconLabel.setThumbnail(context["image"])
 
-        # Store thumbnail pixmap in context
+        # --------------------------------------------------
+        # Store Thumbnail Pixmap
+        # --------------------------------------------------
         context["value"] = self.projectIconLabel.pixmap()
 
-        # Emit project change signal
+        # --------------------------------------------------
+        # Notify Listeners
+        # --------------------------------------------------
         self.project_changed.emit(context)
 
 

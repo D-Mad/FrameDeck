@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player OpenColorIO processing module..
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides a lightweight wrapper around the PyOpenColorIO API used by the Review Player framework.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./ocio/__init__.py
+
+Description:
+    This module provides a lightweight wrapper around the PyOpenColorIO API used by the Review Player framework.
 
 The OCIO processor is responsible for:
     - Loading OCIO configurations
@@ -42,6 +46,8 @@ Notes:
     - GPU processing is not implemented yet.
     - Images are expected to be NumPy float32 arrays.
 """
+
+from __future__ import absolute_import
 
 import numpy
 

@@ -1,8 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Module contains the main playback controller used by the Review Player framework.
-WARNING! All changes made in this file will be lost when recompiling source file!
+
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./playback/player.py
+
+Description:
+    The main playback controller used by the Review Player framework.
 
 The media player is responsible for:
     - Playback control

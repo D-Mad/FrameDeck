@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QComboBox wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt combobox widgets used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/comboboxs.py
+
+Description:
+    This module provides reusable Qt combobox widgets used throughout the Review Player application.
 
 Responsibilities:
     - Context-based combobox handling
@@ -189,6 +193,13 @@ class ContextCombobox(QtWidgets.QComboBox):
 
         # Store active context
         self.context = self.contextList[index]
+
+    def findByKey(self, value, key=None):
+        key = key or self.key
+
+        result = next(filter(lambda x: x[key] == value, self.contextList), None)
+
+        return result
 
 
 class FbsCombobox(ContextCombobox):

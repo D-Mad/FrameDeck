@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt dialog wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt dialog widgets used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/dialogs.py
+
+Description:
+    This module provides reusable Qt dialog widgets used throughout the Review Player application.
 
 Responsibilities:
     - Media file browsing
@@ -301,46 +305,142 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
 
 
 class ColorDialog(QtWidgets.QColorDialog):
+    """
+    Custom color picker dialog.
+
+    Provides a themed QColorDialog and helper method for returning the selected color as an RGB tuple.
+    """
 
     def __init__(self, parent, **kwargs):
+        """
+        Initialize color dialog.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            **kwargs:
+                Additional optional arguments.
+        """
+
+        # Initialize QColorDialog
         super().__init__(parent)
 
+        # Apply application theme
         SetStylesheet(self, theme=constants.DEFAULT_THEME)
 
     def getColor(self):
+        """
+        Return selected color.
+
+        Returns:
+            tuple or None:
+                RGB color tuple in the form (red, green, blue).
+
+                Returns None if no valid color was selected.
+        """
+
+        # Retrieve selected color
         color_form = self.selectedColor()
 
+        # Validate color
         if not color_form.isValid():
             return
 
+        # Convert QColor to RGB tuple
         color = (color_form.red(), color_form.green(), color_form.blue())
 
         return color
 
 
 class FileDialog(QtWidgets.QFileDialog):
+    """
+    Custom file dialog wrapper.
+
+    Provides helper methods for file selection and save file operations with configurable extensions.
+    """
+
     def __init__(self, parent, title, **kwargs):
+        """
+        Initialize file dialog.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            title (str):
+                Dialog title.
+
+            **kwargs:
+                browsepath (str, optional):
+                    Initial browse location.
+
+                extensions (list[str], optional):
+                    Allowed file extensions.
+
+                label (str, optional):
+                    File type label.
+        """
+
+        # Initialize QFileDialog
         super().__init__(parent)
 
+        # Dialog title
         self.title = title
+
+        # Initial browse path
         self.browsepath = kwargs.get("browsepath") or QtCore.QDir.homePath()
 
+        # Supported file extensions
         self.extensions = kwargs.get("extensions", ["txt"])
+
+        # Display label
         self.label = kwargs.get("label", "txt")
 
-        self.extensions = kwargs.get("extensions")
-
     def savefile(self, name):
+        """
+        Open save file dialog.
+
+        Args:
+            name (str):
+                Suggested file name.
+
+        Returns:
+            str:
+                Selected output file path.
+
+                Returns an empty string if the user cancels.
+        """
+
+        # Build default file name
         filename = f"{name}.{self.extensions[0]}" if name else f"untitle.{self.extensions[0]}"
+
+        # Build file filter pattern
         pattern = ";;".join(f"{ext.upper()} (*.{ext.lower()})" for ext in self.extensions)
+
+        # Open save dialog
         filepath, fileFormat = self.getSaveFileName(self, self.title, filename, pattern)
 
         return filepath
 
     def pickFile(self):
+        """
+        Open file picker dialog.
+
+        Returns:
+            str:
+                Selected file path.
+
+                Returns an empty string if the user cancels.
+        """
+
+        # Build filter pattern
         pattern = f"{self.label} (*{' *'.join(self.extensions)})"
+
+        # Open file dialog
         filepath, fileFormat = self.getOpenFileName(self, self.title, self.browsepath, pattern)
 
+        # Update browse path
         if filepath:
             self.browsepath = utils.dirname(filepath)
 

@@ -1,12 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt button wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
+Author:
+    Subin. Gopi (subing85@gmail.com).
 
-This module provides reusable Qt button widgets
-used throughout the Review Player application.
+Module:
+    ./widgets/buttons.py
+
+Description:
+    This module provides reusable Qt button widgets used throughout the Review Player application.
 
 Responsibilities:
     - Standardize button appearance
@@ -49,6 +51,7 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.menus import DisplayMenus
+from widgets.dialogs import ColorDialog
 from widgets.pixmaps import NamePixmapIcon
 
 
@@ -280,90 +283,201 @@ class HelpButton(IconButton):
 
 
 class TextButton(QtWidgets.QPushButton):
+    """
+    Standard text-based push button.
+
+    Provides a simple wrapper around QPushButton with support for label text and tooltip initialization through keyword arguments.
+    """
 
     def __init__(self, parent, **kwargs):
+        """
+        Initialize text button.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            **kwargs:
+                label (str, optional):
+                    Button display text.
+
+                toolTip (str, optional):
+                    Tooltip text displayed on hover.
+        """
+
+        # Initialize QPushButton
         super(TextButton, self).__init__(parent)
 
+        # Apply tooltip
         if kwargs.get("toolTip"):
             self.setToolTip(kwargs["toolTip"])
 
+        # Apply label text
         if kwargs.get("label"):
             self.setText(kwargs["label"])
 
+        # Disable default button behavior
         self.setAutoDefault(False)
         self.setDefault(False)
 
 
 class ColorButton(QtWidgets.QPushButton):
+    """
+    Circular color picker button.
 
+    Displays the currently selected color and opens a custom color dialog when clicked.
+    """
+
+    # Emitted when color changes
     color_changed = QtCore.Signal(tuple)
 
     def __init__(self, parent, **kwargs):
+        """
+        Initialize color button.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            **kwargs:
+                width (int, optional):
+                    Button width.
+
+                height (int, optional):
+                    Button height.
+
+                locked (bool, optional):
+                    Lock button size.
+
+                tooltip (str, optional):
+                    Tooltip text.
+        """
+
         # Initialize QPushButton
         super(ColorButton, self).__init__(parent)
 
-        # Button Size
+        # Button dimensions
         self.width = kwargs.get("width", 22)
         self.height = kwargs.get("height", 22)
 
-        self.color = (255, 0, 0)  # Red
-        # Fixed Size Lock
+        # Default color (red)
+        self.color = (255, 0, 0)
+
+        # Fixed size lock
         self.locked = False if kwargs.get("locked") == False else True
 
-        # Tooltip
+        # Apply tooltip
         if kwargs.get("tooltip"):
             self.setToolTip(kwargs["tooltip"])
 
-        # Flat Button Style
+        # Flat appearance
         self.setFlat(True)
 
-        # Apply Fixed Size
+        # Apply fixed size if enabled
         if self.locked:
             self.setMinimumSize(QtCore.QSize(self.width, self.height))
             self.setMaximumSize(QtCore.QSize(self.width, self.height))
 
-        self.setStyleSheet(
-            f"border-radius: {self.width/2}px; border: 1px solid #ffffff;background-color: rgb{self.color};"
-        )
-        # self.setStyleSheet(
-        #     "QComboBox {background: transparent; border: none;} QComboBox::down-arrow {width: 0px;height: 0px;}"
-        # )
+        # Apply initial button style
+        self.updateStyle()
 
+        # Disable default button behavior
         self.setAutoDefault(False)
         self.setDefault(False)
 
-        self.clicked.connect(self.pick_color)
+        # Open color dialog on click
+        self.clicked.connect(self.pickColor)
 
-    def pick_color(self):
-        from widgets.dialogs import ColorDialog
+    def updateStyle(self):
+        """
+        Update button appearance using current color.
+        """
 
+        self.setStyleSheet(f"""
+            border-radius: {self.width / 2}px;
+            border: 1px solid #ffffff;
+            background-color: rgb{self.color};
+            """)
+
+    def setColor(self, color):
+        """
+        Set button color.
+
+        Args:
+            color (tuple):
+                RGB color tuple.
+        """
+
+        # Store color
+        self.color = color
+
+        # Refresh appearance
+        self.updateStyle()
+
+        # Emit change notification
+        self.color_changed.emit(self.color)
+
+    def getColor(self):
+        """
+        Return current color.
+
+        Returns:
+            tuple:
+                RGB color tuple.
+        """
+
+        return self.color
+
+    def pickColor(self):
+        """
+        Open color picker dialog and update color.
+        """
+
+        # Create dialog
         color_dialog = ColorDialog(self)
 
         if color_dialog.exec():
             result = color_dialog.getColor()
-            # color_form = QtWidgets.QColorDialog.getColor()
 
             if not result:
                 return
 
             self.color = result
 
-            self.setStyleSheet(
-                f"border-radius: {self.width/2}px; border: 1px solid #ffffff;background-color: rgb{self.color};"
-            )
-
-            self.color_changed.emit(self.color)
+            # Apply selected color
+            self.setColor(result)
 
 
 class TextToolButton(QtWidgets.QToolButton):
+    """
+    Text-based tool button.
+
+    Used for toolbar actions that display text instead of icons.
+    """
 
     def __init__(self, parent, value, **kwargs):
+        """
+        Initialize tool button.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            value (str):
+                Button label text.
+
+            **kwargs:
+                checkable (bool, optional):
+                    Enable checkable state.
+        """
+
+        # Initialize QToolButton
         super(TextToolButton, self).__init__(parent)
 
-        # self.name = kwargs.get("name")
-
+        # Set display text
         self.setText(value)
 
+        # Enable toggle behavior
         if kwargs.get("checkable"):
             self.setCheckable(kwargs["checkable"])
 

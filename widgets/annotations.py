@@ -1,7 +1,107 @@
-# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-# Author: Subin. Gopi (subing85@gmail.com).
-# Description: Review Player sketch stroke module.
-# WARNING! All changes made in this file will be lost when recompiling source file!
+"""
+Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/annotations.py
+
+Description:
+    Sketch drawing engine for frame-based annotation system.
+    Managing a full interactive sketching system on top of frame-based image/video data. It handles:
+
+
+Responsibilities:
+    - Freehand drawing (pencil strokes)
+    - Geometric shapes (rectangle, ellipse)
+    - Text annotations
+    - Stroke selection and transformation (move tool)
+    - Erasing with spatial hit detection
+    - Undo system with granular action tracking
+    - Overlay / watermark rendering system
+    - Stroke hit-testing for interaction
+    - Frame-wise stroke storage and retrieval
+    - Qt-based rendering using QPainter
+
+Features:
+    1. Multi-tool drawing system:
+        - Pencil (freehand polyline)
+        - Rectangle (drag-to-draw)
+        - Ellipse (drag-to-draw)
+        - Text insertion tool
+        - Move/transform tool
+        - Eraser tool
+
+    2. Frame-based annotation model:
+        - Each frame stores independent stroke collections
+        - Efficient lookup via dictionary mapping
+
+    3. Interactive editing:
+        - Stroke selection (hit-testing)
+        - Move transformation with delta tracking
+        - Partial erasing of pencil strokes
+
+    4. Rendering system:
+        - Qt QPainter-based rendering pipeline
+        - Stroke-specific renderers (pencil/shape/text)
+        - Selection highlighting
+        - Overlay rendering (HUD/watermarks)
+
+    5. Undo system:
+        - Action-based undo stack
+        - Supports create, erase, and move operations
+        - Frame-scoped restoration
+
+    6. Overlay system:
+        - Multi-position overlays (top/bottom/center variants)
+        - Supports text + image overlays
+        - Opacity and font styling control
+
+Architecture:
+    The system follows a **state-driven procedural architecture**:
+
+    Sketch (Main Controller)
+        |
+        |-- Stroke Storage (self.strokes)
+        |       Frame → List[Stroke]
+        |
+        |-- Interaction Layer
+        |       mousePressEvent()
+        |       mouseMoveEvent()
+        |       mouseReleaseEvent()
+        |
+        |-- Tool System
+        |       pencil / rectangle / ellipse / text / move / erase
+        |
+        |-- Rendering Layer
+        |       draw()
+        |       draw_pencil()
+        |       draw_rectangle()
+        |       draw_text()
+        |
+        |-- Utility Layer
+        |       hit testing
+        |       selection detection
+        |       bounding box computation
+        |
+        |-- Undo System
+        |       undo_history stack
+
+Notes:
+    - This system uses **dictionary-based stroke objects** for flexibility instead of strict classes (performance vs flexibility tradeoff).
+    - Coordinates are stored in image space (not screen space) and optionally converted during rendering using `point_converter`.
+    - Eraser uses geometric hit-testing rather than pixel manipulation, allowing resolution-independent editing.
+    - Undo system is intentionally lightweight and snapshot-based for reliability (not delta-compressed).
+    - Text rendering relies on QFontMetrics for bounding box calculation, ensuring accurate hit detection.
+    - Overlay system is designed as a HUD layer independent of stroke data.
+
+    - Keep stroke schema backward compatible (critical for saved projects)
+    - Avoid changing coordinate system without migration plan
+    - Undo stack may grow large in long sessions → consider pruning
+    - Overlay system may be refactored into a separate module in future
+    - Consider migrating stroke dicts → dataclass for long-term maintainability
+"""
 
 from __future__ import absolute_import
 
@@ -22,9 +122,7 @@ class Sketch(object):
     """
     Frame-based sketch stroke manager.
 
-    This class stores freehand drawing strokes for each frame
-    and provides methods for creating, editing, clearing, and
-    rendering sketches.
+    This class stores freehand drawing strokes for each frame and provides methods for creating, editing, clearing, and rendering sketches.
 
     Notes:
         stroke points should be stored as normalized
@@ -50,47 +148,84 @@ class Sketch(object):
         Initialize sketch manager.
         """
 
+        # ----------------------------
+        # Tool state
+        # ----------------------------
         # Current active stroke tool.
         self.tool = "pencil"
 
+        # ----------------------------
+        # Frame state
+        # ----------------------------
         # Current Active Frame
         self.current_frame = None
 
-        # Drawing State
+        # ----------------------------
+        # Interaction state
+        # ----------------------------
+        # Global drawing enabled flag
         self.enabled = False
+
+        # Mouse drag in progress
         self.drawing = False
 
-        # Active Brush Color
+        # Brush configuration, active brush color
         self.color = (255, 0, 0)
 
-        # Active Brush Thickness
+        # ----------------------------
+        # Brush configuration
+        # ----------------------------
+        # Active stroke thickness
         self.thickness = 3
 
-        # Active eraser radius
+        # Brush configuration, active eraser radius
         self.eraser_radius = 0.02
 
-        # Current Stroke
+        # ----------------------------
+        # Stroke tracking
+        # ----------------------------
+        # Currently drawing stroke
+        self.current_shape = None
+
+        # Legacy reference (unused in logic)
         self.current_stroke = None
 
-        # Frame Stroke Storage
+        # Stroke selected for move
+        self.selected_stroke = None
+
+        # Drag start position
+        self.move_start = None
+
+        # Backup before move
+        self.original_stroke = None
+
+        # ----------------------------
+        # Frame storage
+        # ----------------------------
+        # Stroke Storage
         self.strokes = dict()
 
+        # ----------------------------
+        # Image configuration
+        # ----------------------------
         self.image_width = 1920
         self.image_height = 1080
 
+        # ----------------------------
+        # Text tool configuration
+        # ----------------------------
         self.txt_font = None
 
+        # ----------------------------
+        # Temporary UI state
+        # ----------------------------
         self.drag_start = None
         self.drag_end = None
-
         self.preview_shape = None
 
-        self.selected_stroke = None
-
-        self.move_start = None
-        self.original_stroke = None
-
-        # Overlay storage
+        # ----------------------------
+        # Overlay system
+        # ----------------------------
         self.overlays = {
             "top_left": dict(),
             "top_right": dict(),
@@ -101,6 +236,9 @@ class Sketch(object):
             "bottom_center": dict(),
         }
 
+        # ----------------------------
+        # Undo system
+        # ----------------------------
         self.undo_history = list()
 
     def set_tool(self, tool):
@@ -164,11 +302,11 @@ class Sketch(object):
             value (int):
                 Radius in pixels.
 
-        5    # very small
-        10   # small
-        20   # medium
-        40   # large
-        80   # huge
+            5    # very small
+            10   # small
+            20   # medium
+            40   # large
+            80   # huge
         """
 
         self.eraser_radius = max(1, int(value))
@@ -189,6 +327,13 @@ class Sketch(object):
         self.image_height = max(height, 1)
 
     def set_txt_font(self, values):
+        """
+        Set text tool configuration.
+
+        Args:
+            values (dict): Font/text metadata.
+        """
+
         self.txt_font = values
 
     def get_strokes(self):
@@ -229,11 +374,21 @@ class Sketch(object):
         return len(self.strokes)
 
     def generate_id(self):
+        """
+        Generate unique stroke ID.
+
+        Returns:
+            str: UUID string.
+        """
+
         return str(uuid.uuid4())
 
     def mousePressEvent(self, point):
         """
-        Start drawing operation.
+        Handle mouse press event.
+
+        Args:
+            point (tuple): Cursor position.
         """
 
         if self.current_frame is None:
@@ -242,6 +397,7 @@ class Sketch(object):
         # Enable drag operation
         self.drawing = True
 
+        # Move Tool
         if self.tool == "move":
             self.selected_stroke = self.hit_stroke(point)
 
@@ -267,10 +423,9 @@ class Sketch(object):
 
             return
 
+        # Text
         if self.tool == "txt":
-
             if self.txt_font.get("txt"):
-
                 stroke = self.txt_font.copy()
 
                 stroke["id"] = self.generate_id()
@@ -290,7 +445,7 @@ class Sketch(object):
 
             return
 
-        # Create stroke
+        # Stroke (shapes)
         stroke = {
             "id": self.generate_id(),
             "type": self.tool,
@@ -315,13 +470,16 @@ class Sketch(object):
     def mouseMoveEvent(self, point):
         """
         Update current drawing operation.
+
+        Args:
+            point (tuple): Cursor position.
         """
 
         if not self.drawing:
             return
 
+        # Move Tool
         if self.tool == "move":
-
             if not self.selected_stroke:
                 return
 
@@ -329,7 +487,6 @@ class Sketch(object):
             dy = point[1] - self.move_start[1]
 
             self.move_stroke(self.selected_stroke, dx, dy)
-
             self.move_start = point
 
             return
@@ -358,11 +515,15 @@ class Sketch(object):
     def mouseReleaseEvent(self, point):
         """
         Finish drawing operation.
+
+        Args:
+            point (tuple): Cursor position.
         """
 
         if not self.drawing:
             return
 
+        # Move Tool
         if self.tool == "move":
 
             if self.selected_stroke and self.original_stroke:
@@ -376,7 +537,6 @@ class Sketch(object):
 
             self.selected_stroke = None
             self.original_stroke = None
-
             self.drawing = False
 
             return
@@ -409,17 +569,35 @@ class Sketch(object):
 
     def draw(self, painter, point_converter=None, rect=None):
         """
-        Draw all strokes for current frame.
+        Render all strokes for the current frame.
+
+        This is the main rendering entry point. It iterates through all stored strokes and dispatches drawing to shape-specific renderers.
+
+        Args:
+            painter (QtGui.QPainter):
+                Active Qt painter used for rendering.
+
+            point_converter (callable, optional):
+                Function to convert logical image coordinates to screen coordinates.
+
+            rect (QtCore.QRect, optional):
+                Viewport rectangle used for overlay rendering.
+
+        Returns:
+            None
         """
 
+        # No frame selected → nothing to render
         if self.current_frame is None:
             return
 
+        # Retrieve strokes for current frame
         strokes = self.get_strokes()
 
         for stroke in strokes:
             typed = stroke["type"]
 
+            # Pencil
             if typed == "pencil":
                 pen = QtGui.QPen(QtGui.QColor(*stroke["color"]))
                 pen.setWidth(stroke["thickness"])
@@ -427,6 +605,7 @@ class Sketch(object):
 
                 self.draw_pencil(painter, stroke, point_converter)
 
+            # Rectangle
             elif typed == "rectangle":
                 pen = QtGui.QPen(QtGui.QColor(*stroke["color"]))
                 pen.setWidth(stroke["thickness"])
@@ -434,13 +613,14 @@ class Sketch(object):
 
                 self.draw_rectangle(painter, stroke, point_converter)
 
+            # Ellipse
             elif typed == "ellipse":
                 pen = QtGui.QPen(QtGui.QColor(*stroke["color"]))
                 pen.setWidth(stroke["thickness"])
                 painter.setPen(pen)
 
                 self.draw_ellipse(painter, stroke, point_converter)
-
+            # Text
             elif typed == "txt":
                 self.draw_text(painter, stroke, point_converter)
 
@@ -453,15 +633,35 @@ class Sketch(object):
             self.draw_overlays(painter, rect)
 
     def draw_pencil(self, painter, stroke, point_converter=None):
+        """
+        Draw freehand pencil stroke as connected line segments.
+
+        Args:
+            painter (QtGui.QPainter):
+                Active painter.
+
+            stroke (dict):
+                Stroke containing list of points.
+
+            point_converter (callable, optional):
+                Coordinate transformation function.
+
+        Returns:
+            None
+        """
+
         points = stroke["points"]
 
+        # Need at least 2 points to form a line
         if len(points) < 2:
             return
 
+        # Draw segment-by-segment
         for index in range(len(points) - 1):
             point1 = points[index]
             point2 = points[index + 1]
 
+            # Convert coordinates if needed
             if point_converter:
                 point1 = point_converter(point1)
                 point2 = point_converter(point2)
@@ -469,19 +669,43 @@ class Sketch(object):
             painter.drawLine(point1, point2)
 
     def draw_ellipse(self, painter, stroke, point_converter=None):
+        """
+        Draw rectangular shape using start and end points.
+
+        Args:
+            painter (QtGui.QPainter): Active painter.
+            stroke (dict): Stroke containing 'start' and 'end'.
+            point_converter (callable, optional): Coordinate transform.
+
+        Returns:
+            None
+        """
 
         point1 = stroke["start"]
         point2 = stroke["end"]
 
+        # Convert coordinates if required
         if point_converter:
             point1 = point_converter(point1)
             point2 = point_converter(point2)
 
+        # Normalize rectangle (handles drag direction)
         rect = QtCore.QRectF(point1, point2).normalized()
 
         painter.drawEllipse(rect)
 
     def draw_rectangle(self, painter, stroke, point_converter=None):
+        """
+        Draw ellipse shape using bounding rectangle.
+
+        Args:
+            painter (QtGui.QPainter): Active painter.
+            stroke (dict): Stroke containing start/end points.
+            point_converter (callable, optional): Coordinate transform.
+
+        Returns:
+            None
+        """
 
         point1 = stroke["start"]
         point2 = stroke["end"]
@@ -490,12 +714,31 @@ class Sketch(object):
             point1 = point_converter(point1)
             point2 = point_converter(point2)
 
+        # Ellipse is defined by bounding rectangle
         rect = QtCore.QRectF(point1, point2).normalized()
 
         painter.drawRect(rect)
 
     def draw_text(self, painter, stroke, point_converter=None):
+        """
+        Render text annotation on canvas.
 
+        This method:
+            - Configures QFont from stroke data
+            - Computes text metrics
+            - Stores bounding box for hit-testing
+            - Draws text at specified position
+
+        Args:
+            painter (QtGui.QPainter): Active painter.
+            stroke (dict): Text stroke dictionary.
+            point_converter (callable, optional): Coordinate transform.
+
+        Returns:
+            None
+        """
+
+        # Text anchor position
         point = stroke["position"]
 
         if point_converter:
@@ -503,27 +746,27 @@ class Sketch(object):
         else:
             draw_point = point
 
+        # Font setup
         font = QtGui.QFont()
 
         font.setFamily(stroke.get("family", None))
         font.setPointSize(stroke.get("font_size", 24))
         font.setBold(stroke.get("bold", False))
-
         font.setItalic(stroke.get("italic", False))
         font.setUnderline(stroke.get("underline", False))
         font.setStrikeOut(stroke.get("strike_out", False))
 
         painter.setFont(font)
 
+        # Font Metrics
         metrics = QtGui.QFontMetrics(font)
-
         text = stroke["txt"]
 
         width = metrics.horizontalAdvance(text)
         height = metrics.height()
-
         ascent = metrics.ascent()
 
+        # Store bounds for hit-testing (important for selection)
         stroke["bounds"] = {
             "x": point[0],
             "y": point[1],
@@ -532,10 +775,25 @@ class Sketch(object):
             "ascent": ascent,
         }
 
+        # Draw
         painter.setPen(QtGui.QColor(*stroke["color"]))
         painter.drawText(draw_point, text)
 
     def erase(self, point):
+        """
+        Erase strokes based on proximity to pointer position.
+
+        This method:
+            - Checks all strokes in current frame
+            - Removes or splits strokes depending on type
+            - Uses geometric hit-testing instead of pixel deletion
+
+        Args:
+            point (tuple): Cursor position.
+
+        Returns:
+            None
+        """
 
         strokes = self.get_strokes()
 
@@ -561,20 +819,39 @@ class Sketch(object):
                 if not self.hit_ellipse(stroke, point):
                     new_strokes.append(stroke)
 
-            # txt
+            # Text
             elif typed == "txt":
                 if not self.hit_txt(stroke, point):
                     new_strokes.append(stroke)
 
+        # Replace frame strokes after erase operation
         self.strokes[self.current_frame] = new_strokes
 
     def move_stroke(self, stroke, dx, dy):
+        """
+        Translate a stroke by a delta offset.
+
+        Supports:
+            - Pencil strokes (list of points)
+            - Rectangle/Ellipse (start/end)
+            - Text (position)
+
+        Args:
+            stroke (dict): Stroke to move.
+            dx (float): Delta X.
+            dy (float): Delta Y.
+
+        Returns:
+            None
+        """
 
         typed = stroke["type"]
 
+        # Pencil
         if typed == "pencil":
             stroke["points"] = [(x + dx, y + dy) for x, y in stroke["points"]]
 
+        # Shapes (Rectangle, Ellipse)
         elif typed in ["rectangle", "ellipse"]:
             x1, y1 = stroke["start"]
             x2, y2 = stroke["end"]
@@ -582,14 +859,33 @@ class Sketch(object):
             stroke["start"] = (x1 + dx, y1 + dy)
             stroke["end"] = (x2 + dx, y2 + dy)
 
+        # Text
         elif typed == "txt":
             x, y = stroke["position"]
             stroke["position"] = (x + dx, y + dy)
 
     def get_stroke_rect(self, stroke, point_converter=None):
+        """
+        Compute bounding rectangle of a stroke for selection and hit-testing.
+
+        Supports:
+            - Pencil (polyline bounds)
+            - Rectangle / Ellipse (start-end bounds)
+            - Text (font metrics bounds)
+
+        Args:
+            stroke (dict): Stroke data.
+            point_converter (callable, optional): Coordinate transform.
+
+        Returns:
+            QtCore.QRectF: Bounding rectangle of stroke.
+        """
+
+        # Pencil
         if stroke["type"] == "pencil":
             points = stroke["points"]
 
+            # Convert points if required
             converted = [point_converter(p) if point_converter else p for p in points]
 
             xs = [p.x() for p in converted]
@@ -599,6 +895,7 @@ class Sketch(object):
 
             return rect
 
+        # Shapes (Rectangle, Ellipse)
         elif stroke["type"] in ["rectangle", "ellipse"]:
             p1 = stroke["start"]
             p2 = stroke["end"]
@@ -611,6 +908,7 @@ class Sketch(object):
 
             return rect
 
+        # Text
         elif stroke["type"] == "txt":
             point = stroke["position"]
 
@@ -621,35 +919,60 @@ class Sketch(object):
             font.setPointSize(stroke.get("font_size", 24))
 
             metrics = QtGui.QFontMetrics(font)
-
             rect = metrics.boundingRect(stroke["txt"])
 
+            # Align rect to text position (top-left baseline correction)
             rect.moveTo(point.x(), point.y() - rect.height())
 
             return QtCore.QRectF(rect)
 
     def draw_selection(self, painter, stroke, point_converter=None):
+        """
+        Draw selection outline around a stroke.
+
+        Used when a stroke is active or selected.
+
+        Args:
+            painter (QtGui.QPainter): Active painter.
+            stroke (dict): Selected stroke.
+            point_converter (callable, optional): Coordinate transform.
+
+        Returns:
+            None
+        """
+
         rect = self.get_stroke_rect(stroke, point_converter)
 
         if rect is None:
             return
 
+        # Blue dashed selection pen
         pen = QtGui.QPen(QtGui.QColor(0, 170, 255))
-
         pen.setWidth(2)
         pen.setStyle(QtCore.Qt.DashLine)
 
         painter.setPen(pen)
-
         painter.drawRect(rect)
 
     def undo(self):
+        """
+        Undo last action (create, move, erase).
+
+        Undo system is snapshot-based and supports:
+            - Create: remove stroke by ID
+            - Move: restore previous stroke state
+            - Erase: restore full frame snapshot
+
+        Returns:
+            None
+        """
+
         if not self.undo_history:
             return
 
         action = self.undo_history.pop()
 
-        # CREATE
+        # Create undo
         if action["type"] == "create":
             frame = action["frame"]
             stroke_id = action["stroke_id"]
@@ -658,12 +981,14 @@ class Sketch(object):
                 self.strokes[frame] = [
                     stroke for stroke in self.strokes[frame] if stroke["id"] != stroke_id
                 ]
+
+                # Remove frame entry if empty
                 if not self.strokes[frame]:
                     del self.strokes[frame]
 
             return
 
-        # MOVE
+        # Move undo
         if action["type"] == "move":
             stroke = self.find_stroke(action["stroke_id"])
 
@@ -673,7 +998,7 @@ class Sketch(object):
 
             return
 
-        # ERASE
+        # Erase undo
         if action["type"] == "erase":
             self.strokes[action["frame"]] = copy.deepcopy(action["strokes"])
 
@@ -681,19 +1006,40 @@ class Sketch(object):
 
     def find_stroke(self, stroke_id):
         """
-        Find stroke by UUID.
+        Find a stroke by its unique ID across all frames.
+
+        Args:
+            stroke_id (str): Stroke UUID.
+
+        Returns:
+            dict | None: Stroke if found, else None.
         """
 
+        # Search all frames
         for frame_strokes in self.strokes.values():
-
             for stroke in frame_strokes:
-
                 if stroke.get("id") == stroke_id:
                     return stroke
 
         return None
 
     def hit_pencil(self, stroke, point):
+        """
+        Erase logic for pencil strokes using segment splitting.
+
+        This method:
+            - Splits stroke into multiple segments
+            - Removes points within eraser radius
+            - Returns remaining stroke fragments
+
+        Args:
+            stroke (dict): Pencil stroke.
+            point (tuple): Eraser position.
+
+        Returns:
+            list: New stroke fragments.
+        """
+
         radius_x = self.eraser_radius / float(self.image_width)
         radius_y = self.eraser_radius / float(self.image_height)
 
@@ -707,6 +1053,7 @@ class Sketch(object):
             inside = (dx * dx + dy * dy) <= 1.0
 
             if inside:
+                # Flush current segment if valid
                 if len(current_segment) > 1:
                     segments.append(
                         {
@@ -717,12 +1064,11 @@ class Sketch(object):
                             "thickness": stroke["thickness"],
                         }
                     )
-
                 current_segment = list()
-
             else:
                 current_segment.append(p)
 
+        # Add last segment
         if len(current_segment) > 1:
             segments.append(
                 {
@@ -737,6 +1083,16 @@ class Sketch(object):
         return segments
 
     def hit_rectangle(self, stroke, point):
+        """
+        Check if a point lies inside a rectangle stroke.
+
+        Args:
+            stroke (dict): Rectangle stroke.
+            point (tuple): Test point.
+
+        Returns:
+            bool: True if inside rectangle.
+        """
 
         p1 = stroke["start"]
         p2 = stroke["end"]
@@ -752,6 +1108,19 @@ class Sketch(object):
         return xmin <= px <= xmax and ymin <= py <= ymax
 
     def hit_ellipse(self, stroke, point):
+        """
+        Check if a point lies inside an ellipse stroke.
+
+        Uses normalized ellipse equation:
+            (x^2 / rx^2) + (y^2 / ry^2) <= 1
+
+        Args:
+            stroke (dict): Ellipse stroke.
+            point (tuple): Test point.
+
+        Returns:
+            bool: True if inside ellipse.
+        """
 
         p1 = stroke["start"]
         p2 = stroke["end"]
@@ -773,16 +1142,27 @@ class Sketch(object):
         return value <= 1.0
 
     def hit_txt(self, stroke, point):
+        """
+        Check if a point intersects a text stroke bounding box.
+
+        Args:
+            stroke (dict): Text stroke.
+            point (tuple): Test point (normalized or image space).
+
+        Returns:
+            bool: True if inside text bounds.
+        """
+
         bounds = stroke.get("bounds")
 
         if not bounds:
             return False
 
-        # normalized mouse -> image pixels
+        # Convert mouse position to image space
         px = point[0] * self.image_width
         py = point[1] * self.image_height
 
-        # normalized text position -> image pixels
+        # Convert text origin to image space
         tx = bounds["x"] * self.image_width
         ty = bounds["y"] * self.image_height
 
@@ -795,11 +1175,22 @@ class Sketch(object):
         return left <= px <= right and top <= py <= bottom
 
     def hit_stroke(self, point):
+        """
+        Detect which stroke is under cursor.
+
+        Checks strokes in reverse order (top-most first).
+
+        Args:
+            point (tuple): Cursor position.
+
+        Returns:
+            dict | None: Hit stroke or None.
+        """
 
         strokes = self.get_strokes()
 
+        # Reverse for proper layering (last drawn = top)
         for stroke in reversed(strokes):
-
             typed = stroke["type"]
 
             if typed == "txt":
@@ -820,6 +1211,18 @@ class Sketch(object):
         return None
 
     def hit_pencil_move(self, stroke, point):
+        """
+        Hit-test for pencil stroke selection (move tool).
+
+        Uses simple radius-based proximity check.
+
+        Args:
+            stroke (dict): Pencil stroke.
+            point (tuple): Cursor position.
+
+        Returns:
+            bool: True if stroke is near point.
+        """
 
         radius = 0.01
 
@@ -835,70 +1238,99 @@ class Sketch(object):
 
     def clear(self):
         """
-        Remove all strokes from current frame.
-        """
+        Remove all strokes from the current frame.
 
+        This does NOT affect other frames.
+
+        Returns:
+            None
+        """
         if self.current_frame is None:
             return
 
-        # Remove Frame Data
+        # Safely remove frame entry if it exists
         self.strokes.pop(self.current_frame, None)
 
     def clear_all(self):
         """
-        Remove all sketches from all frames.
+        Remove all strokes from all frames.
+
+        This resets the entire sketch system.
+
+        Returns:
+            None
         """
 
         self.strokes.clear()
 
     def draw_overlays(self, painter, rect):
         """
-        Draw all overlay positions.
+        Render all overlay groups on the canvas.
+
+        Overlays are drawn based on predefined screen positions:
+            - top_left, top_right, top_center
+            - bottom_left, bottom_right, bottom_center
+            - center
+
+        Args:
+            painter (QtGui.QPainter): Active Qt painter.
+            rect (QtCore.QRect): Viewport or canvas bounds.
+
+        Returns:
+            None
         """
 
+        # Iterate all overlay positions
         for position in self.overlays:
-            self.draw_overlay_position(
-                painter,
-                rect,
-                position,
-            )
+            self.draw_overlay_position(painter, rect, position)
 
     def set_overlays(self, watermarks):
         """
-        Set all overlay options.
+        Set multiple overlay configurations at once.
+
+        This method is typically used to load watermark presets.
 
         Args:
             watermarks (dict):
-                Watermark configuration dictionary.
-        """
+                Dictionary structured as:
+                {
+                    position: [
+                        {
+                            "checked": bool,
+                            "code": str,
+                            ...
+                        }
+                    ]
+                }
 
+        Returns:
+            None
+        """
         for position, values in watermarks.items():
             for context in values:
                 self.set_overlay(context["checked"], context["code"], position, context)
 
     def set_overlay(self, checked, key, position, context):
         """
-        Update a single overlay option.
+        Add or update a single overlay entry.
+
+        Overlays are grouped by screen position.
 
         Args:
-            checked (bool):
-                Overlay enabled state.
+            checked (bool): Enable/disable overlay.
+            key (str): Unique overlay identifier.
+            position (str): Screen position group.
+            context (dict): Overlay configuration data.
 
-            key (str):
-                Overlay identifier.
-
-            position (str):
-                Overlay screen position.
-
-            context (dict):
-                Overlay settings.
+        Returns:
+            None
         """
 
-        # Create position group if missing
+        # Ensure position group exists
         if position not in self.overlays:
             self.overlays[position] = dict()
 
-        # Create overlay entry if missing
+        # Ensure overlay key exists
         if key not in self.overlays[position]:
             self.overlays[position][key] = dict()
 
@@ -906,31 +1338,34 @@ class Sketch(object):
         self.overlays[position][key] = context
         self.overlays[position][key]["checked"] = checked
 
-        # self.update()
-
     def draw_overlay_position(self, painter, rect, position):
         """
-        Draw overlays for a specific position group.
+        Render all overlays for a specific screen position.
+
+        Supports:
+            - Image overlays
+            - Text overlays
+            - Alignment (left, center, right)
+            - Vertical stacking direction
 
         Args:
-            painter (QtGui.QPainter):
-                Painter object.
+            painter (QtGui.QPainter): Active painter.
+            rect (QtCore.QRect): Canvas bounds.
+            position (str): Overlay anchor position.
 
-            rect (QtCore.QRect):
-                Display rectangle.
-
-            position (str):
-                Overlay position.
+        Returns:
+            None
         """
 
         overlays = self.overlays.get(position, dict())
         if not overlays:
             return
 
+        # Font metrics for spacing calculations
         metrics = QtGui.QFontMetrics(painter.font())
         margin, spacing = 20, 20
 
-        # Resolve overlay anchor position
+        # Resolve overlay anchor position (position calculation)
         if position == "top_left":
             x = rect.left() + margin
             y = rect.top() + margin  # 40
@@ -962,7 +1397,7 @@ class Sketch(object):
         else:
             return
 
-        # Bottom positions render upward
+        # Bottom positions stack upward
         reverse_vertical = position in ["bottom_left", "bottom_center", "bottom_right"]
 
         # Draw overlays
@@ -1054,30 +1489,26 @@ class Sketch(object):
 
     def draw_overlay_text(self, painter, x, y, text, font_data):
         """
-        Draw overlay text.
+        Render styled overlay text with stroke + fill support.
+
+        Supports:
+            - Fill color
+            - Stroke outline
+            - Opacity control
+            - Font customization
 
         Args:
-            painter (QtGui.QPainter):
-                Painter object.
-
-            x (float):
-                Draw X position.
-
-            y (float):
-                Draw Y position.
-
-            text (str):
-                Overlay text.
-
-            font_data (dict):
-                Font configuration.
+            painter (QtGui.QPainter): Active painter.
+            x (float): X position.
+            y (float): Y position.
+            text (str): Text to render.
+            font_data (dict): Font + style configuration.
 
         Returns:
-            QtGui.QPainterPath:
-                Generated text path.
+            QtGui.QPainterPath: Rendered text path.
         """
 
-        # Configure font
+        # Build font from configuration
         font = Font(None, **font_data)
         painter.setFont(font)
 

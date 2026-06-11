@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Main Qt GUI module for the Review Player application.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the primary application window and integrates all major UI components, including:
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/__init__.py
+
+Description:
+    This module contains the primary application window and integrates all major UI components, including:
 
     * Playlist browser
     * OpenGL media viewer
@@ -31,36 +35,24 @@ from PySide6 import QtWidgets
 
 from ocio import OCIOProcessor
 
+from widgets.viewer import ViewFrame
 from widgets.pixmaps import PathPixmap
-
-
 from widgets.buttons import HelpButton
-
-
+from widgets.dialogs import FileDialog
+from playback.player import MediaPlayer
+from widgets.viewer import ViewerWidget
+from widgets.recaps import RecapsWidget
+from widgets.styles import SetStylesheet
+from widgets.labels import CopyrightLabel
+from widgets.pixmaps import NamePixmapIcon
 from widgets.layouts import VerticalLayout
+from widgets.dialogs import OpenMediaDialog
+from widgets.timeline import TimelineWidget
+from widgets.playlist import PlaylistWidget
 from widgets.layouts import HorizontalLayout
 from widgets.layouts import HorizontalSpacer
-from widgets.layouts import HorizontalSplitter
-
-from widgets.styles import SetStylesheet
-
-from widgets.labels import CopyrightLabel
 from widgets.fontdialog import TxtInputDialog
-
-
-from widgets.pixmaps import NamePixmapIcon
-from widgets.dialogs import OpenMediaDialog
-from widgets.dialogs import FileDialog
-
-
-from widgets.viewer import ViewerWidget
-from widgets.timeline import TimelineWidget
-
-from playback.player import MediaPlayer
-
-from widgets.viewer import ViewFrame
-from widgets.playlist import PlaylistWidget
-from widgets.recaps import RecapsWidget
+from widgets.layouts import HorizontalSplitter
 
 LOGGER = logger.getLogger(__name__)
 
@@ -328,8 +320,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Load media into player
         self.player.load(filepath)
-
-        # Sync FPS UI for video files
 
         # Sequence media supports AOVs
         self.viewframe.viewToolbarLayout.set_aovs(

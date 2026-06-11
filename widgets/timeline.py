@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt custom timeline widget module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the custom timeline widget used by the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/timeline.py
+
+Description:
+    This module contains the custom timeline widget used by the Review Player application.
 
 The timeline widget is responsible for:
 
