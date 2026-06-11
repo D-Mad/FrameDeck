@@ -37,7 +37,7 @@ Signals:
     project_changed:
         Emitted when the active project changes.
 
-    click_widgetitem:
+    select_media:
         Emitted when media items are clicked or double-clicked.
 """
 
@@ -54,7 +54,11 @@ from widgets.comboboxs import ProjectCombobox
 from widgets.treewidgets import PlaylistTreewidget
 
 
-class PlaylistGroup(QtWidgets.QWidget):
+from scripts import Projects
+from scripts import Versions
+
+
+class PlaylistWidget(QtWidgets.QWidget):
     """
     Main playlist container widget.
 
@@ -70,7 +74,7 @@ class PlaylistGroup(QtWidgets.QWidget):
         project_changed (dict):
             Emitted when the active project changes.
 
-        click_widgetitem (bool, dict):
+        select_media (bool, dict):
             Emitted when a media item is clicked or double-clicked.
 
             Arguments:
@@ -88,7 +92,7 @@ class PlaylistGroup(QtWidgets.QWidget):
     """
 
     project_changed = QtCore.Signal(dict)
-    click_widgetitem = QtCore.Signal(bool, dict)
+    select_media = QtCore.Signal(bool, dict)
 
     def __init__(self, parent, *args, **kwargs):
         """
@@ -108,22 +112,111 @@ class PlaylistGroup(QtWidgets.QWidget):
                     Project context list.
         """
 
-        super(PlaylistGroup, self).__init__(parent)
+        super(PlaylistWidget, self).__init__(parent)
+
+        self.current_project = None
 
         # Store project data
-        self.projects = kwargs.get("projects")
+        # self.projects = kwargs.get("projects")
 
         # Main vertical layout
         self.verticallayout = VerticalLayout(self, space=5, margins=(0, 0, 0, 0))
 
-        # Project header group
-        self.projectGroupbox = QtWidgets.QGroupBox(self)
-        self.verticallayout.addWidget(self.projectGroupbox)
+        self.projectsFrame = ProjectsFrame(self)
+        self.verticallayout.addWidget(self.projectsFrame)
+
+        # Playlist tree widget
+        self.playlistTreewidget = PlaylistTreewidget(self)
+        self.verticallayout.addWidget(self.playlistTreewidget)
+
+        # Signal Connections
+        self.projectsFrame.project_changed.connect(self.set_playlist)
+
+        # Connect playlist interactions
+        self.playlistTreewidget.itemClicked.connect(self.open_media)
+        self.playlistTreewidget.itemDoubleClicked.connect(self.play_media)
+
+        # Emit initial project
+        self.projectsFrame.set_default_project(index=0)
+
+    def set_playlist(self, project):
+        """
+        Update playlist versions based on selected project.
+
+        Args:
+            project (dict):
+                Project context dictionary.
+        """
+        self.current_project = project
+
+        # Load project versions
+        versions = Versions.get(self.current_project)
+
+        # Update playlist widget
+        self.set_versions(versions)
+
+        self.project_changed.emit(self.current_project)
+
+    def set_versions(self, versions):
+        """
+        Populate playlist with versions/media items.
+
+        Args:
+            versions (list):
+                Media/version context list.
+
+        Example:
+            >>> widget.set_versions(versions)
+        """
+
+        self.playlistTreewidget.setValues(versions)
+
+    def open_media(self, widgetitem):
+        """
+        Emit media open request. Triggered when a playlist item is single-clicked.
+
+        Args:
+            widgetitem (PlaylistWidgetItem):
+                Selected playlist item.
+        """
+
+        self.project_changed.emit(self.current_project)
+
+        self.select_media.emit(False, widgetitem.context)
+
+    def play_media(self, widgetitem):
+        """
+        Emit media playback request. Triggered when a playlist item is double-clicked.
+
+        Args:
+            widgetitem (PlaylistWidgetItem):
+                Selected playlist item.
+        """
+
+        self.project_changed.emit(self.current_project)
+
+        self.select_media.emit(True, widgetitem.context)
+
+
+class ProjectsFrame(QtWidgets.QFrame):
+
+    project_changed = QtCore.Signal(dict)
+
+    def __init__(self, parent, *args, **kwargs):
+        super(ProjectsFrame, self).__init__(parent)
+
+        # Store project data
+        self.projects = Projects.get()
+
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Raised)
+
+        self.setupUi()
+
+    def setupUi(self):
 
         # Header horizontal layout
-        self.horizontallayout = HorizontalLayout(
-            self.projectGroupbox, space=10, margins=(10, 10, 10, 10)
-        )
+        self.horizontallayout = HorizontalLayout(self, space=10, margins=(10, 10, 10, 10))
 
         # Project thumbnail preview
         self.projectIconLabel = ProjectIconLabel(self)
@@ -132,23 +225,23 @@ class PlaylistGroup(QtWidgets.QWidget):
         # Project selector combobox
         self.projectCombobox = ProjectCombobox(self, key="name")
         self.projectCombobox.setItems(contextList=self.projects)
-        self.projectCombobox.project_changed.connect(self.set_project)
 
         self.horizontallayout.addWidget(self.projectCombobox)
 
-        # Playlist tree widget
-        self.playlistTreewidget = PlaylistTreewidget(self)
-        self.verticallayout.addWidget(self.playlistTreewidget)
+        self.projectCombobox.project_changed.connect(self.set_current_project)
 
         # Set initial project
-        if self.projects:
-            self.set_project(self.projects[0])
+        # if self.projects:
+        #    self.set_current_project(self.projects[0])
+        #    self.set_current_project(self.projects[1])
 
-        # Connect playlist interactions
-        self.playlistTreewidget.itemClicked.connect(self.open_media)
-        self.playlistTreewidget.itemDoubleClicked.connect(self.play_media)
+    def set_default_project(self, index=0):
+        if not self.projects:
+            return
 
-    def set_project(self, context):
+        self.set_current_project(self.projects[index])
+
+    def set_current_project(self, context):
         """
         Set current active project.
 
@@ -174,53 +267,6 @@ class PlaylistGroup(QtWidgets.QWidget):
 
         # Emit project change signal
         self.project_changed.emit(context)
-
-    def set_current_project(self, project):
-        """
-        Set current project in project combobox.
-
-        Args:
-            project (dict):
-                Project context dictionary.
-        """
-
-        self.projectCombobox.setValue(project)
-
-    def set_versions(self, versions):
-        """
-        Populate playlist with versions/media items.
-
-        Args:
-            versions (list):
-                Media/version context list.
-
-        Example:
-            >>> widget.set_versions(versions)
-        """
-
-        self.playlistTreewidget.setValues(versions)
-
-    def open_media(self, widgetitem):
-        """
-        Emit media open request. Triggered when a playlist item is single-clicked.
-
-        Args:
-            widgetitem (PlaylistWidgetItem):
-                Selected playlist item.
-        """
-
-        self.click_widgetitem.emit(False, widgetitem.context)
-
-    def play_media(self, widgetitem):
-        """
-        Emit media playback request. Triggered when a playlist item is double-clicked.
-
-        Args:
-            widgetitem (PlaylistWidgetItem):
-                Selected playlist item.
-        """
-
-        self.click_widgetitem.emit(True, widgetitem.context)
 
 
 if __name__ == "__main__":

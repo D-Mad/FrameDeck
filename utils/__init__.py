@@ -84,6 +84,17 @@ def hasPathExists(filepath):
     return os.path.exists(absfilepath)
 
 
+def fileName(filepath, extension=False):
+    basename = os.path.basename(filepath)
+
+    if extension:
+        name = basename
+    else:
+        name = os.path.splitext(basename)[0]
+
+    return name
+
+
 def fileExtension(filepath):
     """Return lowercase file extension.
 

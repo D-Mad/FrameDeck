@@ -73,6 +73,386 @@ from PySide6 import QtOpenGLWidgets
 from widgets.pixmaps import PathPixmap
 from widgets.annotations import Sketch
 
+from widgets.buttons import TxtButton
+from widgets.buttons import HelpButton
+from widgets.buttons import OpenButton
+from widgets.buttons import LoopButton
+from widgets.buttons import MoveButton
+from widgets.buttons import UndoButton
+from widgets.buttons import ColorButton
+from widgets.buttons import ClearButton
+from widgets.buttons import ArrowButton
+from widgets.buttons import PencilButton
+from widgets.buttons import PencilButton
+from widgets.buttons import EraserButton
+from widgets.buttons import RenderButton
+from widgets.buttons import RecapsButton
+from widgets.labels import ToolNameLabel
+from widgets.labels import ThicknesLabel
+from widgets.buttons import EllipseButton
+from widgets.comboboxs import AovsCombobox
+from widgets.buttons import RectangleButton
+from widgets.buttons import DisplayMenuButton
+from widgets.lineedits import ThicknesSpinBox
+from widgets.layouts import VerticalLayout
+from widgets.layouts import HorizontalLayout
+from widgets.layouts import HorizontalSpacer
+from widgets.fontdialog import TxtInputDialog
+
+
+from widgets.comboboxs import FbsCombobox
+from widgets.buttons import ForwardButton
+from widgets.buttons import BackwordButton
+from widgets.buttons import PlayPauseButton
+
+from widgets.timeline import TimelineWidget
+
+
+class ViewFrame(QtWidgets.QFrame):
+
+    def __init__(self, parent, *args, **kwargs):
+        super(ViewFrame, self).__init__(parent)
+
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Raised)
+
+        self.verticallayout = VerticalLayout(self, space=10, margins=(10, 10, 10, 10))
+
+        self.viewToolbarLayout = ViewToolbarLayout(None)
+        self.verticallayout.addLayout(self.viewToolbarLayout)
+
+        # OpenGL Viewer
+        self.viewer = ViewerWidget(self)
+        self.verticallayout.addWidget(self.viewer)
+
+        # Timeline widget
+        self.timeline = TimelineWidget()
+        self.verticallayout.addWidget(self.timeline)
+
+        # Timeline widget
+        self.timelineToolbarLayout = TimelineToolbarLayout(None)
+        self.verticallayout.addLayout(self.timelineToolbarLayout)
+
+
+class ViewToolbarLayout(HorizontalLayout):
+
+    aov_changed = QtCore.Signal(str)
+    thicknes_changed = QtCore.Signal(float)
+    radius_changed = QtCore.Signal(float)
+    color_changed = QtCore.Signal(tuple)
+    draw_enabled = QtCore.Signal(str, bool, object)
+    undo_stack = QtCore.Signal()
+    clear_stack = QtCore.Signal()
+    water_marks = QtCore.Signal(bool, str, str, dict)
+    trigger_render = QtCore.Signal()
+    trigger_recaps = QtCore.Signal(bool)
+
+    def __init__(self, parent, *args, **kwargs):
+        super(ViewToolbarLayout, self).__init__(parent, *args, **kwargs)
+
+        self.setupUi()
+
+    def setupUi(self):
+        # AOV selector
+        self.aovsCombobox = AovsCombobox(None)
+        self.addWidget(self.aovsCombobox)
+
+        # Spacer
+        self.horizontalspacer1 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer1)
+
+        # Annotation Drawing #####################################
+
+        self.toolNameLabel = ToolNameLabel(None)
+        self.addWidget(self.toolNameLabel)
+
+        # Pencil button
+        self.pencilButton = PencilButton(
+            None, tooltip="Pencil Tool", checkable=True, width=22, height=22
+        )
+        self.addWidget(self.pencilButton)
+
+        self.arrowButton = ArrowButton(
+            None, tooltip="Arrow Shape", checkable=True, width=22, height=22
+        )
+        self.arrowButton.setVisible(False)
+        self.addWidget(self.arrowButton)
+
+        self.ellipseButton = EllipseButton(
+            None, tooltip="Ellipse Shape", checkable=True, width=22, height=22
+        )
+        self.addWidget(self.ellipseButton)
+
+        self.rectangleButton = RectangleButton(
+            None, tooltip="Rectangle Shape", checkable=True, width=22, height=22
+        )
+        self.addWidget(self.rectangleButton)
+
+        self.eraserButton = EraserButton(
+            None, tooltip="Erasier Tool", checkable=True, width=22, height=22
+        )
+        self.eraserButton.setCheckable(True)
+        self.addWidget(self.eraserButton)
+
+        self.thicknesLabel = ThicknesLabel(None, "Thicknes")
+        self.addWidget(self.thicknesLabel)
+
+        self.thicknesSpinBox = ThicknesSpinBox(None, 3)
+        self.addWidget(self.thicknesSpinBox)
+
+        self.radiusSpinBox = ThicknesSpinBox(None, 10)
+        self.radiusSpinBox.setVisible(False)
+        self.addWidget(self.radiusSpinBox)
+
+        self.colorButton = ColorButton(None, tooltip="Pick Color", width=22, height=22)
+        self.addWidget(self.colorButton)
+
+        self.txtButton = TxtButton(None, tooltip="Text Tool", checkable=True, width=22, height=22)
+        self.addWidget(self.txtButton)
+
+        self.moveButton = MoveButton(None, tooltip="Move Tool", checkable=True, width=22, height=22)
+        self.addWidget(self.moveButton)
+
+        self.undoButton = UndoButton(None, tooltip="Undo", width=22, height=22)
+        self.addWidget(self.undoButton)
+
+        self.clearButton = ClearButton(None, tooltip="Clear", width=22, height=22)
+        self.addWidget(self.clearButton)
+
+        ########################################################
+
+        # Spacer
+        self.horizontalspacer2 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer2)
+
+        # Display menu button
+        self.displayMenuButton = DisplayMenuButton(
+            None, tooltip="Water mark display menu", width=32, height=32
+        )
+        self.addWidget(self.displayMenuButton)
+
+        self.horizontalspacer3 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer3)
+
+        self.renderButton = RenderButton(None, tooltip="Render Current Frame", width=22, height=22)
+        self.addWidget(self.renderButton)
+
+        self.horizontalspacer4 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer4)
+
+        self.recapsButton = RecapsButton(
+            None, tooltip="To display recap panel", width=32, height=32, checkable=True
+        )
+        self.addWidget(self.recapsButton)
+
+        self.aovsCombobox.currentTextChanged.connect(self.set_current_aov)
+
+        self.thicknesSpinBox.thicknes_changed.connect(self.set_current_thicknes)
+        self.radiusSpinBox.thicknes_changed.connect(self.set_current_radius)
+        self.colorButton.color_changed.connect(self.set_current_color)
+
+        self.pencilButton.toggled.connect(lambda enabled: self.set_draw_enabled("pencil", enabled))
+        self.arrowButton.toggled.connect(lambda enabled: self.set_draw_enabled("arrow", enabled))
+        self.ellipseButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("ellipse", enabled)
+        )
+        self.rectangleButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("rectangle", enabled)
+        )
+        self.eraserButton.toggled.connect(lambda enabled: self.set_draw_enabled("eraser", enabled))
+        self.txtButton.toggled.connect(lambda enabled: self.set_draw_enabled("txt", enabled))
+        self.moveButton.toggled.connect(lambda enabled: self.set_draw_enabled("move", enabled))
+
+        self.undoButton.clicked.connect(self.undo_strokes)
+        self.clearButton.clicked.connect(self.clear_strokes)
+
+        self.displayMenuButton.menu.display_changed.connect(self.set_water_marks)
+
+        self.renderButton.clicked.connect(self.render)
+        self.recapsButton.toggled.connect(self.set_recaps)
+
+    def update_watermarks(self, context, **kwargs):
+        self.displayMenuButton.menu.update_watermarks(context, **kwargs)
+
+    def set_aovs(self, typed, aovs):
+
+        if typed == "sequence":
+            self.aovsCombobox.setEnabled(True)
+            self.aovsCombobox.clear()
+            self.aovsCombobox.addItems(aovs)
+        else:
+            self.aovsCombobox.clear()
+            self.aovsCombobox.setEnabled(False)
+
+    def set_current_aov(self, aov):
+        self.aov_changed.emit(aov)
+
+    def set_current_thicknes(self, value):
+        self.thicknes_changed.emit(value)
+
+    def set_current_radius(self, value):
+        self.radius_changed.emit(value)
+
+    def set_current_color(self, value):
+        self.color_changed.emit(value)
+
+    def set_draw_enabled(self, tool, enabled):
+        buttons = [
+            self.pencilButton,
+            self.arrowButton,
+            self.ellipseButton,
+            self.rectangleButton,
+            self.eraserButton,
+            self.txtButton,
+            self.moveButton,
+        ]
+
+        for button in buttons:
+            if button.name == button:
+                continue
+            button.setChecked(False)
+
+        self.toolNameLabel.setValue(enabled, tool)
+
+        if tool == "txt" and enabled:
+            txtInputDialog = TxtInputDialog(self.parentWidget())
+            # txtInputDialog.value_changed.connect(self.viewer.set_sketch_enabled)
+            txtInputDialog.value_changed.connect(self.txt_value_changed)
+
+            txtInputDialog.exec()
+            self.txtButton.setChecked(False)
+
+            return
+
+        if tool == "eraser":
+            self.thicknesSpinBox.setVisible(False)
+            self.radiusSpinBox.setVisible(True)
+            self.thicknesLabel.setValue("Radius")
+        else:
+            self.radiusSpinBox.setVisible(False)
+            self.thicknesSpinBox.setVisible(True)
+            self.thicknesLabel.setValue("Thicknes")
+
+        self.draw_enabled.emit(tool, enabled, None)
+
+    def txt_value_changed(self, tool, enabled, font):
+        # txtInputDialog.value_changed.connect(self.viewer.set_sketch_enabled)
+        self.draw_enabled.emit(tool, enabled, font)
+
+    def undo_strokes(self):
+        self.undo_stack.emit()
+
+    def clear_strokes(self):
+        self.clear_stack.emit()
+
+    def set_water_marks(self, *args):
+        self.water_marks.emit(*args)
+
+    def render(self):
+        self.trigger_render.emit()
+
+    def set_recaps(self, enabled):
+        self.trigger_recaps.emit(enabled)
+
+
+class TimelineToolbarLayout(HorizontalLayout):
+
+    fps_chanaged = QtCore.Signal(dict)
+    trigger_timeline = QtCore.Signal(str, bool)
+
+    def __init__(self, parent, *args, **kwargs):
+        super(TimelineToolbarLayout, self).__init__(parent, *args, **kwargs)
+
+        self.setupUi()
+
+    def setupUi(self):
+        # Open media button
+        self.openButton = OpenButton(None, tooltip="Open Media (Ctrl+O)", width=32, height=32)
+        self.addWidget(self.openButton)
+
+        # Spacer
+        self.horizontalspacer5 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer5)
+
+        # Previous frame button
+        self.backwordButton = BackwordButton(
+            None, tooltip="Backword Frame (<)", width=32, height=32
+        )
+        self.addWidget(self.backwordButton)
+
+        # Play/Pause button
+        self.playPauseButton = PlayPauseButton(None, tooltip="Play (space)", width=42, height=42)
+        # self.player.set_playbutton(self.playPauseButton)
+
+        # Register button with player
+        self.addWidget(self.playPauseButton)
+
+        # Next frame button
+        self.forwardButton = ForwardButton(None, tooltip="Forward Frame (>)", width=32, height=32)
+        self.addWidget(self.forwardButton)
+
+        # Spacer
+        self.horizontalspacer6 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer6)
+
+        # Loop toggle button
+        self.loopButton = LoopButton(
+            None, tooltip="Loop the timeline (Ctrl+L)", width=42, height=32
+        )
+        self.addWidget(self.loopButton)
+
+        # FPS selector
+        self.fpsCombobox = FbsCombobox(None)
+        self.fpsCombobox.fps_changed.connect(self.update_fps)
+        self.addWidget(self.fpsCombobox)
+
+        self.openButton.clicked.connect(self.open)
+        self.backwordButton.clicked.connect(self.backword)
+        self.playPauseButton.clicked.connect(self.play_pause)
+        self.forwardButton.clicked.connect(self.forward)
+        self.loopButton.toggled.connect(self.loop)
+
+    def open(self):
+        self.trigger_timeline.emit("open", False)
+
+    def backword(self):
+        self.trigger_timeline.emit("backword", False)
+
+    def play_pause(self):
+        self.trigger_timeline.emit("play_pause", False)
+
+    def forward(self):
+        self.trigger_timeline.emit("forward", False)
+
+    def loop(self, enabled):
+        # enable = False if self.loopButton.isChecked() else True
+        # self.loopButton.setChecked(enable)
+
+        self.trigger_timeline.emit("loop", enabled)
+
+        # enable = False if self.loopButton.isChecked() else True
+        # self.loopButton.setChecked(enable)
+
+    def reset_fps(self, typed, fps):
+
+        # Only applies to video playback
+        if typed != "video":
+            return
+
+        for d in dir(self.fpsCombobox):
+            print(d)
+
+        # Find matching FPS preset
+        context = self.fpsCombobox.findByKey(fps, "value")
+        if not context:
+            return
+
+        # Update combobox
+        self.fpsCombobox.setValue(context)
+
+    def update_fps(self, value):
+        self.fps_chanaged.emit(value)
+
 
 class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     """
@@ -316,13 +696,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.annotations.set_overlays(watermarks)
         self.update()
 
-    def set_overlay_option(
-        self,
-        checked,
-        key,
-        position,
-        context,
-    ):
+    def set_overlay_option(self, checked, key, position, context):
         self.annotations.set_overlay(checked, key, position, context)
         self.update()
 

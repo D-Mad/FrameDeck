@@ -337,6 +337,15 @@ class FileDialog(QtWidgets.QFileDialog):
 
         return filepath
 
+    def pickFile(self):
+        pattern = f"{self.label} (*{' *'.join(self.extensions)})"
+        filepath, fileFormat = self.getOpenFileName(self, self.title, self.browsepath, pattern)
+
+        if filepath:
+            self.browsepath = utils.dirname(filepath)
+
+        return filepath
+
 
 if __name__ == "__main__":
     pass

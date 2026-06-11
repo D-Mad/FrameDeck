@@ -158,5 +158,52 @@ class Versions(object):
         return result
 
 
+class Submit(object):
+
+    @classmethod
+    def set(cls, project):
+        """Return versions/media data for project.
+
+        Args:
+            project (dict):
+                Project dictionary.
+
+        Returns:
+            list:
+                Filtered and sorted version list.
+
+        Notes:
+            This implementation loads example preset data
+            from:
+                resources/presets/versions.json
+
+            Replace this method with:
+                - ShotGrid Version queries
+                - FTrack AssetVersion queries
+                - Database queries
+                - REST API integrations
+
+        Example:
+            >>> versions = Versions.get(project)
+        """
+
+        # Load Example Version Preset Data
+        versions = resources.getPreset("versions")
+
+        # Filter Versions By Project
+        project_versions = list(
+            filter(lambda x: x.get("project") and x["project"]["id"] == project["id"], versions)
+        )
+
+        # Sort Versions By Creation Date
+        result = sorted(project_versions, key=lambda k: (k["created_at"]), reverse=True)
+
+        return result
+
+    @classmethod
+    def get(cls, version):
+        pass
+
+
 if __name__ == "__main__":
     pass

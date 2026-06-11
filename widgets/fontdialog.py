@@ -1,11 +1,9 @@
 from __future__ import absolute_import
 
-from dataclasses import dataclass
-
-
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
+
 
 from widgets.buttons import TextButton
 from widgets.buttons import ColorButton
@@ -15,13 +13,6 @@ from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalLayout
 from widgets.lineedits import FontSizeSpinBox
-
-
-@dataclass
-class TextData(object):
-    font: QtGui.QFont
-    text: str
-    color: tuple
 
 
 class TxtInputDialog(QtWidgets.QDialog):
@@ -142,3 +133,7 @@ class TxtInputDialog(QtWidgets.QDialog):
 
         self.value_changed.emit("txt", True, self.values)
         self.accept()  # closes dialog
+
+
+if __name__ == "__main__":
+    pass

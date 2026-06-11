@@ -306,7 +306,7 @@ class SequenceReader(object):
 
         return len(self.files)
 
-    def get_fps(self):
+    def get_fps(self, rounded=0):
         """Return playback FPS.
 
         Returns:
@@ -317,7 +317,14 @@ class SequenceReader(object):
             >>> fps = reader.get_fps()
         """
 
-        return self.fps
+        # Return Original FPS
+        if rounded == 0:
+            return self.fps
+
+        # Return Rounded FPS
+        result = round(self.fps, rounded)
+
+        return result
 
     def set_fps(self, fps):
         """Set sequence playback FPS.

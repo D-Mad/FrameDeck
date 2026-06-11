@@ -48,6 +48,42 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 
+class GridLayout(QtWidgets.QGridLayout):
+    def __init__(self, parent, *args, **kwargs):
+        super(GridLayout, self).__init__(parent)
+
+        self.space = kwargs.get("space", [10, 10])
+        self.margins = kwargs.get("margins", (10, 10, 10, 10))
+
+        self.setHorizontalSpacing(self.space[0])
+        self.setVerticalSpacing(self.space[1])
+        self.setContentsMargins(*self.margins)
+
+    def getChildren(self):
+
+        stack = [self]
+        children = list()
+
+        while stack:
+            layout = stack.pop()
+
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+
+                if item.widget():
+                    children.append(item.widget())
+
+                if item.layout():
+                    children.append(item.layout())
+                    stack.append(item.layout())
+
+        return children
+
+    def clear(self):
+        for child in self.getChildren():
+            child.deleteLater()
+
+
 class VerticalLayout(QtWidgets.QVBoxLayout):
     """Custom vertical layout wrapper.
 

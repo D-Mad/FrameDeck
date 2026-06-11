@@ -196,6 +196,13 @@ class RightLabel(QtWidgets.QLabel):
         self.setText(value)
 
 
+class LeftLabel(RightLabel):
+    def __init__(self, parent, value, **kwargs):
+        super(LeftLabel, self).__init__(parent, value, **kwargs)
+
+        self.setAlignment(QtCore.Qt.AlignLeading | QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+
 class ThicknesLabel(RightLabel):
     def __init__(self, parent, value, **kwargs):
         super(ThicknesLabel, self).__init__(parent, value, **kwargs)

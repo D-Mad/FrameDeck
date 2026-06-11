@@ -521,7 +521,9 @@
             "id": 121,
             "name": "Subin Gopi",
             "type": "HumanUser"
-        }
+        },
+        "image": "/run/media/batman/ALPHA/works/developments/review_player/resources/icons/sample-01.png",
+        "media": "/alpha/works/C2C/samples/street/street.####.exr"
     },
     {
         "type": "Version",

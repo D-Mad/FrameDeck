@@ -355,5 +355,21 @@ class ProjectCombobox(ContextCombobox):
         self.project_changed.emit(self.context)
 
 
+class ReviewTypeCombobox(ContextCombobox):
+
+    def __init__(self, parent, **kwargs):
+        kwargs["contextList"] = constants.REVIEW_TYPES
+
+        super(ReviewTypeCombobox, self).__init__(parent, **kwargs)
+
+
+class StatusTypeCombobox(ContextCombobox):
+
+    def __init__(self, parent, **kwargs):
+        kwargs["contextList"] = constants.REVIEW_TYPES
+
+        super(StatusTypeCombobox, self).__init__(parent, **kwargs)
+
+
 if __name__ == "__main__":
     pass

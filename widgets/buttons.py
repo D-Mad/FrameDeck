@@ -49,7 +49,6 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.menus import DisplayMenus
-from widgets.dialogs import ColorDialog
 from widgets.pixmaps import NamePixmapIcon
 
 
@@ -250,6 +249,30 @@ class RenderButton(IconButton):
     name = "render"
 
 
+class AttachButton(IconButton):
+    """Attach button."""
+
+    name = "attach"
+
+
+class RecapsButton(IconButton):
+    """Recaps button."""
+
+    name = "recaps"
+
+
+class SnapshotButton(IconButton):
+    """Snapshot button."""
+
+    name = "snapshot"
+
+
+class RemoveButton(IconButton):
+    """Remove button."""
+
+    name = "remove"
+
+
 class HelpButton(IconButton):
     """Help/documentation button."""
 
@@ -312,6 +335,8 @@ class ColorButton(QtWidgets.QPushButton):
         self.clicked.connect(self.pick_color)
 
     def pick_color(self):
+        from widgets.dialogs import ColorDialog
+
         color_dialog = ColorDialog(self)
 
         if color_dialog.exec():

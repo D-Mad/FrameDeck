@@ -146,6 +146,19 @@ FRAME_PADDING = 4
 
 FRAME_CACHE_MAX_SIZE = 200
 
+
+REVIEW_TYPES = [
+    {"code": "Comment", "tooltip": "Comment? Notifiction message to artisan", "color": "#81c784"},
+    {
+        "code": "Correction",
+        "tooltip": "Correction? Correction and Roll back to artisan",
+        "color": "#ff8a65",
+    },
+    {"code": "Approved", "tooltip": "Approved? Internal approval", "color": "#64b5f6"},
+    {"code": "Final", "tooltip": "Final? Close the task", "color": "#00ff00"},
+]
+
+
 COPYRIGHT_LABEL = "Support, Subin. Gopi (subing85@gmail.com)."
 
 WEBLINK = "https://github.com/subing85/review_player"

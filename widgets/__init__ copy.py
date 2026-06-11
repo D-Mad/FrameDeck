@@ -211,7 +211,244 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.helpButton.clicked.connect(self.help)
 
+        # Maximize window if enabled
+        if constants.MAXIMIZE:
+            self.showMaximized()
+
+        # Apply stylesheet theme
+        SetStylesheet(self, theme=constants.DEFAULT_THEME)
+
+        # Initial splitter sizes
+        self.splitter.setSizes([446, 1040, 386])
+
+        return
+
+        ###########################################################################
+        # Viewer Area
+        self.viewerGroupBox = QtWidgets.QGroupBox(self)
+        self.splitter.addWidget(self.viewerGroupBox)
+
+        self.verticallayout_viewer = VerticalLayout(
+            self.viewerGroupBox, space=10, margins=(10, 10, 10, 10)
+        )
+
+        # Top Viewer Toolbar
+        self.horizontallayout_toolbar = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
+        self.verticallayout_viewer.addLayout(self.horizontallayout_toolbar)
+
+        # AOV selector
+        self.aovsCombobox = AovsCombobox(self)
+        self.horizontallayout_toolbar.addWidget(self.aovsCombobox)
+
+        # Spacer
+        self.horizontalspacer1 = HorizontalSpacer()
+        self.horizontallayout_toolbar.addItem(self.horizontalspacer1)
+
+        # Annotation Drawing #####################################
+
+        self.toolNameLabel = ToolNameLabel(self)
+        self.horizontallayout_toolbar.addWidget(self.toolNameLabel)
+
+        # Pencil button
+        self.pencilButton = PencilButton(
+            self, tooltip="Pencil Tool", checkable=True, width=22, height=22
+        )
+        self.horizontallayout_toolbar.addWidget(self.pencilButton)
+
+        self.arrowButton = ArrowButton(
+            self, tooltip="Arrow Shape", checkable=True, width=22, height=22
+        )
+        self.arrowButton.setVisible(False)
+        self.horizontallayout_toolbar.addWidget(self.arrowButton)
+
+        self.ellipseButton = EllipseButton(
+            self, tooltip="Ellipse Shape", checkable=True, width=22, height=22
+        )
+        self.horizontallayout_toolbar.addWidget(self.ellipseButton)
+
+        self.rectangleButton = RectangleButton(
+            self, tooltip="Rectangle Shape", checkable=True, width=22, height=22
+        )
+        self.horizontallayout_toolbar.addWidget(self.rectangleButton)
+
+        self.eraserButton = EraserButton(
+            self, tooltip="Erasier Tool", checkable=True, width=22, height=22
+        )
+        self.eraserButton.setCheckable(True)
+        self.horizontallayout_toolbar.addWidget(self.eraserButton)
+
+        self.thicknesLabel = ThicknesLabel(self, "Thicknes")
+        self.horizontallayout_toolbar.addWidget(self.thicknesLabel)
+
+        self.thicknesSpinBox = ThicknesSpinBox(self, 3)
+        self.horizontallayout_toolbar.addWidget(self.thicknesSpinBox)
+
+        self.radiusSpinBox = ThicknesSpinBox(self, 10)
+        self.radiusSpinBox.setVisible(False)
+        self.horizontallayout_toolbar.addWidget(self.radiusSpinBox)
+
+        self.colorButton = ColorButton(self, tooltip="Pick Color", width=22, height=22)
+        self.horizontallayout_toolbar.addWidget(self.colorButton)
+
+        self.txtButton = TxtButton(self, tooltip="Text Tool", checkable=True, width=22, height=22)
+        self.horizontallayout_toolbar.addWidget(self.txtButton)
+
+        self.moveButton = MoveButton(self, tooltip="Move Tool", checkable=True, width=22, height=22)
+        self.horizontallayout_toolbar.addWidget(self.moveButton)
+
+        self.undoButton = UndoButton(self, tooltip="Undo", width=22, height=22)
+        self.horizontallayout_toolbar.addWidget(self.undoButton)
+
+        self.clearButton = ClearButton(self, tooltip="Clear", width=22, height=22)
+        self.horizontallayout_toolbar.addWidget(self.clearButton)
+
+        ########################################################
+
+        # Spacer
+        self.horizontalspacer2 = HorizontalSpacer()
+        self.horizontallayout_toolbar.addItem(self.horizontalspacer2)
+
+        # Display menu button
+        self.displayMenuButton = DisplayMenuButton(
+            self, tooltip="Water mark display menu", width=32, height=32
+        )
+        self.horizontallayout_toolbar.addWidget(self.displayMenuButton)
+
+        self.horizontalspacer3 = HorizontalSpacer()
+        self.horizontallayout_toolbar.addItem(self.horizontalspacer3)
+
+        self.renderButton = RenderButton(self, tooltip="Render Current Frame", width=22, height=22)
+        self.horizontallayout_toolbar.addWidget(self.renderButton)
+
+        self.horizontalspacer4 = HorizontalSpacer()
+        self.horizontallayout_toolbar.addItem(self.horizontalspacer4)
+
+        self.recapsButton = RecapsButton(
+            self, tooltip="To display recap panel", width=32, height=32
+        )
+        self.horizontallayout_toolbar.addWidget(self.recapsButton)
+
+        # OpenGL Viewer
+        self.viewer = ViewerWidget(self)
+        self.verticallayout_viewer.addWidget(self.viewer)
+
+        # Timeline widget
+        self.timeline = TimelineWidget()
+        self.verticallayout_viewer.addWidget(self.timeline)
+
+        # Playback Controller
+        self.horizontallayout_controller = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
+        self.verticallayout_viewer.addLayout(self.horizontallayout_controller)
+
+        # Open media button
+        self.openButton = OpenButton(self, tooltip="Open Media (Ctrl+O)", width=32, height=32)
+        self.horizontallayout_controller.addWidget(self.openButton)
+
+        # Spacer
+        self.horizontalspacer5 = HorizontalSpacer()
+        self.horizontallayout_controller.addItem(self.horizontalspacer5)
+
+        # Previous frame button
+        self.backwordButton = BackwordButton(
+            self, tooltip="Backword Frame (<)", width=32, height=32
+        )
+        self.horizontallayout_controller.addWidget(self.backwordButton)
+
+        # Play/Pause button
+        self.playPauseButton = PlayPauseButton(self, tooltip="Play (space)", width=42, height=42)
+        self.player.set_playbutton(self.playPauseButton)
+
+        # Register button with player
+        self.horizontallayout_controller.addWidget(self.playPauseButton)
+
+        # Next frame button
+        self.forwardButton = ForwardButton(self, tooltip="Forward Frame (>)", width=32, height=32)
+        self.horizontallayout_controller.addWidget(self.forwardButton)
+
+        # Spacer
+        self.horizontalspacer6 = HorizontalSpacer()
+        self.horizontallayout_controller.addItem(self.horizontalspacer6)
+
+        # Loop toggle button
+        self.loopButton = LoopButton(
+            self, tooltip="Loop the timeline (Ctrl+L)", width=42, height=32
+        )
+        self.horizontallayout_controller.addWidget(self.loopButton)
+
+        # FPS selector
+        self.fpsCombobox = FbsCombobox(self)
+        self.fpsCombobox.fps_changed.connect(self.update_fps)
+        self.horizontallayout_controller.addWidget(self.fpsCombobox)
+
+        ###########################################################################
+
+        self.recapsGroup = RecapsGroup(self)
+        self.splitter.addWidget(self.recapsGroup)
+
+        # Footer
+        self.horizontallayout_footer = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
+        self.verticallayout.addLayout(self.horizontallayout_footer)
+
+        self.copyrightLabel = CopyrightLabel(self)
+        self.horizontallayout_footer.addWidget(self.copyrightLabel)
+
+        # Help button
+        self.helpButton = HelpButton(self, tooltip="Help and Support (F2)", width=22, height=22)
+        # self.horizontallayout_toolbar.addWidget(self.helpButton)
+        self.horizontallayout_footer.addWidget(self.helpButton)
+
+        # Signal Connections
+        # self.playlistGroup.project_changed.connect(self.set_playlist)
+        # self.playlistGroup.click_widgetitem.connect(self.play_from_playlist)
+
+        self.aovsCombobox.currentTextChanged.connect(self.player.set_aov)
+
+        # self.openButton.clicked.connect(self.openMedia)
+        # self.playPauseButton.clicked.connect(self.toggle_play_pause)
+        # self.loopButton.toggled.connect(self.player.set_loop)
+
+        # self.player.frame_ready.connect(self.viewer.set_frame)
+        # self.player.frame_changed.connect(self.timeline.set_current_frame)
+        # self.player.frame_changed.connect(self.viewer.set_current_frame)
+        # self.player.cache_changed.connect(self.timeline.set_cached_frames)
+        # self.timeline.frame_changed.connect(self.seek)
+
+        self.thicknesSpinBox.thicknes_changed.connect(self.viewer.annotations.set_thickness)
+        self.radiusSpinBox.thicknes_changed.connect(self.viewer.annotations.set_eraser_radius)
+        self.colorButton.color_changed.connect(self.viewer.annotations.set_color)
+
+        self.backwordButton.clicked.connect(self.backword_frame)
+        self.forwardButton.clicked.connect(self.forward_frame)
+
+        self.displayMenuButton.menu.display_changed.connect(self.viewer.set_overlay_option)
+
+        # Initialize viewer overlay settings
+        self.viewer.set_overlay_options(self.displayMenuButton.menu.watermarks)
+
+        self.helpButton.clicked.connect(self.help)
+
+        # self.pencilButton.toggled.connect(self.set_pencil_enabled)
+
+        self.pencilButton.toggled.connect(lambda enabled: self.set_draw_enabled("pencil", enabled))
+        self.arrowButton.toggled.connect(lambda enabled: self.set_draw_enabled("arrow", enabled))
+        self.ellipseButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("ellipse", enabled)
+        )
+        self.rectangleButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("rectangle", enabled)
+        )
+        self.eraserButton.toggled.connect(lambda enabled: self.set_draw_enabled("eraser", enabled))
+        self.txtButton.toggled.connect(lambda enabled: self.set_draw_enabled("txt", enabled))
+        self.moveButton.toggled.connect(lambda enabled: self.set_draw_enabled("move", enabled))
+
+        self.undoButton.clicked.connect(self.viewer.undo_strokes)
+        self.clearButton.clicked.connect(self.viewer.clear_strokes)
+
+        self.renderButton.clicked.connect(self.render)
+        self.recapsButton.clicked.connect(self.recaps)
+
         # Keyboard Shortcuts
+
         # Play / Pause
         self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
         self.playShortcut.activated.connect(self.toggle_play_pause)
@@ -235,6 +472,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Help
         self.helpShortcut = QtGui.QShortcut(QtGui.QKeySequence("F2"), self)
         self.helpShortcut.activated.connect(self.help)
+
+        # Load default playlist
+        if self.projects:
+            self.set_playlist(self.projects[0])
 
         # Maximize window if enabled
         if constants.MAXIMIZE:
@@ -474,6 +715,62 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Open help URL in browser
         utils.openUrl(constants.WEBLINK)
+
+    ###############################################
+
+    def _set_draw_enabled(self, tool, enabled):
+        buttons = [
+            self.pencilButton,
+            self.arrowButton,
+            self.ellipseButton,
+            self.rectangleButton,
+            self.eraserButton,
+            self.txtButton,
+            self.moveButton,
+        ]
+
+        for button in buttons:
+            if button.name == button:
+                continue
+            button.setChecked(False)
+
+        self.toolNameLabel.setValue(enabled, tool)
+
+        if tool == "txt" and enabled:
+            txtInputDialog = TxtInputDialog(self)
+            txtInputDialog.value_changed.connect(self.viewer.set_sketch_enabled)
+            txtInputDialog.exec()
+            self.txtButton.setChecked(False)
+
+            return
+
+        if tool == "eraser":
+            self.thicknesSpinBox.setVisible(False)
+            self.radiusSpinBox.setVisible(True)
+            self.thicknesLabel.setValue("Radius")
+        else:
+            self.radiusSpinBox.setVisible(False)
+            self.thicknesSpinBox.setVisible(True)
+            self.thicknesLabel.setValue("Thicknes")
+
+        self.viewer.set_sketch_enabled(tool, enabled, None)
+
+    def set_playlist(self, project):
+        """
+        Update playlist versions based on selected project.
+
+        Args:
+            project (dict):
+                Project context dictionary.
+        """
+
+        self.current_project = project
+
+        # Load project versions
+        versions = Versions.get(project)
+
+        # Update playlist widget
+        self.playlistGroup.set_versions(versions)
 
 
 if __name__ == "__main__":
