@@ -427,11 +427,11 @@ class ViewToolbarLayout(HorizontalLayout):
         self.addWidget(self.thicknesLabel)
 
         # Annotation thickness control
-        self.thicknesSpinBox = ThicknesSpinBox(None, 3)
+        self.thicknesSpinBox = ThicknesSpinBox(None, 3, tooltip="Strokes Size")
         self.addWidget(self.thicknesSpinBox)
 
         # Eraser radius control
-        self.radiusSpinBox = ThicknesSpinBox(None, 10)
+        self.radiusSpinBox = ThicknesSpinBox(None, 10, tooltip="Eraser Size")
 
         # Hidden until eraser tool becomes active
         self.radiusSpinBox.setVisible(False)
@@ -505,7 +505,7 @@ class ViewToolbarLayout(HorizontalLayout):
 
         # Toggle recap panel visibility
         self.recapsButton = RecapsButton(
-            None, tooltip="To display recap panel", width=32, height=32, checkable=True
+            None, tooltip="Display Recap Panel", width=32, height=32, checkable=True
         )
         self.addWidget(self.recapsButton)
 

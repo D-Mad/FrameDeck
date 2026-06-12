@@ -297,8 +297,28 @@ class ThicknesLabel(RightLabel):
         # Initialize base label
         super(ThicknesLabel, self).__init__(parent, value, **kwargs)
 
+        # Tooltip
+        self.setToolTip("Strokes Thicknes")
+
         # Fixed minimum width for value display
         self.setMinimumSize(QtCore.QSize(63, 0))
+
+    def setValue(self, value):
+        """
+        Update label text and tooltip.
+
+        Args:
+            value (str):
+                New label text.
+        """
+
+        super().setValue(value)
+
+        # Get current Tooltip
+        tooltip = "Eraser Radius" if value == "Radius" else "Strokes Thicknes"
+
+        # Set Tooltip
+        self.setToolTip(tooltip)
 
 
 class ToolNameLabel(QtWidgets.QLabel):
@@ -325,6 +345,9 @@ class ToolNameLabel(QtWidgets.QLabel):
 
         # Initialize QLabel
         super(ToolNameLabel, self).__init__(parent)
+
+        # Tooltip
+        self.setToolTip("Current Active Tool Name")
 
         # Center align text
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)

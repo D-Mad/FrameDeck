@@ -351,7 +351,7 @@ class InputWidget(QtWidgets.QFrame):
         # --------------------------------------------------
         # Review Header Controls
         # --------------------------------------------------
-        self.horizontalayout1 = HorizontalLayout(None, space=10, margins=(10, 10, 10, 10))
+        self.horizontalayout1 = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
         self.mainlayout.addLayout(self.horizontalayout1)
 
         # Header label
@@ -389,7 +389,7 @@ class InputWidget(QtWidgets.QFrame):
         # --------------------------------------------------
         # Attachment Container
         # --------------------------------------------------
-        self.attachmentlayout = VerticalLayout(None, space=1, margins=(1, 1, 1, 1))
+        self.attachmentlayout = VerticalLayout(None, space=1, margins=(0, 0, 0, 0))
         self.mainlayout.addLayout(self.attachmentlayout)
 
         # --------------------------------------------------

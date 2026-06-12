@@ -101,6 +101,10 @@ class ThicknesSpinBox(QtWidgets.QDoubleSpinBox):
         minimum = kwargs.get("minimum") or 0.00
         maximum = kwargs.get("maximum") or 999999999.00
 
+        # Apply tooltip
+        if kwargs.get("tooltip"):
+            self.setToolTip(kwargs["tooltip"])
+
         # Apply decimal precision
         self.setDecimals(2)
 
