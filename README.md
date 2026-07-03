@@ -8,6 +8,7 @@ The goal of this project is to provide a lightweight, extensible, and production
 
 <img width="1848" height="958" alt="image" src="https://github.com/user-attachments/assets/c113466d-2739-4dce-abb7-c966797285ee" />
 
+<<<<<<< HEAD
 
 ---
 # bug
@@ -45,6 +46,8 @@ deeper production pipeline integration
 
 ---
 
+=======
+>>>>>>> main
 ---
 
 # Features
