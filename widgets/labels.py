@@ -55,10 +55,8 @@ Notes:
 
 from __future__ import absolute_import
 
-import utils
 import constants
 
-from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
@@ -242,6 +240,10 @@ class RightLabel(QtWidgets.QLabel):
 
         self.setText(value)
 
+    def setFonts(self, size, family, bold):
+        font = Font(size, family=family, bold=bold)
+        self.setFont(font)
+
 
 class LeftLabel(RightLabel):
     """
@@ -386,6 +388,49 @@ class ToolNameLabel(QtWidgets.QLabel):
         # Clear when disabled
         else:
             self.clear()
+
+
+class ImageViewLabel(QtWidgets.QLabel):
+
+    clicked = QtCore.Signal(PathPixmap)  # Define a custom signal for clicks
+
+    def __init__(self, parent, filepath, **kwargs):
+        super(ImageViewLabel, self).__init__(parent)
+
+        self.filepath = filepath
+        self.pixmap = None
+
+        self.width = kwargs.get("width") or 200
+        self.height = kwargs.get("height") or 112
+
+        self.setThumbnail()
+        self.setAlignment(QtCore.Qt.AlignLeading | QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        self.setScaledContents(False)
+
+    def setThumbnail(self, filepath=None):
+        filepath = filepath or self.filepath
+
+        if not filepath:
+            return
+
+        self.pixmap = PathPixmap(filepath)
+
+        if self.pixmap.isNull():
+            return
+
+        self.resized_pixmap = self.pixmap.scaled(
+            self.width, self.height, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+        )
+
+        self.setPixmap(self.resized_pixmap)
+        self.setScaledContents(False)
+
+    def mousePressEvent(self, event):
+        # Emit the custom clicked signal when the label is clicked
+        if event.button() == QtCore.Qt.LeftButton:
+            self.clicked.emit(self.pixmap)
+        super().mousePressEvent(event)
 
 
 if __name__ == "__main__":

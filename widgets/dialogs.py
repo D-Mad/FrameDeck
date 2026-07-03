@@ -50,7 +50,6 @@ import re
 import utils
 import constants
 
-from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
@@ -293,7 +292,7 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
 
         if self.proxy.__collapse_sequences__:
             dirname = utils.dirname(path)
-            basename = utils.basename(path)
+            basename = utils.fileName(path, extension=True)
 
             # Convert: image.1001.exr -> image.####.exr
             pattern_name = re.sub(
@@ -442,6 +441,7 @@ class FileDialog(QtWidgets.QFileDialog):
 
         # Update browse path
         if filepath:
+            filepath = utils.pathResolver(filepath)
             self.browsepath = utils.dirname(filepath)
 
         return filepath

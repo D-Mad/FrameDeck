@@ -47,6 +47,7 @@ Notes:
 
 from __future__ import absolute_import
 
+import utils
 import resources
 
 
@@ -98,7 +99,17 @@ class Projects(object):
         """
 
         # Load Example Project Preset Data
-        result = resources.getPreset("projects")
+        reviews_path = utils.viewlinePath(subfolder="schemas")
+        projects_file = utils.pathResolver(reviews_path, filename="projects.json")
+
+        projects_data_list = utils.readJsonFile(projects_file)
+
+        if not projects_data_list:
+            projects_data_list = resources.getPreset("projects")
+            utils.writeJsonFile(projects_data_list, projects_file, indent=4)
+
+        # Sort Versions By Creation Date
+        result = sorted(projects_data_list, key=lambda k: (k["created_at"]), reverse=True)
 
         return result
 
@@ -149,23 +160,32 @@ class Versions(object):
         """
 
         # Load Example Version Preset Data
-        versions = resources.getPreset("versions")
+        reviews_path = utils.viewlinePath(subfolder="schemas")
+        versions_file = utils.pathResolver(reviews_path, filename="versions.json")
+        versions_data_list = utils.readJsonFile(versions_file)
+
+        if not versions_data_list:
+            versions_data_list = resources.getPreset("versions")
+            utils.writeJsonFile(versions_data_list, versions_file, indent=4)
 
         # Filter Versions By Project
-        project_versions = list(
-            filter(lambda x: x.get("project") and x["project"]["id"] == project["id"], versions)
+        versions_data = list(
+            filter(
+                lambda x: x.get("project") and x["project"]["id"] == project["id"],
+                versions_data_list,
+            )
         )
 
         # Sort Versions By Creation Date
-        result = sorted(project_versions, key=lambda k: (k["created_at"]), reverse=True)
+        result = sorted(versions_data, key=lambda k: (k["created_at"]), reverse=True)
 
         return result
 
 
-class Submit(object):
+class Review(object):
 
     @classmethod
-    def set(cls, project):
+    def set(cls, context):
         """Return versions/media data for project.
 
         Args:
@@ -191,22 +211,176 @@ class Submit(object):
             >>> versions = Versions.get(project)
         """
 
-        # Load Example Version Preset Data
-        versions = resources.getPreset("versions")
+        username = utils.getUsername()
+        created_by = {"id": 101, "name": username, "type": "HumanUser"}
+        created_at = utils.getDateTimes(times=None)
+        project = context["version"]["project"]
+        version = context["version"]
 
-        # Filter Versions By Project
-        project_versions = list(
-            filter(lambda x: x.get("project") and x["project"]["id"] == project["id"], versions)
+        reviews_path = utils.viewlinePath(subfolder="schemas")
+
+        # Attachments
+        attachment_file = utils.pathResolver(reviews_path, filename="attachment.json")
+        attachment_data_list = utils.readJsonFile(attachment_file) or list()
+
+        attachment_contents = list()
+
+        for index, attachment in enumerate(context["attachments"]):
+            numericId = utils.numericId()
+            extension = utils.fileExtension(attachment)
+            filepath = utils.pathResolver(
+                reviews_path, folders=["media"], filename=f"{numericId}.{extension}"
+            )
+            utils.copyFile(attachment, filepath)
+            relative_path = f"media/{numericId}.{extension}"
+
+            id = ((attachment_data_list[-1]["id"] + 1) if attachment_data_list else 10000) + index
+
+            content = {
+                "id": id,
+                "type": "Attachment",
+                "created_at": created_at,
+                "created_by": created_by,
+                "file_extension": extension,
+                "filename": f"{numericId}.{extension}",
+                "image": relative_path,
+                "project": project,
+            }
+
+            attachment_contents.append(content)
+
+        attachment_data_list = attachment_data_list + attachment_contents
+        utils.writeJsonFile(attachment_data_list, attachment_file, indent=4)
+
+        # Notes
+        note_file = utils.pathResolver(reviews_path, filename="note.json")
+        note_data_list = utils.readJsonFile(note_file) or list()
+
+        matched_note = next(
+            filter(
+                lambda x: any(
+                    link["type"] == "Version" and link["id"] == version["id"]
+                    for link in x.get("note_links", [])
+                ),
+                note_data_list,
+            ),
+            None,
         )
 
-        # Sort Versions By Creation Date
-        result = sorted(project_versions, key=lambda k: (k["created_at"]), reverse=True)
+        if matched_note:  # Create replay
+            date_file = utils.pathResolver(reviews_path, filename="reply.json")
+            reply_data_list = utils.readJsonFile(date_file) or list()
 
-        return result
+            content = {
+                "id": (reply_data_list[-1]["id"] + 1) if reply_data_list else 10000,
+                "type": "Reply",
+                "content": context["message"],
+                "created_at": created_at,
+                "created_by": created_by,
+                "entity": {
+                    "id": matched_note["id"],
+                    "name": matched_note["subject"],
+                    "type": "Note",
+                },
+                "publish_status": "published",
+                "sg_review_type": context["reviewType"]["value"],
+                "attachments": attachment_contents,
+            }
+
+            # Update status in note data
+            matched_note["sg_status_list"] = context["status"]["value"]
+            matched_note["replies"].append(content)
+
+            utils.writeJsonFile(note_data_list, note_file, indent=4)
+
+            content_list = reply_data_list + [content]
+
+        else:  # Create note
+            content = {
+                "id": (note_data_list[-1]["id"] + 1) if note_data_list else 10000,
+                "type": "Note",
+                "subject": f"{username}'s Note on {context['version']['code']} and  {context['version']['entity']['name']}",
+                "content": context["message"],
+                "created_at": created_at,
+                "created_by": created_by,
+                "project": project,
+                "publish_status": "published",
+                "sg_review_type": context["reviewType"]["value"],
+                "sg_status_list": context["status"]["value"],
+                "tasks": [version["sg_task"]],
+                "attachments": attachment_contents,
+                "replies": list(),
+                "note_links": [{"id": version["id"], "name": version["code"], "type": "Version"}],
+            }
+            date_file = note_file
+            content_list = note_data_list + [content]
+
+        utils.writeJsonFile(content_list, date_file, indent=4)
+
+        # Update version status
+        versions_file = utils.pathResolver(reviews_path, filename="versions.json")
+        versions_data_list = utils.readJsonFile(versions_file)
+
+        current_version = next(filter(lambda x: x["id"] == version["id"], versions_data_list), None)
+        current_version["sg_status_list"] = context["status"]["value"]
+
+        utils.writeJsonFile(versions_data_list, versions_file, indent=4)
+
+        version["sg_status_list"] = context["status"]["value"]
+
+        message = f"created {content['type']} {content['sg_review_type']} ( {content['id']} )"
+
+        return True, message
 
     @classmethod
-    def get(cls, version):
-        pass
+    def get(cls, version, reverse=False):
+
+        reviews_path = utils.viewlinePath(subfolder="schemas")
+        note_file = utils.pathResolver(reviews_path, filename="note.json")
+
+        note_data_list = utils.readJsonFile(note_file) or list()
+
+        review_notes = list(
+            filter(
+                lambda x: any(
+                    link["type"] == "Version" and link["id"] == version["id"]
+                    for link in x["note_links"]
+                ),
+                note_data_list,
+            )
+        )
+
+        if not review_notes:
+            return False, None
+
+        result = list()
+
+        for review_note in review_notes:
+            node_copy = review_note.copy()
+            node_copy.pop("attachments")
+            node_copy.pop("replies")
+
+            for attachment in review_note["attachments"]:
+                attachment["image"] = utils.pathResolver(reviews_path, filename=attachment["image"])
+
+            node_content = [[node_copy, review_note["attachments"]]]
+
+            for reply in review_note["replies"]:
+                reply_copy = reply.copy()
+                reply_copy.pop("attachments")
+
+                for attachment in reply["attachments"]:
+                    attachment["image"] = utils.pathResolver(
+                        reviews_path, filename=attachment["image"]
+                    )
+
+                reply_content = [reply_copy, reply["attachments"]]
+
+                node_content.append(reply_content)
+
+            result.append(node_content)
+
+        return True, result
 
 
 if __name__ == "__main__":

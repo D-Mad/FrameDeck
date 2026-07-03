@@ -90,9 +90,11 @@ class ReviewTextEdit(QtWidgets.QTextEdit):
         if kwargs.get("readonly"):
             self.setReadOnly(True)
 
+        self.setStyleSheet("QTextEdit {border: none;}")
+
         # Fixed-height vertical sizing policy
         sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
         )
         self.setSizePolicy(sizepolicy)
 
@@ -109,6 +111,9 @@ class ReviewTextEdit(QtWidgets.QTextEdit):
 
         # Return normalized review text
         return self.toPlainText().strip()
+
+    def setValue(self, value):
+        self.setText(value)
 
 
 if __name__ == "__main__":

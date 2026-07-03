@@ -140,10 +140,9 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 from PySide6 import QtOpenGLWidgets
 
+from widgets.buttons import TxtButton
 from widgets.pixmaps import PathPixmap
 from widgets.annotations import Sketch
-
-from widgets.buttons import TxtButton
 from widgets.buttons import HelpButton
 from widgets.buttons import OpenButton
 from widgets.buttons import LoopButton
@@ -159,23 +158,20 @@ from widgets.buttons import RenderButton
 from widgets.buttons import RecapsButton
 from widgets.labels import ToolNameLabel
 from widgets.labels import ThicknesLabel
-from widgets.buttons import EllipseButton
-from widgets.comboboxs import AovsCombobox
-from widgets.buttons import RectangleButton
-from widgets.buttons import DisplayMenuButton
-from widgets.lineedits import ThicknesSpinBox
-from widgets.layouts import VerticalLayout
-from widgets.layouts import HorizontalLayout
-from widgets.layouts import HorizontalSpacer
-from widgets.fontdialog import TxtInputDialog
-
-
 from widgets.comboboxs import FbsCombobox
 from widgets.buttons import ForwardButton
+from widgets.buttons import EllipseButton
 from widgets.buttons import BackwordButton
+from widgets.layouts import VerticalLayout
+from widgets.comboboxs import AovsCombobox
+from widgets.buttons import RectangleButton
 from widgets.buttons import PlayPauseButton
-
 from widgets.timeline import TimelineWidget
+from widgets.layouts import HorizontalLayout
+from widgets.layouts import HorizontalSpacer
+from widgets.lineedits import ThicknesSpinBox
+from widgets.fontdialog import TxtInputDialog
+from widgets.buttons import WatermarkMenuButton
 
 LOGGER = logger.getLogger(__name__)
 
@@ -477,10 +473,10 @@ class ViewToolbarLayout(HorizontalLayout):
         # --------------------------------------------------
 
         # Watermark display configuration menu
-        self.displayMenuButton = DisplayMenuButton(
+        self.watermarkMenuButton = WatermarkMenuButton(
             None, tooltip="Water mark display menu", width=32, height=32
         )
-        self.addWidget(self.displayMenuButton)
+        self.addWidget(self.watermarkMenuButton)
 
         # Spacer before render controls
         self.horizontalspacer3 = HorizontalSpacer()
@@ -545,7 +541,7 @@ class ViewToolbarLayout(HorizontalLayout):
         self.clearButton.clicked.connect(self.clear_strokes)
 
         # Watermark menu
-        self.displayMenuButton.menu.display_changed.connect(self.set_water_marks)
+        self.watermarkMenuButton.menu.display_changed.connect(self.set_water_marks)
 
         # Render current frame
         self.renderButton.clicked.connect(self.render)
@@ -568,7 +564,7 @@ class ViewToolbarLayout(HorizontalLayout):
         """
 
         # Update watermark menu contents
-        self.displayMenuButton.menu.update_watermarks(context, **kwargs)
+        self.watermarkMenuButton.menu.update_watermarks(context, **kwargs)
 
     def set_aovs(self, typed, aovs):
         """
@@ -1137,7 +1133,22 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.image_width = None
         self.image_height = None
 
+        self.set_samples(value=constants.VIEWER_SAMPLES_RATE)
+
         self.annotations = Sketch()
+
+    def set_samples(self, value=8):
+        """
+        0 : Disabled
+        2: Low quality
+        4: Good
+        8: Very good (recommended)
+        16: Highest (hardware dependent)
+        """
+
+        surfaceFormat = QtGui.QSurfaceFormat()
+        surfaceFormat.setSamples(8)
+        self.setFormat(surfaceFormat)
 
     def set_frame(self, frame):
         """
@@ -1199,6 +1210,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = None
+
+        # Clear annotations
+        self.annotations.clear_all()
 
         # Refresh widget
         self.update()
@@ -1425,7 +1439,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         clear current frame annotation.
         """
 
-        self.annotations.clear()
+        self.annotations.clear_all()
 
         self.update()
 

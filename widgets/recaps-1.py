@@ -54,7 +54,7 @@ Architecture:
         ├── ReviewTypeCombobox
         ├── ReviewTextEdit
         ├── StatusTypeCombobox
-        └── AttachmentLayout
+        └── AttachmentWidget
         ↓
     Submit.set()
         ↓
@@ -62,7 +62,7 @@ Architecture:
         ↓
     User Feedback
 
-    AttachmentLayout
+    AttachmentWidget
         ↓
     FileDialog
         ↓
@@ -80,32 +80,30 @@ Notes:
 
 from __future__ import absolute_import
 
-
 import utils
 import logger
-import constants
-import resources
 
+from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
-from widgets.styles import WaitCursor
+from widgets.labels import LeftLabel
 from widgets.labels import RightLabel
 from widgets.dialogs import FileDialog
 from widgets.buttons import TextButton
 from widgets.buttons import RemoveButton
 from widgets.buttons import AttachButton
-from widgets.labels import ImageViewLabel
 from widgets.messagebox import MessageBox
 from widgets.buttons import SnapshotButton
+from widgets.layouts import VerticalSpacer
 from widgets.layouts import VerticalLayout
-from widgets.layouts import VerticalSplitter
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalLayout
 from widgets.textedits import ReviewTextEdit
-from widgets.layouts import HorizontalLineFrame
 from widgets.comboboxs import ReviewTypeCombobox
 from widgets.comboboxs import StatusTypeCombobox
+
+from scripts import Submit
 
 LOGGER = logger.getLogger(__name__)
 
@@ -143,21 +141,17 @@ class RecapsWidget(QtWidgets.QWidget):
         # Main Layout
         self.mainlayout = VerticalLayout(self, space=20, margins=(0, 0, 0, 0))
 
-        self.splitter = VerticalSplitter(self)
-        self.mainlayout.addWidget(self.splitter)
-
         # Review History Panel
         self.outputWidget = OutputWidget(self)
-        self.splitter.addWidget(self.outputWidget)
+        self.mainlayout.addWidget(self.outputWidget)
 
         # Review Submission Panel
         self.inputWidget = InputWidget(self)
-        self.splitter.addWidget(self.inputWidget)
+        self.mainlayout.addWidget(self.inputWidget)
 
-        self.inputWidget.submit_finished.connect(self.inputWidget.set_version_context)
-        self.inputWidget.submit_finished.connect(self.outputWidget.loadReviews)
-
-        self.splitter.setSizes([714, 238])
+        # Layout Spacer
+        self.verticalSpacer = VerticalSpacer()
+        self.mainlayout.addItem(self.verticalSpacer)
 
     def set_current_recaps(self, enabled):
         """
@@ -207,24 +201,25 @@ class OutputWidget(QtWidgets.QScrollArea):
         # Current version context
         self.context = None
 
-        self.scrollAreaWidgetContents = QtWidgets.QWidget()
-        self.setWidget(self.scrollAreaWidgetContents)
-
         # Allow scroll area contents to resize
         self.setWidgetResizable(True)
 
         # Optional frame styling
-        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-
-        sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
-        )
-        self.setSizePolicy(sizepolicy)
+        # self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        # self.setFrameShadow(QtWidgets.QFrame.Plain)
+        # self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
 
         # Main Content Layout
-        self.mainlayout = VerticalLayout(
-            self.scrollAreaWidgetContents, space=10, margins=(10, 10, 10, 10)
-        )
+        self.mainlayout = VerticalLayout(self, space=10, margins=(10, 10, 10, 10))
+
+        # --------------------------------------------------
+        # Temporary Test Data
+        # Creates sample widgets during development. Remove once backend integration is complete.
+        # --------------------------------------------------
+
+        for x in range(10):
+            self.inputRecapsGroup = InputWidget(self)
+            self.mainlayout.addWidget(self.inputRecapsGroup)
 
     def set_version_context(self, context):
         """
@@ -244,9 +239,9 @@ class OutputWidget(QtWidgets.QScrollArea):
         self.context = context
 
         # Load version submissions
-        self.loadReviews(context=self.context)
+        self.loadSubmits(context=self.context)
 
-    def loadReviews(self, context=None):
+    def loadSubmits(self, context=None):
         """
         Load review submissions.
 
@@ -261,116 +256,19 @@ class OutputWidget(QtWidgets.QScrollArea):
         """
 
         # Use current version context when explicit context is not supplied
-        self.context = context or self.context
-
-        self.clear()
+        context = context or self.context
 
         # -------------------------------------------------------------------
         # Backend Submission Query
         # Retrieves review submissions associated with the selected version.
         # -------------------------------------------------------------------
 
-        with WaitCursor():
-            # Load project versions
-
-            import scripts
-            import importlib
-
-            importlib.reload(scripts)
-
-            from scripts import Review
-
-            valid, result = Review.get(self.context, reverse=True)
-
-        if not valid:
-            LOGGER.warning("Couild not find valid task")
-            return
-
         # Create Submission Widgets
-        with WaitCursor():
-            for notes in result:
-                for context, attachments in notes:
-                    self.reviewFrame = ReviewOutFrame(
-                        self.scrollAreaWidgetContents, context, attachments
-                    )
-                    self.mainlayout.addWidget(self.reviewFrame)
+        result = Submit.get(context) or list()
 
-    def clear(self):
-        children = self.mainlayout.getChildren()
-        for child in children:
-            child.deleteLater()
+        # for submit in result:
 
-
-class ReviewOutFrame(QtWidgets.QFrame):
-
-    def __init__(self, parent, *args, **kwargs):
-        super(ReviewOutFrame, self).__init__(parent)
-
-        self.context = args[0]
-        self.attachments = args[1]
-
-        sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
-        )
-        self.setSizePolicy(sizepolicy)
-
-        # Frame appearance
-        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.setFrameShadow(QtWidgets.QFrame.Raised)
-
-        self.mainlayout = VerticalLayout(self, space=10, margins=(10, 10, 10, 10))
-
-        if self.context.get("created_by"):
-            user_name = f"CreatedBy: {self.context['created_by']['name']}"
-        else:
-            user_name = f"User: {self.context['user']['name']}"
-
-        date = utils.getDateTimes(self.context.get("updated_at"))
-
-        labels = [
-            self.context["type"],
-            f"Review Type: {self.context.get('sg_review_type')}",
-            f"{user_name} ( {date} )",
-            f"Status: {utils.getStatusFieldValue(self.context.get('sg_status_list'))}",
-        ]
-
-        self.noteLabel = RightLabel(self, "\n".join(labels))
-        self.noteLabel.setFonts(constants.SMALL_FONT_SIZE, None, True)
-        self.mainlayout.addWidget(self.noteLabel)
-
-        self.reviewTextEdit = ReviewTextEdit(self, readonly=True)
-        self.reviewTextEdit.setValue(self.context["content"])
-        self.mainlayout.addWidget(self.reviewTextEdit)
-
-        if self.attachments:
-            for attachment in self.attachments:
-                if this_file := attachment.get("this_file"):
-                    thumbnail = this_file.get("url") or attachment.get("image")
-                else:
-                    thumbnail = attachment.get("image")
-
-                self.thumbnail_titile = (
-                    f"{self.context['id']} ( {self.context['type']} ) {user_name} ( {date} )"
-                )
-
-                self.imageViewLabel = ImageViewLabel(
-                    self,
-                    thumbnail,
-                    width=constants.RP_THUMBNAIL_SIZE[0],
-                    height=constants.RP_THUMBNAIL_SIZE[1],
-                )
-                self.mainlayout.addWidget(self.imageViewLabel)
-                self.imageViewLabel.clicked.connect(self.openThumbnail)
-
-    def openThumbnail(self, pixmap):
-        context = resources.getTool("viewspan")
-        context["artisan"] = utils.getArtisanContext()
-
-        from widgets import viewspan
-
-        self.viewspan_window = viewspan.MainWindow(parent=None, **context)
-        self.viewspan_window.set_pixmap_preview(pixmap, self.thumbnail_titile)
-        self.viewspan_window.show()
+    #      pass
 
 
 class InputWidget(QtWidgets.QFrame):
@@ -394,7 +292,6 @@ class InputWidget(QtWidgets.QFrame):
     """
 
     trigger_snapshot = QtCore.Signal(str)
-    submit_finished = QtCore.Signal(dict)
 
     def __init__(self, parent, *args, **kwargs):
         """
@@ -442,15 +339,7 @@ class InputWidget(QtWidgets.QFrame):
         # Version Information
         # --------------------------------------------------
         self.versionLabel = RightLabel(self, None)
-        sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed
-        )
-        self.versionLabel.setSizePolicy(sizepolicy)
-
         self.mainlayout.addWidget(self.versionLabel)
-
-        self.horizontalLineFrame = HorizontalLineFrame(self)
-        self.mainlayout.addWidget(self.horizontalLineFrame)
 
         # --------------------------------------------------
         # Review Header Controls
@@ -459,8 +348,8 @@ class InputWidget(QtWidgets.QFrame):
         self.mainlayout.addLayout(self.horizontalayout1)
 
         # Header label
-        self.reviewTypeLabel = RightLabel(self, "Review Type")
-        self.horizontalayout1.addWidget(self.reviewTypeLabel)
+        self.headerLabel = RightLabel(self, "Header")
+        self.horizontalayout1.addWidget(self.headerLabel)
 
         # Review category selector
         self.reviewTypeCombobox = ReviewTypeCombobox(self)
@@ -493,8 +382,8 @@ class InputWidget(QtWidgets.QFrame):
         # --------------------------------------------------
         # Attachment Container
         # --------------------------------------------------
-        self.attachmentMainlayout = VerticalLayout(None, space=1, margins=(0, 0, 0, 0))
-        self.mainlayout.addLayout(self.attachmentMainlayout)
+        self.attachmentlayout = VerticalLayout(None, space=1, margins=(0, 0, 0, 0))
+        self.mainlayout.addLayout(self.attachmentlayout)
 
         # --------------------------------------------------
         # Status Controls
@@ -508,6 +397,7 @@ class InputWidget(QtWidgets.QFrame):
 
         # Review status selector
         self.statusTypeCombobox = StatusTypeCombobox(self)
+
         # Match combobox widths
         self.reviewTypeCombobox.setMinimumSize(QtCore.QSize(250, 0))
         self.horizontalayout3.addWidget(self.statusTypeCombobox)
@@ -559,28 +449,18 @@ class InputWidget(QtWidgets.QFrame):
         # Store version context
         self.context = context
 
-        self.versionLabel.clear()
-
-        if not self.context:
-            return
-
         # Build version summary
-        date = utils.getDateTimes(self.context.get("created_at"))
-        status = utils.getStatusFieldValue(self.context.get("sg_status_list"))
-
         values = [
             f"\nVersion: {self.context['code']} | {self.context['id']}",
             f"Task: {self.context['sg_task']['name']}",
             f"Entity: {self.context['entity']['name']}",
-            f"Status: {status}",
-            f"Crated: {self.context['created_by']['name']} ( {date} )\n",
+            f"Status: {self.context['sg_status_list']}",
+            f"created: {self.context['created_at']}",
+            f"created By: {self.context['created_by']['name']}\n",
         ]
 
         # Update information label
         self.versionLabel.setValue("\n".join(values))
-
-        self.reviewTypeCombobox.setValue(0)
-        self.statusTypeCombobox.setValue(status)
 
     def setAttachment(self):
         """
@@ -597,22 +477,22 @@ class InputWidget(QtWidgets.QFrame):
         """
         Add attachment widget.
 
-        Creates a new AttachmentLayout and connects attachment signals.
+        Creates a new AttachmentWidget and connects attachment signals.
 
         Returns:
             None
         """
 
         # Create attachment row widget
-        attachmentLayout = AttachmentLayout(None, space=2, margins=(1, 1, 1, 1))
+        attachmentWidget = AttachmentWidget(None, space=2, margins=(1, 1, 1, 1))
 
         # Update browse path when file selected
-        attachmentLayout.add_attachment.connect(self.trigger_attachment)
+        attachmentWidget.add_attachment.connect(self.trigger_attachment)
 
         # Add row to attachment layout
-        self.attachmentMainlayout.addLayout(attachmentLayout)
+        self.attachmentlayout.addLayout(attachmentWidget)
 
-        return attachmentLayout
+        return attachmentWidget
 
     def getAttachments(self):
         """
@@ -627,22 +507,18 @@ class InputWidget(QtWidgets.QFrame):
         attachments = list()
 
         # Collect paths from all attachment rows
-        for child in self.attachmentMainlayout.children():
+        for child in self.attachmentlayout.children():
             if child and child.filepath:
                 attachments.append(child.filepath)
         return attachments
 
     def snapshot_attachment(self, filepath):
-        attachmentLayout = self.addAttachment()
-        attachmentLayout.attachment(filepath)
+        attachmentWidget = self.addAttachment()
+        attachmentWidget.attachment(filepath)
 
     def snapshot(self):
         directory = utils.tempdir(subfolder=True)
         self.trigger_snapshot.emit(directory)
-
-    def clearAttachments(self):
-        for attachment in self.attachmentMainlayout.children():
-            attachment.delete()
 
     def submit(self):
         """
@@ -665,57 +541,39 @@ class InputWidget(QtWidgets.QFrame):
 
         # Validate version context
         if not self.context:
-            MessageBox(self, "Warning", f"Could not found version context", ["Ok"])
             LOGGER.info(f"Could not found version context")
-            return
-
-        messgae = self.reviewTextEdit.getValue()
-
-        if not messgae:
-            MessageBox(
-                self, "Warning", f"Description is empty or contains only whitespace.", ["Ok"]
-            )
-            return
-
-        result = MessageBox(
-            self,
-            "Warning",
-            "Are you want to trigger review sumittion?",
-            ["Yes", "No"],
-        )
-
-        if result.replay == MessageBox.No:
-            LOGGER.warning("Skip trigger check state package items.")
             return
 
         # Build submission payload
         context = {
-            "reviewType": self.reviewTypeCombobox.getValue(),
+            "header": self.reviewTypeCombobox.getValue(),
             "message": self.reviewTextEdit.getValue(),
             "attachments": self.getAttachments(),
             "status": self.statusTypeCombobox.getValue(),
+            "project": None,
+            "task": None,
             "version": self.context,
         }
 
-        with WaitCursor():
-            from scripts import Review
+        from pprint import pprint
 
-            valid, message = Review.set(context)
+        pprint(context)
+        # ----------------------------------
+        # Create here your submit signal
+        # ----------------------------------
+
+        # Submit review
+        valid, message, result = Submit.set(context)
 
         if valid:  # Success
             MessageBox(self, "Information", f"Succeed, {message}", ["Ok"])
-
-            self.reviewTextEdit.clear()
-            self.clearAttachments()
-            self.submit_finished.emit(self.context)
-
             LOGGER.info(f"Succeed, {message}")
         else:  # Failure
             MessageBox(self, "Critical", f"Failure, {message}", ["Ok"])
             LOGGER.warning(f"Failure, {message}")
 
 
-class AttachmentLayout(HorizontalLayout):
+class AttachmentWidget(HorizontalLayout):
     """
     Review attachment entry widget.
 
@@ -726,7 +584,7 @@ class AttachmentLayout(HorizontalLayout):
             Emitted when a file is selected.
 
     Example:
-        >>> attachment = AttachmentLayout(parent)
+        >>> attachment = AttachmentWidget(parent)
         >>> attachment.add_attachment.connect(callback)
 
     """
@@ -751,7 +609,7 @@ class AttachmentLayout(HorizontalLayout):
         """
 
         # Initialize horizontal layout
-        super(AttachmentLayout, self).__init__(parent, *args, **kwargs)
+        super(AttachmentWidget, self).__init__(parent, *args, **kwargs)
 
         # Current browse location
         self.browsepath = kwargs.get("browsepath")
@@ -768,14 +626,14 @@ class AttachmentLayout(HorizontalLayout):
         self.addWidget(self.attachemntButton)
 
         # Signal connections
-        self.removeButton.clicked.connect(self.delete)
+        self.removeButton.clicked.connect(self.remove)
         self.attachemntButton.clicked.connect(self.attachment)
 
-    def delete(self):
+    def remove(self):
         """
-        Delete attachment widget.
+        Remove attachment widget.
 
-        Delete all child widgets and schedules the attachment entry for deletion.
+        Removes all child widgets and schedules the attachment entry for deletion.
 
         Returns:
             None

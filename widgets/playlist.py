@@ -95,15 +95,12 @@ from __future__ import absolute_import
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
+from widgets.styles import WaitCursor
 from widgets.layouts import VerticalLayout
 from widgets.labels import ProjectIconLabel
 from widgets.layouts import HorizontalLayout
 from widgets.comboboxs import ProjectCombobox
 from widgets.treewidgets import PlaylistTreewidget
-
-
-from scripts import Projects
-from scripts import Versions
 
 
 class PlaylistWidget(QtWidgets.QWidget):
@@ -164,9 +161,6 @@ class PlaylistWidget(QtWidgets.QWidget):
 
         self.current_project = None
 
-        # Store project data
-        # self.projects = kwargs.get("projects")
-
         # Main vertical layout
         self.verticallayout = VerticalLayout(self, space=5, margins=(0, 0, 0, 0))
 
@@ -197,8 +191,12 @@ class PlaylistWidget(QtWidgets.QWidget):
         """
         self.current_project = project
 
-        # Load project versions
-        versions = Versions.get(self.current_project)
+        with WaitCursor():
+            # Load project versions
+
+            from scripts import Versions
+
+            versions = Versions.get(self.current_project)
 
         # Update playlist widget
         self.set_versions(versions)
@@ -278,9 +276,6 @@ class ProjectsFrame(QtWidgets.QFrame):
         # Initialize QFrame
         super(ProjectsFrame, self).__init__(parent)
 
-        # Load available projects
-        self.projects = Projects.get()
-
         # Apply frame appearance
         self.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Raised)
@@ -313,7 +308,7 @@ class ProjectsFrame(QtWidgets.QFrame):
         # Project Combobox
         # --------------------------------------------------
         self.projectCombobox = ProjectCombobox(self, key="name")
-        self.projectCombobox.setItems(contextList=self.projects)
+        self.projectCombobox.setProjects()
         self.horizontallayout.addWidget(self.projectCombobox)
 
         # Listen for project changes
@@ -330,13 +325,13 @@ class ProjectsFrame(QtWidgets.QFrame):
         """
 
         # No projects available
-        if not self.projects:
+        if not self.projectCombobox.contextList:
             return
 
         # Activate project
-        self.set_current_project(self.projects[index])
+        self.set_current_project(self.projectCombobox.contextList[index])
 
-    def set_current_project(self, context):
+    def set_current_project(self, context, key="image"):
         """
         Set current active project.
 
@@ -360,12 +355,12 @@ class ProjectsFrame(QtWidgets.QFrame):
         # --------------------------------------------------
         # Update Thumbnail
         # --------------------------------------------------
-        self.projectIconLabel.setThumbnail(context["image"])
+        self.projectIconLabel.setThumbnail(context[key])
 
         # --------------------------------------------------
         # Store Thumbnail Pixmap
         # --------------------------------------------------
-        context["value"] = self.projectIconLabel.pixmap()
+        # context["value"] = self.projectIconLabel.pixmap()
 
         # --------------------------------------------------
         # Notify Listeners

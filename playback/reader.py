@@ -123,7 +123,7 @@ class VideoReader(object):
         self.path = path
 
         # Timeline State
-        self.current_frame = constants.START_FRAME
+        self.current_frame = constants.RP_START_FRAME
 
         # Open Video Container
         self.container = av.open(path)
@@ -383,7 +383,10 @@ class SequenceReader(object):
         """
 
         # Convert Timeline Frame To Index
-        frame_number = current_frame - constants.START_FRAME
+        frame_number = current_frame - constants.RP_START_FRAME
+
+        if not self.files:
+            return
 
         # Resolve Sequence File
         path = self.files[frame_number]

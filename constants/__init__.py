@@ -143,23 +143,62 @@ FPS_VALUES = [
 
 DEFULT_FPS = FPS_VALUES[1]
 
-START_FRAME = 101
-DEFAULT_FRAMES = 100 - 1
-FRAME_PADDING = 4
+RP_START_FRAME = 101
+RP_DEFAULT_FRAMES = 100 - 1
+RP_FRAME_PADDING = 4
+RP_FRAME_CACHE_MAX_SIZE = 200
 
-FRAME_CACHE_MAX_SIZE = 200
+RP_THUMBNAIL_SIZE = [200, 112]
 
+DATE_TIME_FORMAT = "%Y-%m-%d %I:%M:%S:%p"
+
+STATUS_LIST = [
+    {"code": "Waiting to Start", "value": "wtg", "color": "#006598"},
+    {"code": "In Progress", "value": "ip", "color": "#dede00"},
+    {"code": "Pending Review", "value": "rev", "color": "#006598"},
+    {"code": "Viewed", "value": "vwd", "color": "#0055ff"},
+    {"code": "Correction", "value": "corr", "color": "#ff0000"},
+    {"code": "Approved", "value": "apr", "color": "#008b00"},
+    {"code": "Final", "value": "fin", "color": "#00aa00"},
+    {"code": "On Hold", "value": "hld", "color": "#aa55ff"},
+    {"code": "Closed", "value": "clsd", "color": "#ff55ff"},
+    {"code": "Open", "value": "opn", "color": "#51783c"},
+]
 
 REVIEW_TYPES = [
-    {"code": "Comment", "tooltip": "Comment? Notifiction message to artisan", "color": "#81c784"},
     {
-        "code": "Correction",
+        "value": "Comment",
+        "tooltip": "Comment? Notifiction message to artisan",
+        "color": "#81c784",
+    },
+    {
+        "value": "Correction",
         "tooltip": "Correction? Correction and Roll back to artisan",
         "color": "#ff8a65",
     },
-    {"code": "Approved", "tooltip": "Approved? Internal approval", "color": "#64b5f6"},
-    {"code": "Final", "tooltip": "Final? Close the task", "color": "#00ff00"},
+    {
+        "value": "Clarification",
+        "tooltip": "Clarification? clear up confusion, and gather missing information",
+        "color": "#ffaaff",
+    },
+    {
+        "value": "Retraction",
+        "tooltip": "Correction? taking back something you previously said",
+        "color": "#aaaa7f",
+    },
+    {
+        "value": "Reaction",
+        "tooltip": "Reaction? feedback given to a piece of work.",
+        "color": "#00ff00",
+    },
+    {
+        "value": "Approved",
+        "tooltip": "Approved? Internal approval",
+        "color": "#64b5f6",
+    },
 ]
+
+VIEWER_SAMPLES_RATE = 8
 
 
 COPYRIGHT_LABEL = "Support, Subin. Gopi (subing85@gmail.com)."

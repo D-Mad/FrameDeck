@@ -52,6 +52,7 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.styles import Font
+from widgets.styles import WaitCursor
 
 
 class ContextCombobox(QtWidgets.QComboBox):
@@ -365,11 +366,26 @@ class ProjectCombobox(ContextCombobox):
         # Emit project context
         self.project_changed.emit(self.context)
 
+    def setProjects(self, contextList=None):
+        """
+        Collect and set the project block area
+        """
+        if contextList:
+            result = contextList
+        else:
+            with WaitCursor():
+                from scripts import Projects
+
+                result = Projects.get()
+
+        self.setItems(contextList=result)
+
 
 class ReviewTypeCombobox(ContextCombobox):
 
     def __init__(self, parent, **kwargs):
         kwargs["contextList"] = constants.REVIEW_TYPES
+        kwargs["key"] = "value"
 
         super(ReviewTypeCombobox, self).__init__(parent, **kwargs)
 
@@ -377,9 +393,17 @@ class ReviewTypeCombobox(ContextCombobox):
 class StatusTypeCombobox(ContextCombobox):
 
     def __init__(self, parent, **kwargs):
-        kwargs["contextList"] = constants.REVIEW_TYPES
+        kwargs["contextList"] = constants.STATUS_LIST
 
         super(StatusTypeCombobox, self).__init__(parent, **kwargs)
+
+        self.defatlt = next(filter(lambda x: x[self.key] == "Viewed", self.contextList), dict())
+        self.setValue(self.defatlt)
+
+    def value(self, key=None):
+        key = key or self.key
+
+        return self.context.get(key)
 
 
 if __name__ == "__main__":

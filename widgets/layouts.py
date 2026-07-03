@@ -199,6 +199,29 @@ class VerticalLayout(QtWidgets.QVBoxLayout):
         self.setSpacing(self.space)
         self.setContentsMargins(*self.margins)
 
+    def getChildren(self):
+        stack = [self]
+        children = list()
+
+        while stack:
+            layout = stack.pop()
+
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+
+                if item.widget():
+                    children.append(item.widget())
+
+                if item.layout():
+                    children.append(item.layout())
+                    stack.append(item.layout())
+
+        return children
+
+    def clear(self):
+        for child in self.getChildren():
+            child.deleteLater()
+
 
 class HorizontalLayout(QtWidgets.QHBoxLayout):
     """Custom horizontal layout wrapper.
@@ -253,6 +276,21 @@ class HorizontalLayout(QtWidgets.QHBoxLayout):
         self.setSpacing(self.space)
         self.setContentsMargins(*self.margins)
 
+    def getChildren(self):
+        children = list()
+
+        for index in range(self.count()):
+            widget = self.itemAt(index).widget()
+            if not widget:
+                continue
+            children.append(widget)
+
+        return children
+
+    def clear(self):
+        for child in self.getChildren():
+            child.deleteLater()
+
 
 class HorizontalSplitter(QtWidgets.QSplitter):
     """Horizontal splitter widget.
@@ -288,6 +326,41 @@ class HorizontalSplitter(QtWidgets.QSplitter):
 
         # Set Horizontal Orientation
         self.setOrientation(QtCore.Qt.Horizontal)
+
+
+class VerticalSplitter(QtWidgets.QSplitter):
+    """Vertical splitter widget.
+
+    This wrapper provides a reusable Vertical Qt splitter used throughout the UI.
+
+    Features:
+        - Vertical orientation
+        - Resizable panels
+        - Dynamic UI layouts
+
+    Args:
+        parent (QWidget):
+            Parent widget.
+
+    Example:
+        >>> splitter = VerticalSplitter(self)
+    """
+
+    def __init__(self, parent, **kwargs):
+        """Initialize vertical splitter.
+
+        Args:
+            parent (QWidget):
+                Parent widget.
+
+            **kwargs:
+                Reserved for future extension.
+        """
+
+        # Initialize QSplitter
+        super(VerticalSplitter, self).__init__(parent)
+
+        self.setOrientation(QtCore.Qt.Vertical)
 
 
 class HorizontalSpacer(QtWidgets.QSpacerItem):

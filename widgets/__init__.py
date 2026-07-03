@@ -40,18 +40,14 @@ from widgets.pixmaps import PathPixmap
 from widgets.buttons import HelpButton
 from widgets.dialogs import FileDialog
 from playback.player import MediaPlayer
-from widgets.viewer import ViewerWidget
 from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
 from widgets.labels import CopyrightLabel
 from widgets.pixmaps import NamePixmapIcon
 from widgets.layouts import VerticalLayout
 from widgets.dialogs import OpenMediaDialog
-from widgets.timeline import TimelineWidget
 from widgets.playlist import PlaylistWidget
 from widgets.layouts import HorizontalLayout
-from widgets.layouts import HorizontalSpacer
-from widgets.fontdialog import TxtInputDialog
 from widgets.layouts import HorizontalSplitter
 
 LOGGER = logger.getLogger(__name__)
@@ -166,6 +162,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player.cache_changed.connect(self.viewframe.timeline.set_cached_frames)
         self.viewframe.timeline.frame_changed.connect(self.seek)
 
+        self.player.timeline_actived.connect(
+            self.viewframe.timelineToolbarLayout.playPauseButton.switch
+        )
+
         # --------------------------------------------------------------------
         # Viewer Toolbar Layout Signal Connections
         # --------------------------------------------------------------------
@@ -255,6 +255,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def set_current_project(self, project):
         self.current_project = project
+        self.viewframe.viewer.clear()
 
     def play_from_playlist(self, play, context):
         """
@@ -269,18 +270,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Clear viewer if media is missing
         if not context.get("media"):
-            self.viewer.clear()
+            self.viewframe.viewer.clear()
+            self.recapsWidget.outputWidget.clear()
+            self.recapsWidget.inputWidget.set_version_context(context)
             return
 
         # Build watermark resources
         logs = {
-            "project_logo": self.current_project["value"],
+            "project_logo": self.current_project["image"],
             "studio_logo": PathPixmap(resources.getIconFilepath(constants.STUDIO_NAME)),
         }
 
         # Update watermark values
         self.viewframe.viewToolbarLayout.update_watermarks(context, **logs)
-        # self.displayMenuButton.menu.update_watermarks(context, **logs)
 
         # Load media
         self.openMedia(filepath=context.get("media"))
@@ -290,8 +292,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toggle_play_pause()
 
         # Set recaps
-        # self.recapsGroup.inputWidget.set_version_context(context)
-        # self.recapsGroup.outputWidget.set_version_context(context)
+        self.recapsWidget.inputWidget.set_version_context(context)
+        self.recapsWidget.outputWidget.set_version_context(context)
 
     def openMedia(self, filepath=None):
         """
@@ -311,7 +313,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Update watermark resources
             logs = {"studio_logo": PathPixmap(resources.getIconFilepath(constants.STUDIO_NAME))}
-            # self.displayMenuButton.menu.update_watermarks(dict(), **logs)
             self.viewframe.viewToolbarLayout.update_watermarks(dict(), **logs)
 
         # Clear current viewer frame
@@ -319,9 +320,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if not filepath:
             return
-
-        # example:
-        # /samples/footage/shot-1001-1/shot-1001.####.png
 
         LOGGER.info(f"Source filepath, {filepath}")
 
@@ -335,7 +333,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Update timeline range
         self.viewframe.timeline.set_range(
-            constants.START_FRAME, constants.START_FRAME + (self.player.frame_count - 1)
+            constants.RP_START_FRAME, constants.RP_START_FRAME + (self.player.frame_count - 1)
         )
 
     def reset_video_fps(self):
@@ -364,7 +362,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reset_video_fps()
 
     def trigger_timeline(self, typed, enabled):
-
         if typed == "open":
             self.openMedia()
 

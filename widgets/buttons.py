@@ -50,7 +50,7 @@ from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
-from widgets.menus import DisplayMenus
+from widgets.menus import WatermarkMenus
 from widgets.dialogs import ColorDialog
 from widgets.pixmaps import NamePixmapIcon
 
@@ -583,7 +583,7 @@ class LoopButton(ToolButton):
         self.setChecked(False)
 
 
-class DisplayMenuButton(ToolButton):
+class WatermarkMenuButton(ToolButton):
     """Watermark/display settings menu button.
 
     This button opens the watermark overlay display configuration menu.
@@ -594,7 +594,7 @@ class DisplayMenuButton(ToolButton):
         - Overlay controls
 
     Example:
-        >>> button = DisplayMenuButton(self)
+        >>> button = WatermarkMenuButton(self)
     """
 
     name = "display"
@@ -611,10 +611,10 @@ class DisplayMenuButton(ToolButton):
         """
 
         # Initialize ToolButton
-        super(DisplayMenuButton, self).__init__(parent, **kwargs)
+        super(WatermarkMenuButton, self).__init__(parent, **kwargs)
 
         # Create Display Menu
-        self.menu = DisplayMenus(self)
+        self.menu = WatermarkMenus(self)
 
         # Connect Menu Trigger
         self.clicked.connect(self.contextMenu)

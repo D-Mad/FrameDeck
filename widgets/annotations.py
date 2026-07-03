@@ -116,6 +116,7 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.styles import Font
+from widgets.styles import StrokePen
 
 
 class Sketch(object):
@@ -591,6 +592,11 @@ class Sketch(object):
         if self.current_frame is None:
             return
 
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+        painter.setRenderHint(QtGui.QPainter.TextAntialiasing)
+
         # Retrieve strokes for current frame
         strokes = self.get_strokes()
 
@@ -599,24 +605,19 @@ class Sketch(object):
 
             # Pencil
             if typed == "pencil":
-                pen = QtGui.QPen(QtGui.QColor(*stroke["color"]))
-                pen.setWidth(stroke["thickness"])
+                pen = StrokePen(stroke["color"], thickness=stroke["thickness"])
                 painter.setPen(pen)
-
                 self.draw_pencil(painter, stroke, point_converter)
 
             # Rectangle
             elif typed == "rectangle":
-                pen = QtGui.QPen(QtGui.QColor(*stroke["color"]))
-                pen.setWidth(stroke["thickness"])
+                pen = StrokePen(stroke["color"], thickness=stroke["thickness"])
                 painter.setPen(pen)
-
                 self.draw_rectangle(painter, stroke, point_converter)
 
             # Ellipse
             elif typed == "ellipse":
-                pen = QtGui.QPen(QtGui.QColor(*stroke["color"]))
-                pen.setWidth(stroke["thickness"])
+                pen = StrokePen(stroke["color"], thickness=stroke["thickness"])
                 painter.setPen(pen)
 
                 self.draw_ellipse(painter, stroke, point_converter)
@@ -649,7 +650,6 @@ class Sketch(object):
         Returns:
             None
         """
-
         points = stroke["points"]
 
         # Need at least 2 points to form a line
@@ -947,10 +947,8 @@ class Sketch(object):
             return
 
         # Blue dashed selection pen
-        pen = QtGui.QPen(QtGui.QColor(0, 170, 255))
-        pen.setWidth(2)
-        pen.setStyle(QtCore.Qt.DashLine)
-
+        pen = StrokePen(stroke["color"], thickness=2)
+        painter.setPen(pen)
         painter.setPen(pen)
         painter.drawRect(rect)
 
@@ -1524,8 +1522,8 @@ class Sketch(object):
 
         # Draw text stroke
         if stroke_width > 0:
-            pen = QtGui.QPen(stroke_color)
-            pen.setWidth(stroke_width)
+            pen = StrokePen(stroke["color"], thickness=stroke_width)
+            painter.setPen(pen)
             painter.strokePath(path, pen)
 
         # Set text opacity
