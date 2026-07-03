@@ -8,6 +8,46 @@ The goal of this project is to provide a lightweight, extensible, and production
 
 <img width="1848" height="958" alt="image" src="https://github.com/user-attachments/assets/c113466d-2739-4dce-abb7-c966797285ee" />
 
+<<<<<<< HEAD
+
+---
+# bug
+
+* Clear all draws
+* Resrt Review Type, Status
+* Smooth brush
+* Documntation
+---
+
+---
+
+The goal of this project is to build a lightweight and pipeline-friendly media review tool focused on animation and VFX workflows.
+
+Current features include:
+
+• Image sequence and video playback
+• EXR and AOV support
+• OpenGL-based viewer
+• Timeline scrubbing and playback cache
+• Watermark and overlay system
+• Playlist/version browsing workflow
+
+The project is built primarily using Python 3.10, PySide6, OpenGL, OpenImageIO, PyAV, and OCIO.
+
+This is still an early beta release focused mainly on core architecture, playback workflow, and UI foundations. There is still a lot to improve, but the project has reached a stage where I’m comfortable sharing progress publicly.
+
+Planned areas of development include 
+
+annotation tools
+comparison modes
+improved caching
+audio support
+deeper production pipeline integration
+
+---
+
+=======
+>>>>>>> main
 ---
 
 # Features

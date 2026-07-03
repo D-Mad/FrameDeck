@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt stylesheet and font wrapper module..
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt styling utilities used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/styles.py
+
+Description:
+    This module provides reusable Qt styling utilities used throughout the Review Player application.
 
 Responsibilities:
     - Apply global application themes
@@ -194,11 +198,12 @@ class Font(QtGui.QFont):
         }
 
         # Font Size
+
         self.setPointSize(sizes or kwargs.get("size", 10))
-        self.setPixelSize(sizes or kwargs.get("size", 10))
+        # self.setPixelSize(sizes or kwargs.get("size", 10))
 
         # Font Family
-        self.setFamily(kwargs.get("family", "Arial"))
+        self.setFamily(kwargs.get("family") or "Segoe UI")
 
         # Font Style
         self.setBold(kwargs.get("bold", False))
@@ -225,6 +230,46 @@ class Font(QtGui.QFont):
         # Font Weight
         if kwargs.get("weight"):
             self.setWeight(QtGui.QFont.Weight(75))
+
+
+class WaitCursor(object):
+    def __init__(self):
+        pass
+
+    def __enter__(self):
+        """set override the cursor  to wait cursor mode"""
+
+        # QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CustomCursor.WaitCursor)
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+
+        return QtWidgets.QApplication
+
+    def __exit__(self, *args):
+        """restore override the cursor"""
+
+        QtWidgets.QApplication.restoreOverrideCursor()
+
+
+class StrokePen(QtGui.QPen):
+
+    def __init__(self, color, **kwargs):
+        """Initialize custom QPen.
+
+        Args:
+            sizes (int):
+                Color value.
+
+            **kwargs:
+                Additional font options.
+        """
+
+        # Initialize QFont
+        super().__init__(QtGui.QColor(*color))
+
+        self.setWidth(kwargs.get("thickness", 1))
+        self.setCapStyle(kwargs.get("cap", QtCore.Qt.RoundCap))
+        self.setJoinStyle(kwargs.get("cap", QtCore.Qt.RoundJoin))
+        self.setCosmetic(kwargs.get("cosmetic", False))
 
 
 if __name__ == "__main__":

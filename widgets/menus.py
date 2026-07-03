@@ -1,23 +1,26 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QMenu and QAction wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains reusable Qt menu and action wrappers used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/menus.py
+
+Description:
+    This module contains reusable Qt menu and action wrappers used throughout the Review Player application.
 
 The module primarily provides:
-
     - Watermark display menus
     - Overlay visibility controls
     - QAction wrapper utilities
     - Dynamic watermark configuration support
 
 Main Components:
-    DisplayMenus:
+    WatermarkMenus:
         Dynamic watermark overlay menu system.
 
-    DisplayAction:
+    WatermarkAction:
         Reusable QAction wrapper for overlay controls.
 
 Features:
@@ -38,7 +41,7 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 
-class DisplayMenus(QtWidgets.QMenu):
+class WatermarkMenus(QtWidgets.QMenu):
     """
     This menu dynamically builds watermark toggle actions from the ``watermarks.json`` preset configuration file.
 
@@ -67,7 +70,7 @@ class DisplayMenus(QtWidgets.QMenu):
                     Full watermark configuration dictionary.
 
     Example:
-        >>> menu = DisplayMenus(parent)
+        >>> menu = WatermarkMenus(parent)
         >>> menu.display_changed.connect(callback)
     """
 
@@ -99,7 +102,7 @@ class DisplayMenus(QtWidgets.QMenu):
                     continue
 
                 # Create menu action
-                action = DisplayAction(
+                action = WatermarkAction(
                     self, context["code"], context["checked"], enable=context["enable"]
                 )
                 self.addAction(action)
@@ -152,7 +155,7 @@ class DisplayMenus(QtWidgets.QMenu):
                 overlay["value"] = None
 
 
-class DisplayAction(QtGui.QAction):
+class WatermarkAction(QtGui.QAction):
     """
     Watermark display QAction wrapper.
 
@@ -164,7 +167,7 @@ class DisplayAction(QtGui.QAction):
         - Dynamic watermark labels
 
     Example:
-        >>> action = DisplayAction(menu, "project", True)
+        >>> action = WatermarkAction(menu, "project", True)
     """
 
     def __init__(self, parent, text, checked, **kwargs):
@@ -188,7 +191,7 @@ class DisplayAction(QtGui.QAction):
                     Enable or disable the action.
         """
 
-        super(DisplayAction, self).__init__(parent)
+        super(WatermarkAction, self).__init__(parent)
 
         # Resolve enabled state
         enable = True if kwargs.get("enable") is None else kwargs["enable"]

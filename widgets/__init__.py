@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Main Qt GUI module for the Review Player application.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the primary application window and integrates all major UI components, including:
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/__init__.py
+
+Description:
+    This module contains the primary application window and integrates all major UI components, including:
 
     * Playlist browser
     * OpenGL media viewer
@@ -31,38 +35,20 @@ from PySide6 import QtWidgets
 
 from ocio import OCIOProcessor
 
-from playlist import Projects
-from playlist import Versions
-
+from widgets.viewer import ViewFrame
 from widgets.pixmaps import PathPixmap
-
 from widgets.buttons import HelpButton
-from widgets.buttons import OpenButton
-from widgets.buttons import LoopButton
-from widgets.buttons import ForwardButton
-from widgets.buttons import BackwordButton
-from widgets.buttons import PlayPauseButton
-from widgets.buttons import DisplayMenuButton
-
-from widgets.comboboxs import FbsCombobox
-from widgets.comboboxs import AovsCombobox
-
-from widgets.layouts import VerticalLayout
-from widgets.layouts import HorizontalLayout
-from widgets.layouts import HorizontalSpacer
-from widgets.layouts import HorizontalSplitter
-
+from widgets.dialogs import FileDialog
+from playback.player import MediaPlayer
+from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
 from widgets.labels import CopyrightLabel
 from widgets.pixmaps import NamePixmapIcon
+from widgets.layouts import VerticalLayout
 from widgets.dialogs import OpenMediaDialog
-
-from widgets.playlist import PlaylistGroup
-
-from widgets.viewer import ViewerWidget
-from widgets.timeline import TimelineWidget
-
-from playback.player import MediaPlayer
+from widgets.playlist import PlaylistWidget
+from widgets.layouts import HorizontalLayout
+from widgets.layouts import HorizontalSplitter
 
 LOGGER = logger.getLogger(__name__)
 
@@ -106,7 +92,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player = MediaPlayer()
 
         # Load available projects
-        self.projects = Projects.get()
+        # self.projects = Projects.get()
 
         # Currently selected project
         self.current_project = None
@@ -138,123 +124,93 @@ class MainWindow(QtWidgets.QMainWindow):
         self.verticallayout.addWidget(self.splitter)
 
         # Playlist Area
-        self.playlistGroup = PlaylistGroup(self, projects=self.projects)
-        self.splitter.addWidget(self.playlistGroup)
+        self.playlistWidget = PlaylistWidget(self)
+        self.splitter.addWidget(self.playlistWidget)
 
-        # Viewer Area
-        self.viewerGroupBox = QtWidgets.QGroupBox(self)
-        self.splitter.addWidget(self.viewerGroupBox)
+        self.viewframe = ViewFrame(self)
+        self.splitter.addWidget(self.viewframe)
 
-        self.verticallayout_viewer = VerticalLayout(
-            self.viewerGroupBox, space=10, margins=(10, 10, 10, 10)
-        )
-
-        # Top Viewer Toolbar
-        self.horizontallayout_panel = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
-        self.verticallayout_viewer.addLayout(self.horizontallayout_panel)
-
-        # AOV selector
-        self.aovsCombobox = AovsCombobox(self)
-        self.horizontallayout_panel.addWidget(self.aovsCombobox)
-
-        # Spacer
-        self.horizontalspacer1 = HorizontalSpacer()
-        self.horizontallayout_panel.addItem(self.horizontalspacer1)
-
-        # Display menu button
-        self.displayMenuButton = DisplayMenuButton(
-            self, tooltip="Water mark display menu", width=32, height=32
-        )
-        self.horizontallayout_panel.addWidget(self.displayMenuButton)
-
-        # Help button
-        self.helpButton = HelpButton(self, tooltip="Help and Support (F2)", width=32, height=32)
-        self.horizontallayout_panel.addWidget(self.helpButton)
-
-        # OpenGL Viewer
-        self.viewer = ViewerWidget(self)
-        self.verticallayout_viewer.addWidget(self.viewer)
-
-        # Timeline widget
-        self.timeline = TimelineWidget()
-        self.verticallayout_viewer.addWidget(self.timeline)
-
-        # Playback Controller
-        self.horizontallayout_controller = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
-        self.verticallayout_viewer.addLayout(self.horizontallayout_controller)
-
-        # Open media button
-        self.openButton = OpenButton(self, tooltip="Open Media (Ctrl+O)", width=32, height=32)
-        self.horizontallayout_controller.addWidget(self.openButton)
-
-        # Spacer
-        self.horizontalspacer2 = HorizontalSpacer()
-        self.horizontallayout_controller.addItem(self.horizontalspacer2)
-
-        # Previous frame button
-        self.backwordButton = BackwordButton(
-            self, tooltip="Backword Frame (<)", width=32, height=32
-        )
-        self.horizontallayout_controller.addWidget(self.backwordButton)
-
-        # Play/Pause button
-        self.playPauseButton = PlayPauseButton(self, tooltip="Play (space)", width=42, height=42)
-        self.player.set_playbutton(self.playPauseButton)
-
-        # Register button with player
-        self.horizontallayout_controller.addWidget(self.playPauseButton)
-
-        # Next frame button
-        self.forwardButton = ForwardButton(self, tooltip="Forward Frame (>)", width=32, height=32)
-        self.horizontallayout_controller.addWidget(self.forwardButton)
-
-        # Spacer
-        self.horizontalspacer3 = HorizontalSpacer()
-        self.horizontallayout_controller.addItem(self.horizontalspacer3)
-
-        # Loop toggle button
-        self.loopButton = LoopButton(
-            self, tooltip="Loop the timeline (Ctrl+L)", width=42, height=32
-        )
-        self.horizontallayout_controller.addWidget(self.loopButton)
-
-        # FPS selector
-        self.fpsCombobox = FbsCombobox(self)
-        self.fpsCombobox.fps_changed.connect(self.update_fps)
-        self.horizontallayout_controller.addWidget(self.fpsCombobox)
+        self.recapsWidget = RecapsWidget(self)
+        self.splitter.addWidget(self.recapsWidget)
 
         # Footer
+        self.horizontallayout_footer = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
+        self.verticallayout.addLayout(self.horizontallayout_footer)
+
         self.copyrightLabel = CopyrightLabel(self)
-        self.verticallayout.addWidget(self.copyrightLabel)
+        self.horizontallayout_footer.addWidget(self.copyrightLabel)
 
-        # Signal Connections
-        self.playlistGroup.project_changed.connect(self.set_playlist)
-        self.playlistGroup.click_widgetitem.connect(self.play_from_playlist)
+        # Help button
+        self.helpButton = HelpButton(self, tooltip="Help and Support (F2)", width=22, height=22)
+        # self.horizontallayout_toolbar.addWidget(self.helpButton)
+        self.horizontallayout_footer.addWidget(self.helpButton)
 
-        self.aovsCombobox.currentTextChanged.connect(self.player.set_aov)
+        # --------------------------------------------------------------------
+        # Playlist Widget Signal Connections
+        # --------------------------------------------------------------------
 
-        self.openButton.clicked.connect(self.openMedia)
-        self.playPauseButton.clicked.connect(self.toggle_play_pause)
-        self.loopButton.toggled.connect(self.player.set_loop)
+        self.playlistWidget.project_changed.connect(self.set_current_project)
+        self.playlistWidget.select_media.connect(self.play_from_playlist)
 
-        self.player.frame_ready.connect(self.viewer.set_frame)
-        self.player.frame_changed.connect(self.timeline.set_current_frame)
-        self.player.frame_changed.connect(self.viewer.set_current_frame)
-        self.player.cache_changed.connect(self.timeline.set_cached_frames)
-        self.timeline.frame_changed.connect(self.seek)
+        # --------------------------------------------------------------------
+        # Player Signal Connections
+        # --------------------------------------------------------------------
 
-        self.backwordButton.clicked.connect(self.backword_frame)
-        self.forwardButton.clicked.connect(self.forward_frame)
+        self.player.frame_ready.connect(self.viewframe.viewer.set_frame)
+        self.player.frame_changed.connect(self.viewframe.timeline.set_current_frame)
+        self.player.frame_changed.connect(self.viewframe.viewer.set_current_frame)
+        self.player.cache_changed.connect(self.viewframe.timeline.set_cached_frames)
+        self.viewframe.timeline.frame_changed.connect(self.seek)
 
-        self.displayMenuButton.menu.display_changed.connect(self.viewer.set_overlay_option)
+        self.player.timeline_actived.connect(
+            self.viewframe.timelineToolbarLayout.playPauseButton.switch
+        )
 
-        # Initialize viewer overlay settings
-        self.viewer.set_overlay_options(self.displayMenuButton.menu.watermarks)
+        # --------------------------------------------------------------------
+        # Viewer Toolbar Layout Signal Connections
+        # --------------------------------------------------------------------
+        self.viewframe.viewToolbarLayout.aov_changed.connect(self.player.set_aov)
+
+        self.viewframe.viewToolbarLayout.thicknes_changed.connect(
+            self.viewframe.viewer.annotations.set_thickness
+        )
+        self.viewframe.viewToolbarLayout.radius_changed.connect(
+            self.viewframe.viewer.annotations.set_eraser_radius
+        )
+        self.viewframe.viewToolbarLayout.color_changed.connect(
+            self.viewframe.viewer.annotations.set_color
+        )
+
+        self.viewframe.viewToolbarLayout.draw_enabled.connect(self.set_draw_enabled)
+
+        self.viewframe.viewToolbarLayout.undo_stack.connect(self.viewframe.viewer.undo_strokes)
+        self.viewframe.viewToolbarLayout.clear_stack.connect(self.viewframe.viewer.clear_strokes)
+
+        self.viewframe.viewToolbarLayout.water_marks.connect(
+            self.viewframe.viewer.set_overlay_option
+        )
+
+        self.viewframe.viewToolbarLayout.trigger_render.connect(self.render)
+        self.viewframe.viewToolbarLayout.trigger_recaps.connect(
+            self.recapsWidget.set_current_recaps
+        )
+
+        self.recapsWidget.inputWidget.trigger_snapshot.connect(self.render_snapshot)
+        self.viewframe.viewer.render_finished.connect(
+            self.recapsWidget.inputWidget.snapshot_attachment
+        )
+
+        # self.recapsWidget.inputWidget.trigger_snapshot.connect(self.render_snapshot)
+
+        # --------------------------------------------------------------------
+        # Viewer Timeline Toolbar Layout Signal Connections
+        # --------------------------------------------------------------------
+        self.viewframe.timelineToolbarLayout.trigger_timeline.connect(self.trigger_timeline)
+        self.viewframe.timelineToolbarLayout.fps_chanaged.connect(self.update_fps)
 
         self.helpButton.clicked.connect(self.help)
 
         # Keyboard Shortcuts
-
         # Play / Pause
         self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
         self.playShortcut.activated.connect(self.toggle_play_pause)
@@ -279,10 +235,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.helpShortcut = QtGui.QShortcut(QtGui.QKeySequence("F2"), self)
         self.helpShortcut.activated.connect(self.help)
 
-        # Load default playlist
-        if self.projects:
-            self.set_playlist(self.projects[0])
-
         # Maximize window if enabled
         if constants.MAXIMIZE:
             self.showMaximized()
@@ -291,7 +243,7 @@ class MainWindow(QtWidgets.QMainWindow):
         SetStylesheet(self, theme=constants.DEFAULT_THEME)
 
         # Initial splitter sizes
-        self.splitter.setSizes([300, 1065])
+        self.splitter.setSizes([446, 1040, 386])
 
     def setupIcons(self):
         """
@@ -301,22 +253,9 @@ class MainWindow(QtWidgets.QMainWindow):
         pixmap = NamePixmapIcon(constants.RP_TOOL_ICON)
         self.setWindowIcon(pixmap)
 
-    def set_playlist(self, project):
-        """
-        Update playlist versions based on selected project.
-
-        Args:
-            project (dict):
-                Project context dictionary.
-        """
-
+    def set_current_project(self, project):
         self.current_project = project
-
-        # Load project versions
-        versions = Versions.get(project)
-
-        # Update playlist widget
-        self.playlistGroup.set_versions(versions)
+        self.viewframe.viewer.clear()
 
     def play_from_playlist(self, play, context):
         """
@@ -331,17 +270,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Clear viewer if media is missing
         if not context.get("media"):
-            self.viewer.clear()
+            self.viewframe.viewer.clear()
+            self.recapsWidget.outputWidget.clear()
+            self.recapsWidget.inputWidget.set_version_context(context)
             return
 
         # Build watermark resources
         logs = {
-            "project_logo": self.current_project["value"],
+            "project_logo": self.current_project["image"],
             "studio_logo": PathPixmap(resources.getIconFilepath(constants.STUDIO_NAME)),
         }
 
         # Update watermark values
-        self.displayMenuButton.menu.update_watermarks(context, **logs)
+        self.viewframe.viewToolbarLayout.update_watermarks(context, **logs)
 
         # Load media
         self.openMedia(filepath=context.get("media"))
@@ -349,6 +290,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Start playback if enabled
         if play:
             self.toggle_play_pause()
+
+        # Set recaps
+        self.recapsWidget.inputWidget.set_version_context(context)
+        self.recapsWidget.outputWidget.set_version_context(context)
 
     def openMedia(self, filepath=None):
         """
@@ -368,46 +313,79 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Update watermark resources
             logs = {"studio_logo": PathPixmap(resources.getIconFilepath(constants.STUDIO_NAME))}
-            self.displayMenuButton.menu.update_watermarks(dict(), **logs)
+            self.viewframe.viewToolbarLayout.update_watermarks(dict(), **logs)
 
         # Clear current viewer frame
-        self.viewer.clear()
+        self.viewframe.viewer.clear()
 
         if not filepath:
             return
-
-        # example:
-        # /samples/footage/shot-1001-1/shot-1001.####.png
 
         LOGGER.info(f"Source filepath, {filepath}")
 
         # Load media into player
         self.player.load(filepath)
 
-        # Sync FPS UI for video files
-        self.reset_video_fps()
-
         # Sequence media supports AOVs
-        if self.player.reader.media_type == "sequence":
-            self.aovsCombobox.setEnabled(True)
-            self.aovsCombobox.clear()
-            self.aovsCombobox.addItems(self.player.reader.get_available_aovs())
-        else:  # Disable AOVs for video files
-            self.aovsCombobox.clear()
-            self.aovsCombobox.setEnabled(False)
-
-        # Update timeline range
-        self.timeline.set_range(
-            constants.START_FRAME, constants.START_FRAME + (self.player.frame_count - 1)
+        self.viewframe.viewToolbarLayout.set_aovs(
+            self.player.reader.media_type, self.player.reader.get_available_aovs()
         )
 
-    def set_loop(self):
+        # Update timeline range
+        self.viewframe.timeline.set_range(
+            constants.RP_START_FRAME, constants.RP_START_FRAME + (self.player.frame_count - 1)
+        )
+
+    def reset_video_fps(self):
         """
-        Toggle playback loop state.
+        Sync FPS combobox with currently loaded video FPS.
+        """
+        if not self.player.reader:
+            return
+
+        # Only applies to video playback
+        if self.player.reader.media_type != "video":
+            return
+
+        self.viewframe.timelineToolbarLayout.reset_fps(
+            self.player.reader.media_type, self.player.reader.get_fps(rounded=3)
+        )
+
+    def seek(self):
+        """
+        Seek playback to timeline frame.
         """
 
-        enable = False if self.loopButton.isChecked() else True
-        self.loopButton.setChecked(enable)
+        self.player.seek(self.viewframe.timeline.current_frame)
+
+        # Sync FPS display
+        self.reset_video_fps()
+
+    def trigger_timeline(self, typed, enabled):
+        if typed == "open":
+            self.openMedia()
+
+        if typed == "backword":
+            self.backword_frame()
+
+        if typed == "play_pause":
+            self.toggle_play_pause()
+
+        if typed == "forward":
+            self.forward_frame()
+
+        if typed == "loop":
+            self.set_loop(enabled)
+
+    def backword_frame(self):
+        """
+        Move playback backward by one frame.
+        """
+
+        self.player.backword_frame()
+
+        # Sync FPS display
+        self.reset_video_fps()
 
     def toggle_play_pause(self):
         """
@@ -417,27 +395,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player.toggle_play_pause()
 
         # Update play button icon
-        self.playPauseButton.switch(self.player.is_playing)
 
-        # Sync FPS display
-        self.reset_video_fps()
-
-    def seek(self):
-        """
-        Seek playback to timeline frame.
-        """
-
-        self.player.seek(self.timeline.current_frame)
-
-        # Sync FPS display
-        self.reset_video_fps()
-
-    def backword_frame(self):
-        """
-        Move playback backward by one frame.
-        """
-
-        self.player.backword_frame()
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(self.player.is_playing)
 
         # Sync FPS display
         self.reset_video_fps()
@@ -452,27 +411,42 @@ class MainWindow(QtWidgets.QMainWindow):
         # Sync FPS display
         self.reset_video_fps()
 
-    def reset_video_fps(self):
+    def set_loop(self, enabled):
         """
-        Sync FPS combobox with currently loaded video FPS.
+        Toggle playback loop state.
         """
 
-        if not self.player.reader:
+        self.player.set_loop(enabled)
+
+    def set_draw_enabled(self, tool, enabled, font):
+        self.viewframe.viewer.set_sketch_enabled(tool, enabled, font)
+
+    def render(self):
+        if not self.viewframe.viewer.current_frame:
             return
 
-        # Only applies to video playback
-        if self.player.reader.media_type != "video":
+        fileDialog = FileDialog(
+            self,
+            "Browse your Save directory",
+            label="Image",
+            extensions=["png", "jpg"],
+            browsepath=None,
+        )
+        filename = f"frame.{self.viewframe.viewer.current_frame:04d}"
+
+        filepath = fileDialog.savefile(filename)
+
+        if filepath:
+            self.viewframe.viewer.save_frame(filepath, post_process=False)
+
+    def render_snapshot(self, directory, extension="png"):
+        if not self.viewframe.viewer.current_frame:
             return
 
-        fps = self.player.reader.get_fps(rounded=3)
+        filename = f"frame.{self.viewframe.viewer.current_frame:04d}.{extension}"
+        filepath = utils.pathResolver(directory, filename=filename)
 
-        # Find matching FPS preset
-        context = self.fpsCombobox.findByKey(fps, "value")
-        if not context:
-            return
-
-        # Update combobox
-        self.fpsCombobox.setValue(context)
+        self.viewframe.viewer.save_frame(filepath, post_process=True)
 
     def update_fps(self, context):
         """
@@ -497,7 +471,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Open support or documentation URL.
         """
 
-        # print(self.splitter.sizes())
+        print(self.splitter.sizes())
         LOGGER.info(f"Support, {constants.WEBLINK}")
 
         # Open help URL in browser

@@ -1,13 +1,16 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt custom playlist widget module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the primary playlist UI components used by the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
 
-The playlist system is responsible for:
+Module:
+    ./widgets/playlist.py
 
+Description:
+    This module contains the primary playlist UI components used by the Review Player application.
+
+Responsibilities:
     - Displaying project lists
     - Managing version/media playlists
     - Handling project switching
@@ -27,17 +30,63 @@ Features:
     - Signal-driven UI updates
     - Version/media list integration
 
-Widget Architecture:
-    PlaylistGroup
-        ├── ProjectIconLabel
-        ├── ProjectCombobox
-        └── PlaylistTreewidget
+Architecture:
+    PlaylistWidget
+        ↓
+    ProjectsFrame
+        ↓
+    ProjectCombobox
+        ↓
+    User Project Selection
+        ↓
+    set_playlist()
+        ↓
+    Versions.get(project)
+        ↓
+    Version Collection
+        ↓
+    set_versions()
+        ↓
+    PlaylistTreewidget
+        ↓
+    PlaylistWidgetItem
+        ↓
+    User Selection
+        ├── itemClicked
+        │   ↓
+        │   open_media()
+        │   ↓
+        │   select_media(False, context)
+        │
+        └── itemDoubleClicked
+            ↓
+            play_media()
+            ↓
+            select_media(True, context)
+
+    ProjectsFrame
+        ↓
+    Projects.get()
+        ↓
+    Project Dataset
+        ↓
+    ProjectCombobox
+        ↓
+    User Project Selection
+        ↓
+    set_current_project()
+        ↓
+    ProjectIconLabel
+        ↓
+    project_changed Signal
+        ↓
+    Playlist Widget
 
 Signals:
     project_changed:
         Emitted when the active project changes.
 
-    click_widgetitem:
+    select_media:
         Emitted when media items are clicked or double-clicked.
 """
 
@@ -46,15 +95,15 @@ from __future__ import absolute_import
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
+from widgets.styles import WaitCursor
 from widgets.layouts import VerticalLayout
-from widgets.layouts import HorizontalLayout
-
 from widgets.labels import ProjectIconLabel
+from widgets.layouts import HorizontalLayout
 from widgets.comboboxs import ProjectCombobox
 from widgets.treewidgets import PlaylistTreewidget
 
 
-class PlaylistGroup(QtWidgets.QWidget):
+class PlaylistWidget(QtWidgets.QWidget):
     """
     Main playlist container widget.
 
@@ -70,7 +119,7 @@ class PlaylistGroup(QtWidgets.QWidget):
         project_changed (dict):
             Emitted when the active project changes.
 
-        click_widgetitem (bool, dict):
+        select_media (bool, dict):
             Emitted when a media item is clicked or double-clicked.
 
             Arguments:
@@ -88,7 +137,7 @@ class PlaylistGroup(QtWidgets.QWidget):
     """
 
     project_changed = QtCore.Signal(dict)
-    click_widgetitem = QtCore.Signal(bool, dict)
+    select_media = QtCore.Signal(bool, dict)
 
     def __init__(self, parent, *args, **kwargs):
         """
@@ -108,83 +157,51 @@ class PlaylistGroup(QtWidgets.QWidget):
                     Project context list.
         """
 
-        super(PlaylistGroup, self).__init__(parent)
+        super(PlaylistWidget, self).__init__(parent)
 
-        # Store project data
-        self.projects = kwargs.get("projects")
+        self.current_project = None
 
         # Main vertical layout
         self.verticallayout = VerticalLayout(self, space=5, margins=(0, 0, 0, 0))
 
-        # Project header group
-        self.projectGroupbox = QtWidgets.QGroupBox(self)
-        self.verticallayout.addWidget(self.projectGroupbox)
-
-        # Header horizontal layout
-        self.horizontallayout = HorizontalLayout(
-            self.projectGroupbox, space=10, margins=(10, 10, 10, 10)
-        )
-
-        # Project thumbnail preview
-        self.projectIconLabel = ProjectIconLabel(self)
-        self.horizontallayout.addWidget(self.projectIconLabel)
-
-        # Project selector combobox
-        self.projectCombobox = ProjectCombobox(self, key="name")
-        self.projectCombobox.setItems(contextList=self.projects)
-        self.projectCombobox.project_changed.connect(self.set_project)
-
-        self.horizontallayout.addWidget(self.projectCombobox)
+        self.projectsFrame = ProjectsFrame(self)
+        self.verticallayout.addWidget(self.projectsFrame)
 
         # Playlist tree widget
         self.playlistTreewidget = PlaylistTreewidget(self)
         self.verticallayout.addWidget(self.playlistTreewidget)
 
-        # Set initial project
-        if self.projects:
-            self.set_project(self.projects[0])
+        # Signal Connections
+        self.projectsFrame.project_changed.connect(self.set_playlist)
 
         # Connect playlist interactions
         self.playlistTreewidget.itemClicked.connect(self.open_media)
         self.playlistTreewidget.itemDoubleClicked.connect(self.play_media)
 
-    def set_project(self, context):
+        # Emit initial project
+        self.projectsFrame.set_default_project(index=0)
+
+    def set_playlist(self, project):
         """
-        Set current active project.
-
-        This updates:
-
-            - Project thumbnail
-            - Current project context
-            - UI project state
-
-        Args:
-            context (dict):
-                Project context dictionary.
-
-        Example:
-            >>> widget.set_project(project)
-        """
-
-        # Update project thumbnail
-        self.projectIconLabel.setThumbnail(context["image"])
-
-        # Store thumbnail pixmap in context
-        context["value"] = self.projectIconLabel.pixmap()
-
-        # Emit project change signal
-        self.project_changed.emit(context)
-
-    def set_current_project(self, project):
-        """
-        Set current project in project combobox.
+        Update playlist versions based on selected project.
 
         Args:
             project (dict):
                 Project context dictionary.
         """
+        self.current_project = project
 
-        self.projectCombobox.setValue(project)
+        with WaitCursor():
+            # Load project versions
+
+            from scripts import Versions
+
+            versions = Versions.get(self.current_project)
+
+        # Update playlist widget
+        self.set_versions(versions)
+
+        self.project_changed.emit(self.current_project)
 
     def set_versions(self, versions):
         """
@@ -209,7 +226,9 @@ class PlaylistGroup(QtWidgets.QWidget):
                 Selected playlist item.
         """
 
-        self.click_widgetitem.emit(False, widgetitem.context)
+        self.project_changed.emit(self.current_project)
+
+        self.select_media.emit(False, widgetitem.context)
 
     def play_media(self, widgetitem):
         """
@@ -220,7 +239,133 @@ class PlaylistGroup(QtWidgets.QWidget):
                 Selected playlist item.
         """
 
-        self.click_widgetitem.emit(True, widgetitem.context)
+        self.project_changed.emit(self.current_project)
+
+        self.select_media.emit(True, widgetitem.context)
+
+
+class ProjectsFrame(QtWidgets.QFrame):
+    """
+    Project selection widget.
+
+    Displays the available projects, allows users to select the active project, and emits project change notifications to the application.
+
+    Signals:
+        project_changed(dict):
+            Emitted whenever the active project changes.
+    """
+
+    # Emitted when current project changes
+    project_changed = QtCore.Signal(dict)
+
+    def __init__(self, parent, *args, **kwargs):
+        """
+        Initialize project frame.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            *args:
+                Additional positional arguments.
+
+            **kwargs:
+                Additional optional arguments.
+        """
+
+        # Initialize QFrame
+        super(ProjectsFrame, self).__init__(parent)
+
+        # Apply frame appearance
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Raised)
+
+        # Build interface
+        self.setupUi()
+
+    def setupUi(self):
+        """
+        Build user interface.
+
+        Creates:
+
+            - Project thumbnail preview
+            - Project selection combobox
+
+        Connects project selection signals to the project update handler.
+        """
+
+        # Main horizontal layout
+        self.horizontallayout = HorizontalLayout(self, space=10, margins=(10, 10, 10, 10))
+
+        # --------------------------------------------------
+        # Project Thumbnail
+        # --------------------------------------------------
+        self.projectIconLabel = ProjectIconLabel(self)
+        self.horizontallayout.addWidget(self.projectIconLabel)
+
+        # --------------------------------------------------
+        # Project Combobox
+        # --------------------------------------------------
+        self.projectCombobox = ProjectCombobox(self, key="name")
+        self.projectCombobox.setProjects()
+        self.horizontallayout.addWidget(self.projectCombobox)
+
+        # Listen for project changes
+        self.projectCombobox.project_changed.connect(self.set_current_project)
+
+    def set_default_project(self, index=0):
+        """
+        Set default project.
+
+        Args:
+            index (int, optional):
+                Project index to activate.
+                Defaults to 0.
+        """
+
+        # No projects available
+        if not self.projectCombobox.contextList:
+            return
+
+        # Activate project
+        self.set_current_project(self.projectCombobox.contextList[index])
+
+    def set_current_project(self, context, key="image"):
+        """
+        Set current active project.
+
+        Updates:
+
+            - Project thumbnail
+            - Current project context
+            - Project preview image
+
+        Emits:
+            project_changed(dict)
+
+        Args:
+            context (dict):
+                Project context dictionary.
+
+        Example:
+            >>> widget.set_current_project(project)
+        """
+
+        # --------------------------------------------------
+        # Update Thumbnail
+        # --------------------------------------------------
+        self.projectIconLabel.setThumbnail(context[key])
+
+        # --------------------------------------------------
+        # Store Thumbnail Pixmap
+        # --------------------------------------------------
+        # context["value"] = self.projectIconLabel.pixmap()
+
+        # --------------------------------------------------
+        # Notify Listeners
+        # --------------------------------------------------
+        self.project_changed.emit(context)
 
 
 if __name__ == "__main__":

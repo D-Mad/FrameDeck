@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QPixmap and QIcon wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt pixmap and icon wrapper classes used throughout the Review Player UI.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/pixmaps.py
+
+Description:
+    This module provides reusable Qt pixmap and icon wrapper classes used throughout the Review Player UI.
 
 Responsibilities:
     - Load pixmaps from resources

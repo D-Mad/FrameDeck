@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QTreeWidgetItem widget module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains custom QTreeWidgetItem classes used by the playlist system.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/widgetItems.py
+
+Description:
+    This module contains custom QTreeWidgetItem classes used by the playlist system.
 
 Responsibilities:
     - Store playlist/version context
@@ -35,6 +39,8 @@ Notes:
         - Version browsers
         - Media selection UIs
 """
+
+from __future__ import absolute_import
 
 from PySide6 import QtCore
 from PySide6 import QtWidgets

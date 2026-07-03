@@ -1,10 +1,14 @@
 """
-# Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-# Author: Subin. Gopi (subing85@gmail.com).
-# Description: Review Player utility module.
-# WARNING! All changes made in this file will be lost when recompiling source file!
+Copyright (c) 2026, Motion-Craft Technology All rights reserved.
 
-This module provides common helper utilities used throughout the Review Player framework.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./utils/__init__.py
+
+Description:
+    This module provides common helper utilities used throughout the Review Player framework.
 
 Responsibilities:
     - File/path utilities
@@ -43,14 +47,35 @@ from __future__ import absolute_import
 
 import os
 import re
+import json
 import glob
+import uuid
+import shutil
 import base64
 import urllib
+import getpass
+import datetime
 import requests
+import tempfile
+import platform
 import webbrowser
+import subprocess
 
+import logger
 import resources
 import constants
+
+from pathlib import Path
+
+LOGGER = logger.getLogger(__name__)
+
+
+def getPlatform():
+    return platform.system().lower()  # ["Windows", "Linux"]
+
+
+def getUsername():
+    return getpass.getuser()
 
 
 def hasPathExists(filepath):
@@ -84,7 +109,45 @@ def hasPathExists(filepath):
     return os.path.exists(absfilepath)
 
 
-def fileExtension(filepath):
+def fileName(filepath, extension=False):
+    """
+    Return the file name from a file path.
+
+    Args:
+        filepath (str):
+            Absolute or relative file path.
+
+        extension (bool, optional):
+            Include file extension in the returned name.
+            Defaults to False.
+
+    Returns:
+        str:
+            File name with or without extension.
+
+    Examples:
+        >>> fileName("/tmp/image.png")
+        'image'
+
+        >>> fileName("/tmp/image.png", extension=True)
+        'image.png'
+    """
+
+    # Extract file name from path
+    basename = os.path.basename(filepath)
+
+    # Return with extension
+    if extension:
+        name = basename
+
+    # Return without extension
+    else:
+        name = os.path.splitext(basename)[0]
+
+    return name
+
+
+def fileExtension(filepath, dot=False):
     """Return lowercase file extension.
 
     Args:
@@ -101,7 +164,16 @@ def fileExtension(filepath):
     """
 
     # Extract File Extension
-    return os.path.splitext(filepath)[1].lower()
+    # return os.path.splitext(filepath)[1].lower()
+
+    splitext = os.path.splitext(filepath)[-1]
+
+    if dot:
+        result = splitext.lower()
+    else:
+        result = splitext.rsplit(".", 1)[-1].lower()
+
+    return result
 
 
 def dirname(path):
@@ -124,7 +196,7 @@ def dirname(path):
     return os.path.dirname(path)
 
 
-def basename(path):
+def _basename(path):
     """Return basename from path.
 
     Args:
@@ -167,11 +239,25 @@ def pathResolver(path, folders=list(), filename=None):
 
     # Build Path with Expand Environment Variables
     if filename:
-        result = os.path.expandvars(os.path.join(path, *folders, filename))
+        result = os.path.expandvars(os.path.join(path, *folders, filename)).replace("\\", "/")
     else:
-        result = os.path.expandvars(os.path.join(path, *folders))
+        result = os.path.expandvars(os.path.join(path, *folders)).replace("\\", "/")
 
     return result
+
+
+def openPath(path):
+    if not hasPathExists(path):
+        LOGGER.warning(f"Could not found such path, {path}")
+        return
+
+    operatingSystem = getPlatform()
+
+    if operatingSystem == "windows":
+        subprocess.Popen(["start", path], shell=True)
+
+    if operatingSystem == "linux":
+        subprocess.Popen(["xdg-open", path])
 
 
 def openUrl(path):
@@ -375,6 +461,119 @@ def overrideWatermarkValues(version, watermarks=None, **kwargs):
             overlay["value"] = value
 
     return watermarks
+
+
+def getDateTimes(times=None):
+    if isinstance(times, str):
+        return times
+
+    now = times if times else datetime.datetime.now()
+    result = now.strftime(constants.DATE_TIME_FORMAT)
+    return result
+
+
+def getTempDate(context=None):
+    now = context if context else datetime.datetime.now()
+    date_time = now.strftime("%Y-%B-%d-%A-%I-%M-%S-%p")
+    return date_time
+
+
+def tempdir(subfolder=False):
+    directory = pathResolver(tempfile.gettempdir())
+
+    if subfolder:
+        directory = pathResolver(directory, folders=[getTempDate()])
+
+    return directory
+
+
+def hasFile(filepath):
+    dirname, extenstion = os.path.splitext(filepath)
+    return True if extenstion else False
+
+
+def jsonDefaultSerializer(obj):
+    if isinstance(obj, (datetime.date, datetime.datetime)):
+        # return obj.isoformat()  # e.g. "2025-08-22"
+        return obj.strftime(constants.DATE_TIME_FORMAT)
+
+    # Handle QTreeWidgetItem
+    from wsqt import QtWidgets
+
+    if isinstance(obj, QtWidgets.QTreeWidgetItem):
+        return str(obj)
+
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+def writeJsonFile(context, filepath, serializer=False, indent=4):
+    makedirs(filepath)
+
+    default = jsonDefaultSerializer if serializer else None
+
+    with open(filepath, "w") as target:
+        target.write(json.dumps(context, default=default, indent=indent))
+
+
+def readJsonFile(filepath):  # remove this function
+    if not hasPathExists(filepath):
+        return
+
+    with open(filepath, "r") as target:
+        return json.load(target)
+
+
+def makedirs(path, open=False):
+    if not path:
+        return
+
+    abspath = os.path.expandvars(path)
+    if hasFile(abspath):
+        abspath = os.path.dirname(abspath)
+
+    if not os.path.isdir(abspath):
+        os.makedirs(abspath, exist_ok=True)
+
+    if open:
+        openPath(abspath)
+
+
+def getStatusFieldValue(value):
+    if not value:
+        return
+
+    current_status = next(filter(lambda x: x["value"] == value, constants.STATUS_LIST), None)
+    result = current_status["code"] if current_status else value
+
+    return result
+
+
+def environmentValue(key):
+    return os.getenv(key)
+
+
+def viewlinePath(subfolder=None):
+    result = pathResolver(
+        environmentValue("VIEW_LINE_PROFILE_ROOT"), folders=["viewline", subfolder]
+    )
+
+    return result
+
+
+def numericId():
+    id = uuid.uuid1()
+    return int(id.time_low)
+
+
+def copyFile(source, destination, delete=False):
+    makedirs(destination)
+
+    if pathResolver(source) == pathResolver(destination):
+        return pathResolver(source)
+
+    copiedFile = shutil.copy2(source, destination)
+
+    return pathResolver(copiedFile)
 
 
 if __name__ == "__main__":

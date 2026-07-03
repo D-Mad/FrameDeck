@@ -4,7 +4,7 @@
             "code": "project",
             "label": "project",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -35,7 +35,7 @@
             "code": "entity",
             "label": "shot",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -65,7 +65,7 @@
             "code": "sg_task",
             "label": "shot",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -95,7 +95,7 @@
             "code": "code",
             "label": "version",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -127,7 +127,7 @@
             "code": "created_at",
             "label": "date",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -157,7 +157,7 @@
             "code": "created_by",
             "label": "artist",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -188,7 +188,7 @@
         {
             "code": "resolution",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 20,
                 "family": "Noto Sans",
@@ -219,7 +219,7 @@
         {
             "code": "project-logo",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "type": "image",
             "opacity": 0.75
         }
@@ -228,7 +228,7 @@
         {
             "code": "studio-logo",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "type": "image",
             "opacity": 0.7
         }
@@ -237,7 +237,7 @@
         {
             "code": "frame",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 15,
                 "family": "Noto Sans",
@@ -268,7 +268,7 @@
         {
             "code": "copyright",
             "enable": true,
-            "checked": true,
+            "checked": false,
             "font": {
                 "size": 25,
                 "family": "Noto Sans",

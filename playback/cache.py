@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player frame cache module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides a lightweight in-memory frame cache used by the playback system.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./playback/cache.py
+
+Description:
+    This module provides a lightweight in-memory frame cache used by the playback system.
 
 The frame cache is responsible for:
     - Storing decoded image frames

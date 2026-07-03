@@ -1,11 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player media reader module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides media reading systems used by the
-Review Player playback framework.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./playback/reader.py
+
+Description:
+    This module provides media reading systems used by the Review Player playback framework.
 
 The module supports:
     - Video playback
@@ -120,7 +123,7 @@ class VideoReader(object):
         self.path = path
 
         # Timeline State
-        self.current_frame = constants.START_FRAME
+        self.current_frame = constants.RP_START_FRAME
 
         # Open Video Container
         self.container = av.open(path)
@@ -199,6 +202,19 @@ class VideoReader(object):
             return image
         except StopIteration:
             return None
+
+    def get_available_aovs(self):
+        """Return available AOV names.
+
+        Returns:
+            list:
+                Available AOV names.
+
+        Example:
+            >>> aovs = reader.get_available_aovs()
+        """
+
+        return list()
 
 
 class SequenceReader(object):
@@ -306,7 +322,7 @@ class SequenceReader(object):
 
         return len(self.files)
 
-    def get_fps(self):
+    def get_fps(self, rounded=0):
         """Return playback FPS.
 
         Returns:
@@ -317,7 +333,14 @@ class SequenceReader(object):
             >>> fps = reader.get_fps()
         """
 
-        return self.fps
+        # Return Original FPS
+        if rounded == 0:
+            return self.fps
+
+        # Return Rounded FPS
+        result = round(self.fps, rounded)
+
+        return result
 
     def set_fps(self, fps):
         """Set sequence playback FPS.
@@ -360,7 +383,10 @@ class SequenceReader(object):
         """
 
         # Convert Timeline Frame To Index
-        frame_number = current_frame - constants.START_FRAME
+        frame_number = current_frame - constants.RP_START_FRAME
+
+        if not self.files:
+            return
 
         # Resolve Sequence File
         path = self.files[frame_number]

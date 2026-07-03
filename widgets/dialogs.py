@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt dialog wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt dialog widgets used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/dialogs.py
+
+Description:
+    This module provides reusable Qt dialog widgets used throughout the Review Player application.
 
 Responsibilities:
     - Media file browsing
@@ -48,6 +52,8 @@ import constants
 
 from PySide6 import QtCore
 from PySide6 import QtWidgets
+
+from widgets.styles import SetStylesheet
 
 
 class SequenceDisplayDelegate(QtWidgets.QStyledItemDelegate):
@@ -286,7 +292,7 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
 
         if self.proxy.__collapse_sequences__:
             dirname = utils.dirname(path)
-            basename = utils.basename(path)
+            basename = utils.fileName(path, extension=True)
 
             # Convert: image.1001.exr -> image.####.exr
             pattern_name = re.sub(
@@ -295,6 +301,150 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
             path = utils.pathResolver(dirname, filename=pattern_name)
 
         return path
+
+
+class ColorDialog(QtWidgets.QColorDialog):
+    """
+    Custom color picker dialog.
+
+    Provides a themed QColorDialog and helper method for returning the selected color as an RGB tuple.
+    """
+
+    def __init__(self, parent, **kwargs):
+        """
+        Initialize color dialog.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            **kwargs:
+                Additional optional arguments.
+        """
+
+        # Initialize QColorDialog
+        super().__init__(parent)
+
+        # Apply application theme
+        SetStylesheet(self, theme=constants.DEFAULT_THEME)
+
+    def getColor(self):
+        """
+        Return selected color.
+
+        Returns:
+            tuple or None:
+                RGB color tuple in the form (red, green, blue).
+
+                Returns None if no valid color was selected.
+        """
+
+        # Retrieve selected color
+        color_form = self.selectedColor()
+
+        # Validate color
+        if not color_form.isValid():
+            return
+
+        # Convert QColor to RGB tuple
+        color = (color_form.red(), color_form.green(), color_form.blue())
+
+        return color
+
+
+class FileDialog(QtWidgets.QFileDialog):
+    """
+    Custom file dialog wrapper.
+
+    Provides helper methods for file selection and save file operations with configurable extensions.
+    """
+
+    def __init__(self, parent, title, **kwargs):
+        """
+        Initialize file dialog.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            title (str):
+                Dialog title.
+
+            **kwargs:
+                browsepath (str, optional):
+                    Initial browse location.
+
+                extensions (list[str], optional):
+                    Allowed file extensions.
+
+                label (str, optional):
+                    File type label.
+        """
+
+        # Initialize QFileDialog
+        super().__init__(parent)
+
+        # Dialog title
+        self.title = title
+
+        # Initial browse path
+        self.browsepath = kwargs.get("browsepath") or QtCore.QDir.homePath()
+
+        # Supported file extensions
+        self.extensions = kwargs.get("extensions", ["txt"])
+
+        # Display label
+        self.label = kwargs.get("label", "txt")
+
+    def savefile(self, name):
+        """
+        Open save file dialog.
+
+        Args:
+            name (str):
+                Suggested file name.
+
+        Returns:
+            str:
+                Selected output file path.
+
+                Returns an empty string if the user cancels.
+        """
+
+        # Build default file name
+        filename = f"{name}.{self.extensions[0]}" if name else f"untitle.{self.extensions[0]}"
+
+        # Build file filter pattern
+        pattern = ";;".join(f"{ext.upper()} (*.{ext.lower()})" for ext in self.extensions)
+
+        # Open save dialog
+        filepath, fileFormat = self.getSaveFileName(self, self.title, filename, pattern)
+
+        return filepath
+
+    def pickFile(self):
+        """
+        Open file picker dialog.
+
+        Returns:
+            str:
+                Selected file path.
+
+                Returns an empty string if the user cancels.
+        """
+
+        # Build filter pattern
+        pattern = f"{self.label} (*{' *'.join(self.extensions)})"
+
+        # Open file dialog
+        filepath, fileFormat = self.getOpenFileName(self, self.title, self.browsepath, pattern)
+
+        # Update browse path
+        if filepath:
+            filepath = utils.pathResolver(filepath)
+            self.browsepath = utils.dirname(filepath)
+
+        return filepath
 
 
 if __name__ == "__main__":

@@ -1,8 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Module contains the main playback controller used by the Review Player framework.
-WARNING! All changes made in this file will be lost when recompiling source file!
+
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./playback/player.py
+
+Description:
+    The main playback controller used by the Review Player framework.
 
 The media player is responsible for:
     - Playback control
@@ -129,6 +135,7 @@ class MediaPlayer(QtCore.QObject):
     frame_ready = QtCore.Signal(object)
     frame_changed = QtCore.Signal(int)
     cache_changed = QtCore.Signal(list)
+    timeline_actived = QtCore.Signal(int)
 
     def __init__(self):
         """Initialize media player.
@@ -156,14 +163,14 @@ class MediaPlayer(QtCore.QObject):
 
         # Playback Reader
         self.reader = None
-        self.playbutton = None
+        # self.playbutton = None
 
         # Playback FPS
         self.fps = None
 
         # Timeline State
-        self.start_frame = constants.START_FRAME or 101
-        self.current_frame = constants.START_FRAME or 101
+        self.start_frame = constants.RP_START_FRAME or 101
+        self.current_frame = constants.RP_START_FRAME or 101
         self.frame_count = 0
 
         # Playback State
@@ -174,13 +181,13 @@ class MediaPlayer(QtCore.QObject):
         self.current_aov = "rgb"
 
         # Frame Cache
-        self.cache = FrameCache(max_size=200)
+        self.cache = FrameCache(max_size=constants.RP_FRAME_CACHE_MAX_SIZE)
 
         # Playback Timer
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.next_frame)
 
-    def set_playbutton(self, playbutton):
+    def _set_playbutton(self, playbutton):
         """Set playback button widget.
 
         Stores the playback button reference so playback
@@ -224,10 +231,10 @@ class MediaPlayer(QtCore.QObject):
         """
 
         # Detect Media Type
-        extension = utils.fileExtension(path)
+        extension = utils.fileExtension(path, dot=False)
 
         # Create Reader
-        if extension in [".mp4", ".mov", ".avi"]:
+        if extension in ["mp4", "mov", "avi"]:
             self.reader = VideoReader(path)
         else:
             self.reader = SequenceReader(path)
@@ -236,9 +243,9 @@ class MediaPlayer(QtCore.QObject):
         # Timeline Setup
         self.frame_count = self.reader.frame_count()
 
-        self.start_frame = constants.START_FRAME
+        self.start_frame = constants.RP_START_FRAME
         self.current_frame = self.start_frame
-        self.end_frame = constants.START_FRAME + (self.frame_count)  # - 1
+        self.end_frame = constants.RP_START_FRAME + (self.frame_count)  # - 1
 
         # Reset Cache
         self.cache.clear()
@@ -366,8 +373,8 @@ class MediaPlayer(QtCore.QObject):
         self.is_playing = True
 
         # Update Play Button UI
-        if self.playbutton:
-            self.playbutton.switch(True)
+        # if self.playbutton:
+        #     self.playbutton.switch(True)
 
     def stop(self):
         """Stop playback.
@@ -389,11 +396,13 @@ class MediaPlayer(QtCore.QObject):
         self.is_playing = False
 
         # Update Play Button UI
-        if self.playbutton:
-            self.playbutton.switch(False)
+        # if self.playbutton:
+        #     self.playbutton.switch(False)
 
         # Restore Displayed Frame
         self.current_frame = self.displayed_frame
+
+        self.timeline_actived.emit(self.is_playing)
 
     def set_loop(self, enabled):
         """Enable or disable playback looping.
@@ -510,7 +519,7 @@ class MediaPlayer(QtCore.QObject):
 
         # Wrap Timeline
         if self.current_frame <= self.start_frame:
-            self.current_frame = constants.START_FRAME + (self.frame_count - 1)
+            self.current_frame = constants.RP_START_FRAME + (self.frame_count - 1)
 
         # Refresh Viewer Frame
         self.update_frame()
@@ -534,7 +543,7 @@ class MediaPlayer(QtCore.QObject):
         self.current_frame += 1
 
         # Wrap Timeline
-        if self.current_frame >= constants.START_FRAME + self.frame_count:
+        if self.current_frame >= constants.RP_START_FRAME + self.frame_count:
             self.current_frame = self.start_frame
 
         # Refresh Viewer Frame

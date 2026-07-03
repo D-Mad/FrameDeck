@@ -1,13 +1,16 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QTreeWidget playlist module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the custom playlist tree widget used by the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/treewidgets.py
+
+Description:
+    This module contains the custom playlist tree widget used by the Review Player application.
 
 The playlist tree widget is responsible for:
-
     - Displaying version/media items
     - Managing playlist item selection
     - Handling thumbnail/icon display
@@ -29,6 +32,8 @@ Widget Architecture:
     PlaylistTreewidget
         └── PlaylistWidgetItem
 """
+
+from __future__ import absolute_import
 
 from PySide6 import QtCore
 from PySide6 import QtWidgets

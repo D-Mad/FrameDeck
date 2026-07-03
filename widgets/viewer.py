@@ -1,36 +1,65 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt OpenGL media viewer widget module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the main media viewer widget used by the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
 
-The viewer widget is responsible for:
+Module:
+    ./widgets/viewer.py
 
+Description:
+    Provides the primary media display component used by the Review Player application.
+
+Responsibilities:
     - OpenGL-based image rendering
     - Video frame display
     - Image sequence preview
     - Dynamic fit-to-window scaling
     - Aspect ratio preservation
+    - Annotation rendering
     - Watermark and overlay rendering
-    - Text and image overlays
-    - Playback frame display
+    - Playback frame visualization
+    - Frame export and rendering
+
+Responsibilities:
+    - Display source media frames.
+    - Manage OpenGL rendering.
+    - Maintain viewport calculations.
+    - Render annotations.
+    - Render watermarks and overlays.
+    - Handle user interaction tools.
+    - Export annotated frames.
 
 Main Components:
     ViewerWidget:
         OpenGL-powered media display widget.
 
+    AnnotationManager:
+        Handles drawing, editing, moving,
+        erasing, and rendering annotations.
+
+    Overlay System:
+        Handles watermark rendering.
+
 Features:
-    - OpenGL frame rendering
-    - Dynamic viewport resizing
-    - Aspect ratio preservation
-    - Overlay rendering system
-    - Text watermark support
-    - Image watermark support
-    - Opacity control
-    - Font customization
-    - Playback frame visualization
+    - OpenGL frame rendering.
+    - Dynamic viewport resizing.
+    - Aspect ratio preservation.
+    - Annotation rendering.
+    - Pencil annotations.
+    - Rectangle annotations.
+    - Ellipse annotations.
+    - Text annotations.
+    - Annotation move tool.
+    - Annotation erase tool.
+    - Annotation undo support.
+    - Overlay rendering system.
+    - Text watermark support.
+    - Image watermark support.
+    - Opacity control.
+    - Font customization.
+    - Playback frame visualization.
+    - Frame export rendering.
 
 Overlay Positions:
     - top_left
@@ -48,17 +77,58 @@ Overlay Types:
     image:
         Image/logo overlays.
 
+Architecture:
+    ViewerWidget
+        │
+        ├── OpenGL Renderer
+        │       │
+        │       └── Media Frame Display
+        │
+        ├── Annotation Layer
+        │       │
+        │       ├── Pencil
+        │       ├── Rectangle
+        │       ├── Ellipse
+        │       ├── Text
+        │       └── Selection Tools
+        │
+        └── Overlay Layer
+                │
+                ├── Text Watermarks
+                └── Image Watermarks
+
 Rendering Pipeline:
-    Media Frame
+    Source Frame
         ↓
     OpenGL Draw
         ↓
     QPainter Overlay
         ↓
+    Annotation Rendering
+        ↓
     Watermark Rendering
+
+Export Pipeline:
+    Source Frame
+        ↓
+    Annotation Rendering
+        ↓
+    Watermark Rendering
+        ↓
+    QImage Output
+
+Notes:
+    - Annotations are stored separately from source media.
+    - Watermarks are display-only elements.
+    - Watermarks are excluded from annotation undo history.
+    - Export rendering uses source-frame resolution rather than viewport resolution.
 """
 
+from __future__ import absolute_import
+
+import utils
 import numpy
+import logger
 
 import resources
 import constants
@@ -70,8 +140,943 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 from PySide6 import QtOpenGLWidgets
 
-from widgets.styles import Font
+from widgets.buttons import TxtButton
 from widgets.pixmaps import PathPixmap
+from widgets.annotations import Sketch
+from widgets.buttons import HelpButton
+from widgets.buttons import OpenButton
+from widgets.buttons import LoopButton
+from widgets.buttons import MoveButton
+from widgets.buttons import UndoButton
+from widgets.buttons import ColorButton
+from widgets.buttons import ClearButton
+from widgets.buttons import ArrowButton
+from widgets.buttons import PencilButton
+from widgets.buttons import PencilButton
+from widgets.buttons import EraserButton
+from widgets.buttons import RenderButton
+from widgets.buttons import RecapsButton
+from widgets.labels import ToolNameLabel
+from widgets.labels import ThicknesLabel
+from widgets.comboboxs import FbsCombobox
+from widgets.buttons import ForwardButton
+from widgets.buttons import EllipseButton
+from widgets.buttons import BackwordButton
+from widgets.layouts import VerticalLayout
+from widgets.comboboxs import AovsCombobox
+from widgets.buttons import RectangleButton
+from widgets.buttons import PlayPauseButton
+from widgets.timeline import TimelineWidget
+from widgets.layouts import HorizontalLayout
+from widgets.layouts import HorizontalSpacer
+from widgets.lineedits import ThicknesSpinBox
+from widgets.fontdialog import TxtInputDialog
+from widgets.buttons import WatermarkMenuButton
+
+LOGGER = logger.getLogger(__name__)
+
+
+class ViewFrame(QtWidgets.QFrame):
+    """
+    Main viewer container widget.
+
+    Acts as the primary media viewing workspace of the Review Player application.
+
+    Data Flow:
+        Media Source
+                ↓
+          ViewerWidget
+                ↓
+          OpenGL Display
+                ↓
+        Annotation Layer
+
+    Notes:
+        - Acts as the central viewer workspace.
+        - Coordinates playback and annotation tools.
+        - ViewerWidget performs all rendering operations.
+        - Timeline controls are isolated from rendering logic.
+
+    """
+
+    def __init__(self, parent, *args, **kwargs):
+        super(ViewFrame, self).__init__(parent)
+
+        # Apply frame appearance
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Raised)
+
+        # Main Layout, Root viewer layout
+        self.verticallayout = VerticalLayout(self, space=10, margins=(10, 10, 10, 10))
+
+        # --------------------------------------------------
+        # Viewer Toolbar
+        # --------------------------------------------------
+        # Annotation and viewer controls
+        self.viewToolbarLayout = ViewToolbarLayout(None)
+        self.verticallayout.addLayout(self.viewToolbarLayout)
+
+        # --------------------------------------------------
+        # OpenGL Viewer
+        # --------------------------------------------------
+        self.viewer = ViewerWidget(self)
+        self.verticallayout.addWidget(self.viewer)
+
+        # --------------------------------------------------
+        # Timeline Widget
+        # --------------------------------------------------
+        # Frame navigation widget
+        self.timeline = TimelineWidget()
+        self.verticallayout.addWidget(self.timeline)
+
+        # --------------------------------------------------
+        # Playback Toolbar
+        # --------------------------------------------------
+        # Playback control toolbar
+        self.timelineToolbarLayout = TimelineToolbarLayout(None)
+        self.verticallayout.addLayout(self.timelineToolbarLayout)
+
+
+class ViewToolbarLayout(HorizontalLayout):
+    """
+    Provides all viewer-related controls used for media review, annotation drawing, rendering, watermark display, and recap management.
+
+    Responsibilities:
+        - Manage annotation tool selection.
+        - Manage drawing attributes.
+        - Manage AOV selection.
+        - Manage watermark visibility.
+        - Manage frame rendering actions.
+        - Manage recap panel visibility.
+        - Emit viewer interaction signals.
+
+    Features:
+        - AOV selection.
+        - Pencil drawing tool.
+        - Ellipse drawing tool.
+        - Rectangle drawing tool.
+        - Text annotation tool.
+        - Move annotation tool.
+        - Eraser tool.
+        - Thickness control.
+        - Eraser radius control.
+        - Color picker.
+        - Undo support.
+        - Clear support.
+        - Watermark controls.
+        - Frame rendering.
+        - Recap panel controls.
+
+    Architecture:
+        ViewToolbarLayout
+            │
+            ├── AOV Controls
+            │
+            ├── Annotation Tools
+            │       ├── Pencil
+            │       ├── Arrow
+            │       ├── Ellipse
+            │       ├── Rectangle
+            │       ├── Text
+            │       ├── Move
+            │       └── Eraser
+            │
+            ├── Drawing Controls
+            │       ├── Thickness
+            │       ├── Radius
+            │       └── Color
+            │
+            ├── Edit Actions
+            │       ├── Undo
+            │       └── Clear
+            │
+            ├── Viewer Actions
+            │       ├── Watermarks
+            │       └── Render
+            │
+            └── Review Actions
+                    └── Recaps
+
+    Signal Flow:
+        User Interaction
+                ↓
+        Toolbar Widgets
+                ↓
+        ViewToolbarLayout
+                ↓
+        ViewerWidget / ViewFrame
+    """
+
+    # Signal emitted when current AOV changes
+    aov_changed = QtCore.Signal(str)
+
+    # Signal emitted when drawing thickness changes
+    thicknes_changed = QtCore.Signal(float)
+
+    # Signal emitted when eraser radius changes
+    radius_changed = QtCore.Signal(float)
+
+    # Signal emitted when drawing color changes
+    color_changed = QtCore.Signal(tuple)
+
+    # Signal emitted when drawing tool state changes
+    draw_enabled = QtCore.Signal(str, bool, object)
+
+    # Signal emitted when undo is requested
+    undo_stack = QtCore.Signal()
+
+    # Signal emitted when clear is requested
+    clear_stack = QtCore.Signal()
+
+    # Signal emitted when watermark settings change
+    water_marks = QtCore.Signal(bool, str, str, dict)
+
+    # Signal emitted when frame render is requested
+    trigger_render = QtCore.Signal()
+
+    # Signal emitted when recap panel visibility changes
+    trigger_recaps = QtCore.Signal(bool)
+
+    def __init__(self, parent, *args, **kwargs):
+        """
+        Initialize viewer toolbar.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+        """
+
+        # Initialize base horizontal layout
+        super(ViewToolbarLayout, self).__init__(parent, *args, **kwargs)
+
+        # Build toolbar UI
+        self.setupUi()
+
+    def setupUi(self):
+        """
+        Build viewer toolbar user interface.
+
+        """
+
+        # --------------------------------------------------
+        # AOV Selection
+        # --------------------------------------------------
+        self.aovsCombobox = AovsCombobox(None)
+        self.addWidget(self.aovsCombobox)
+
+        # Spacer after AOV selector
+        self.horizontalspacer1 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer1)
+
+        # --------------------------------------------------
+        # Active Tool Display
+        # --------------------------------------------------
+
+        # Displays currently active annotation tool
+        self.toolNameLabel = ToolNameLabel(None)
+        self.addWidget(self.toolNameLabel)
+
+        # --------------------------------------------------
+        # Annotation Tools
+        # --------------------------------------------------
+
+        # Pencil drawing tool
+        self.pencilButton = PencilButton(
+            None, tooltip="Pencil Tool", checkable=True, width=22, height=22
+        )
+        self.addWidget(self.pencilButton)
+
+        # Arrow annotation tool
+        self.arrowButton = ArrowButton(
+            None, tooltip="Arrow Shape", checkable=True, width=22, height=22
+        )
+
+        # Hidden until arrow support is enabled
+        self.arrowButton.setVisible(False)
+        self.addWidget(self.arrowButton)
+
+        # Ellipse annotation tool
+        self.ellipseButton = EllipseButton(
+            None, tooltip="Ellipse Shape", checkable=True, width=22, height=22
+        )
+        self.addWidget(self.ellipseButton)
+
+        # Rectangle annotation tool
+        self.rectangleButton = RectangleButton(
+            None, tooltip="Rectangle Shape", checkable=True, width=22, height=22
+        )
+        self.addWidget(self.rectangleButton)
+
+        # Eraser tool
+        self.eraserButton = EraserButton(
+            None, tooltip="Erasier Tool", checkable=True, width=22, height=22
+        )
+        self.eraserButton.setCheckable(True)
+        self.addWidget(self.eraserButton)
+
+        # --------------------------------------------------
+        # Drawing Controls
+        # --------------------------------------------------
+
+        # Thickness label
+        self.thicknesLabel = ThicknesLabel(None, "Thicknes")
+        self.addWidget(self.thicknesLabel)
+
+        # Annotation thickness control
+        self.thicknesSpinBox = ThicknesSpinBox(None, 3, tooltip="Strokes Size")
+        self.addWidget(self.thicknesSpinBox)
+
+        # Eraser radius control
+        self.radiusSpinBox = ThicknesSpinBox(None, 10, tooltip="Eraser Size")
+
+        # Hidden until eraser tool becomes active
+        self.radiusSpinBox.setVisible(False)
+        self.addWidget(self.radiusSpinBox)
+
+        # Annotation color picker
+        self.colorButton = ColorButton(None, tooltip="Pick Color", width=22, height=22)
+        self.addWidget(self.colorButton)
+
+        # --------------------------------------------------
+        # Text Annotation Tool
+        # --------------------------------------------------
+
+        # Text annotation tool
+        self.txtButton = TxtButton(None, tooltip="Text Tool", checkable=True, width=22, height=22)
+        self.addWidget(self.txtButton)
+
+        # --------------------------------------------------
+        # Move Tool
+        # --------------------------------------------------
+
+        # Move existing annotations
+        self.moveButton = MoveButton(None, tooltip="Move Tool", checkable=True, width=22, height=22)
+        self.addWidget(self.moveButton)
+
+        # --------------------------------------------------
+        # Edit Actions
+        # --------------------------------------------------
+
+        # Undo last annotation action
+        self.undoButton = UndoButton(None, tooltip="Undo", width=22, height=22)
+        self.addWidget(self.undoButton)
+
+        # Clear all annotations
+        self.clearButton = ClearButton(None, tooltip="Clear", width=22, height=22)
+        self.addWidget(self.clearButton)
+
+        self.horizontalspacer2 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer2)
+
+        # --------------------------------------------------
+        # Watermark Controls
+        # --------------------------------------------------
+
+        # Watermark display configuration menu
+        self.watermarkMenuButton = WatermarkMenuButton(
+            None, tooltip="Water mark display menu", width=32, height=32
+        )
+        self.addWidget(self.watermarkMenuButton)
+
+        # Spacer before render controls
+        self.horizontalspacer3 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer3)
+
+        # --------------------------------------------------
+        # Rendering Controls
+        # --------------------------------------------------
+
+        # Render current frame with annotations
+
+        self.renderButton = RenderButton(None, tooltip="Render Current Frame", width=22, height=22)
+        self.addWidget(self.renderButton)
+
+        # Spacer before recap controls
+        self.horizontalspacer4 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer4)
+
+        # --------------------------------------------------
+        # Review Controls
+        # --------------------------------------------------
+
+        # Toggle recap panel visibility
+        self.recapsButton = RecapsButton(
+            None, tooltip="Display Recap Panel", width=32, height=32, checkable=True
+        )
+        self.addWidget(self.recapsButton)
+
+        # --------------------------------------------------
+        # Signal Connections
+        # --------------------------------------------------
+
+        # AOV selection
+        self.aovsCombobox.currentTextChanged.connect(self.set_current_aov)
+
+        # Thickness control
+        self.thicknesSpinBox.thicknes_changed.connect(self.set_current_thicknes)
+
+        # Radius control
+        self.radiusSpinBox.thicknes_changed.connect(self.set_current_radius)
+
+        # Color picker
+        self.colorButton.color_changed.connect(self.set_current_color)
+
+        # Annotation tools
+        self.pencilButton.toggled.connect(lambda enabled: self.set_draw_enabled("pencil", enabled))
+        self.arrowButton.toggled.connect(lambda enabled: self.set_draw_enabled("arrow", enabled))
+        self.ellipseButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("ellipse", enabled)
+        )
+        self.rectangleButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("rectangle", enabled)
+        )
+        self.eraserButton.toggled.connect(lambda enabled: self.set_draw_enabled("eraser", enabled))
+        self.txtButton.toggled.connect(lambda enabled: self.set_draw_enabled("txt", enabled))
+        self.moveButton.toggled.connect(lambda enabled: self.set_draw_enabled("move", enabled))
+
+        # Undo action
+        self.undoButton.clicked.connect(self.undo_strokes)
+
+        # Clear action
+        self.clearButton.clicked.connect(self.clear_strokes)
+
+        # Watermark menu
+        self.watermarkMenuButton.menu.display_changed.connect(self.set_water_marks)
+
+        # Render current frame
+        self.renderButton.clicked.connect(self.render)
+
+        # Toggle recap panel
+        self.recapsButton.toggled.connect(self.set_recaps)
+
+    def update_watermarks(self, context, **kwargs):
+        """
+        Update watermark display configuration.
+
+        Refreshes watermark values displayed inside the watermark menu using the supplied context information.
+
+        Args:
+            context (dict):
+                Current media or project context.
+
+            **kwargs:
+                Additional watermark data.
+        """
+
+        # Update watermark menu contents
+        self.watermarkMenuButton.menu.update_watermarks(context, **kwargs)
+
+    def set_aovs(self, typed, aovs):
+        """
+        Populate available AOVs.
+
+        Enables the AOV selector when sequence media contains multiple AOV layers.
+
+        Args:
+            typed (str):
+                Media type.
+
+            aovs (list):
+                Available AOV names.
+        """
+
+        # Enable AOV selection for sequences
+        if typed == "sequence":
+            # Enable combobox
+            self.aovsCombobox.setEnabled(True)
+
+            # Remove previous AOV entries
+            self.aovsCombobox.clear()
+
+            # Add new AOV entries
+            self.aovsCombobox.addItems(aovs)
+        else:
+            # Remove all AOV entries
+            self.aovsCombobox.clear()
+
+            # Disable combobox
+            self.aovsCombobox.setEnabled(False)
+
+    def set_current_aov(self, aov):
+        """
+        Emit selected AOV.
+
+        Args:
+            aov (str):
+                Selected AOV name.
+        """
+
+        # Forward selected AOV
+        self.aov_changed.emit(aov)
+
+    def set_current_thicknes(self, value):
+        """
+        Emit drawing thickness value.
+
+        Args:
+            value (float):
+                Annotation thickness.
+        """
+
+        # Forward thickness value
+        self.thicknes_changed.emit(value)
+
+    def set_current_radius(self, value):
+        """
+        Emit eraser radius value.
+
+        Args:
+            value (float):
+                Eraser radius.
+        """
+
+        # Forward radius value
+        self.radius_changed.emit(value)
+
+    def set_current_color(self, value):
+        """
+        Emit selected annotation color.
+
+        Args:
+            value (tuple):
+                RGB color tuple.
+        """
+
+        # Forward selected color
+        self.color_changed.emit(value)
+
+    def set_draw_enabled(self, tool, enabled):
+        """
+        Activate drawing tool.
+
+        Ensures only one annotation tool remains active at a time and updates related UI controls.
+
+        Args:
+            tool (str):
+                Tool identifier.
+
+            enabled (bool):
+                Tool enabled state.
+        """
+
+        # List of available drawing tools
+        buttons = [
+            self.pencilButton,
+            self.arrowButton,
+            self.ellipseButton,
+            self.rectangleButton,
+            self.eraserButton,
+            self.txtButton,
+            self.moveButton,
+        ]
+
+        # Disable all other tools
+        for button in buttons:
+            if button.name == button:
+                continue
+            button.setChecked(False)
+
+        # Update current tool label
+        self.toolNameLabel.setValue(enabled, tool)
+
+        # Launch text annotation dialog
+        if tool == "txt" and enabled:
+            # Create dialog
+            txtInputDialog = TxtInputDialog(self.parentWidget())
+
+            # Receive text settings
+            txtInputDialog.value_changed.connect(self.txt_value_changed)
+
+            # Open dialog
+            txtInputDialog.exec()
+
+            # Reset text tool button
+            self.txtButton.setChecked(False)
+
+            return
+
+        # Switch to eraser controls
+        if tool == "eraser":
+            # Hide thickness control
+            self.thicknesSpinBox.setVisible(False)
+
+            # Show radius control
+            self.radiusSpinBox.setVisible(True)
+
+            # Update label
+            self.thicknesLabel.setValue("Radius")
+        else:
+            # Hide radius control
+            self.radiusSpinBox.setVisible(False)
+
+            # Show thickness control
+            self.thicknesSpinBox.setVisible(True)
+
+            # Update label
+            self.thicknesLabel.setValue("Thicknes")
+
+        # Notify viewer
+        self.draw_enabled.emit(tool, enabled, None)
+
+    def txt_value_changed(self, tool, enabled, font):
+        """
+        Forward text annotation settings.
+
+        Args:
+            tool (str):
+                Tool identifier.
+
+            enabled (bool):
+                Tool state.
+
+            font (dict):
+                Text formatting settings.
+        """
+
+        # Forward text settings
+        self.draw_enabled.emit(tool, enabled, font)
+
+    def undo_strokes(self):
+        """
+        Trigger undo operation.
+
+        Emits undo request signal.
+        """
+
+        # Emit undo signal
+        self.undo_stack.emit()
+
+    def clear_strokes(self):
+        """
+        Trigger clear operation.
+
+        Emits clear request signal.
+        """
+
+        # Emit clear signal
+        self.clear_stack.emit()
+
+    def set_water_marks(self, *args):
+        """
+        Forward watermark updates.
+
+        Args:
+            *args:
+                Watermark update parameters.
+        """
+
+        # Emit watermark update signal
+        self.water_marks.emit(*args)
+
+    def render(self):
+        """
+        Trigger frame render operation.
+
+        Emits render request signal.
+        """
+
+        # Emit render signal
+        self.trigger_render.emit()
+
+    def set_recaps(self, enabled):
+        """
+        Toggle recap panel visibility.
+
+        Args:
+            enabled (bool):
+                Recap panel state.
+        """
+
+        # Emit recap visibility state
+        self.trigger_recaps.emit(enabled)
+
+
+class TimelineToolbarLayout(HorizontalLayout):
+    """
+    Timeline playback toolbar layout.
+
+    Provides transport controls used for media playback, navigation, looping, and FPS management.
+
+    Responsibilities:
+        - Media open action
+        - Playback control
+        - Frame navigation
+        - Loop state management
+        - FPS selection
+        - Timeline signal routing
+
+    Features:
+        - Open media button
+        - Previous frame navigation
+        - Play / Pause control
+        - Next frame navigation
+        - Loop playback toggle
+        - FPS preset selector
+        - Timeline event forwarding
+
+    Components:
+        OpenButton:
+            Opens media files.
+
+        BackwordButton:
+            Moves to previous frame.
+
+        PlayPauseButton:
+            Controls playback state.
+
+        ForwardButton:
+            Moves to next frame.
+
+        LoopButton:
+            Enables continuous playback.
+
+        FbsCombobox:
+            Controls playback FPS.
+
+    Architecture:
+        Open Button
+            ↓
+        Timeline Event
+            ↓
+        Media Loader
+
+        Backword Button
+            ↓
+        Timeline Event
+            ↓
+        Previous Frame
+
+        Play / Pause Button
+            ↓
+        Timeline Event
+            ↓
+        Playback Controller
+
+        Forward Button
+            ↓
+        Timeline Event
+            ↓
+        Next Frame
+
+        Loop Button
+            ↓
+        Loop State
+            ↓
+        Playback Controller
+
+        FPS Combobox
+            ↓
+        FPS Context
+            ↓
+        Viewer Playback Rate
+
+    Signals:
+        fps_chanaged(dict):
+            Emitted when FPS preset changes.
+
+        trigger_timeline(str, bool):
+            Emitted for timeline actions.
+
+            Supported actions:
+
+                - open
+                - backword
+                - play_pause
+                - forward
+                - loop
+
+    Notes:
+        This layout contains no playback logic.
+        It only provides user controls and emits
+        timeline-related signals for the player.
+    """
+
+    # Signal emitted when fps value changes
+    fps_chanaged = QtCore.Signal(dict)
+
+    # Signal emitted when timeline tools clicked
+    trigger_timeline = QtCore.Signal(str, bool)
+
+    def __init__(self, parent, *args, **kwargs):
+        """
+        Initialize timeline toolbar layout.
+
+        Creates the toolbar container and builds all timeline playback controls.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            *args:
+                Additional positional arguments.
+
+            **kwargs:
+                Additional keyword arguments.
+        """
+
+        # Initialize base horizontal layout
+        super(TimelineToolbarLayout, self).__init__(parent, *args, **kwargs)
+
+        # Build interface
+        self.setupUi()
+
+    def setupUi(self):
+        """
+        Build timeline toolbar user interface.
+
+        Creates playback controls, FPS selector, spacers, and signal connections used by the timeline toolbar.
+        """
+
+        # Open media button
+        self.openButton = OpenButton(None, tooltip="Open Media (Ctrl+O)", width=32, height=32)
+        self.addWidget(self.openButton)
+
+        # Left spacer
+        self.horizontalspacer1 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer1)
+
+        # Previous frame button
+        self.backwordButton = BackwordButton(
+            None, tooltip="Backword Frame (<)", width=32, height=32
+        )
+        self.addWidget(self.backwordButton)
+
+        # Play / Pause button
+        self.playPauseButton = PlayPauseButton(None, tooltip="Play (space)", width=42, height=42)
+        self.addWidget(self.playPauseButton)
+
+        # Next frame button
+        self.forwardButton = ForwardButton(None, tooltip="Forward Frame (>)", width=32, height=32)
+        self.addWidget(self.forwardButton)
+
+        # Right spacer
+        self.horizontalspacer2 = HorizontalSpacer()
+        self.addItem(self.horizontalspacer2)
+
+        # Loop playback button
+        self.loopButton = LoopButton(
+            None, tooltip="Loop the timeline (Ctrl+L)", width=42, height=32
+        )
+        self.addWidget(self.loopButton)
+
+        # FPS selector combobox
+        self.fpsCombobox = FbsCombobox(None)
+
+        # Listen for FPS changes
+        self.fpsCombobox.fps_changed.connect(self.update_fps)
+        self.addWidget(self.fpsCombobox)
+
+        # Open media action
+        self.openButton.clicked.connect(self.open)
+
+        # Previous frame action
+        self.backwordButton.clicked.connect(self.backword)
+
+        # Play / Pause action
+        self.playPauseButton.clicked.connect(self.play_pause)
+
+        # Next frame action
+        self.forwardButton.clicked.connect(self.forward)
+
+        # Loop action
+        self.loopButton.toggled.connect(self.loop)
+
+    def open(self):
+        """
+        Trigger open media action.
+
+        Emits timeline open request.
+        """
+
+        # Notify timeline controller
+
+        self.trigger_timeline.emit("open", False)
+
+    def backword(self):
+        """
+        Trigger previous frame action.
+
+        Emits timeline backword request.
+        """
+
+        # Notify timeline controller
+
+        self.trigger_timeline.emit("backword", False)
+
+    def play_pause(self):
+        """
+        Trigger play / pause action.
+
+        Emits playback toggle request.
+        """
+
+        # Notify timeline controller
+
+        self.trigger_timeline.emit("play_pause", False)
+
+    def forward(self):
+        """
+        Trigger next frame action.
+
+        Emits timeline forward request.
+        """
+
+        # Notify timeline controller
+
+        self.trigger_timeline.emit("forward", False)
+
+    def loop(self, enabled):
+        """
+        Toggle playback looping.
+
+        Args:
+            enabled (bool):
+                Loop playback state.
+        """
+
+        # Notify timeline controller
+
+        self.trigger_timeline.emit("loop", enabled)
+
+    def reset_fps(self, typed, fps):
+        """
+        Reset FPS combobox selection.
+
+        Updates the FPS selector to match the playback FPS of the currently loaded video media.
+
+        Args:
+            typed (str):
+                Media type.
+
+            fps (float):
+                Playback FPS value.
+        """
+
+        # Only applies to video media
+        if typed != "video":
+            return
+
+        # Find matching FPS preset
+        context = self.fpsCombobox.findByKey(fps, "value")
+
+        # Ignore unsupported FPS values
+        if not context:
+            return
+
+        # Update selected FPS preset
+        self.fpsCombobox.setValue(context)
+
+    def update_fps(self, value):
+        """
+        Forward FPS selection changes.
+
+        Args:
+            value (dict):
+                Selected FPS context.
+        """
+
+        # Emit FPS update signal
+        self.fps_chanaged.emit(value)
 
 
 class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
@@ -98,6 +1103,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         - Opacity control
     """
 
+    render_finished = QtCore.Signal(str)
+
     def __init__(self, parent=None):
         """
         Initialize viewer widget.
@@ -123,22 +1130,25 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.current_frame = None
 
         # Source image dimensions
-        self.image_height = None
         self.image_width = None
+        self.image_height = None
 
-        # Overlay storage
-        self.overlay_options = {
-            "top_left": dict(),
-            "top_right": dict(),
-            "top_center": dict(),
-            "center": dict(),
-            "bottom_left": dict(),
-            "bottom_right": dict(),
-            "bottom_center": dict(),
-        }
+        self.set_samples(value=constants.VIEWER_SAMPLES_RATE)
 
-        # Cached overlay pixmaps
-        self.overlay_pixmaps = dict()
+        self.annotations = Sketch()
+
+    def set_samples(self, value=8):
+        """
+        0 : Disabled
+        2: Low quality
+        4: Good
+        8: Very good (recommended)
+        16: Highest (hardware dependent)
+        """
+
+        surfaceFormat = QtGui.QSurfaceFormat()
+        surfaceFormat.setSamples(8)
+        self.setFormat(surfaceFormat)
 
     def set_frame(self, frame):
         """
@@ -150,6 +1160,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = frame
+
+        #  print("\nself.frame =", self.frame)
 
         # Refresh OpenGL widget
         self.update()
@@ -164,6 +1176,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.current_frame = frame
+        self.annotations.set_frame(frame)
 
     def initializeGL(self):
         """
@@ -197,6 +1210,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = None
+
+        # Clear annotations
+        self.annotations.clear_all()
 
         # Refresh widget
         self.update()
@@ -289,52 +1305,6 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # Draw overlays
         self.draw_overlay()
 
-    def set_overlay_options(self, watermarks):
-        """
-        Set all overlay options.
-
-        Args:
-            watermarks (dict):
-                Watermark configuration dictionary.
-        """
-
-        for position, values in watermarks.items():
-            for context in values:
-                self.set_overlay_option(context["checked"], context["code"], position, context)
-
-    def set_overlay_option(self, checked, key, position, context):
-        """
-        Update a single overlay option.
-
-        Args:
-            checked (bool):
-                Overlay enabled state.
-
-            key (str):
-                Overlay identifier.
-
-            position (str):
-                Overlay screen position.
-
-            context (dict):
-                Overlay settings.
-        """
-
-        # Create position group if missing
-        if position not in self.overlay_options:
-            self.overlay_options[position] = dict()
-
-        # Create overlay entry if missing
-        if key not in self.overlay_options[position]:
-            self.overlay_options[position][key] = dict()
-
-        # Store overlay configuration
-        self.overlay_options[position][key] = context
-        self.overlay_options[position][key]["checked"] = checked
-
-        # Refresh widget
-        self.update()
-
     def draw_overlay(self):
         """
         Draw all overlays.
@@ -357,208 +1327,190 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         rect = self.display_rect
 
         # Draw overlays by position
-        for position in self.overlay_options:
-            self.draw_overlay_position(painter, rect, position)
+        # for position in self.overlay_options:
+        #     self.draw_overlay_position(painter, rect, position)
+
+        # Draw pencil annotations
+        self.annotations.draw(
+            painter, point_converter=self.image_to_widget_point, rect=self.display_rect
+        )
 
         painter.end()
 
-    def draw_overlay_position(self, painter, rect, position):
+    def set_overlay_options(self, watermarks):
+        self.annotations.set_overlays(watermarks)
+        self.update()
+
+    def set_overlay_option(self, checked, key, position, context):
+        self.annotations.set_overlay(checked, key, position, context)
+        self.update()
+
+    def set_sketch_enabled(self, tool, enabled, font):
         """
-        Draw overlays for a specific position group.
+        Enable or disable pencil tool.
 
         Args:
-            painter (QtGui.QPainter):
-                Painter object.
-
-            rect (QtCore.QRect):
-                Display rectangle.
-
-            position (str):
-                Overlay position.
+            enabled (bool): Pencil tool state.
         """
 
-        overlays = self.overlay_options.get(position, dict())
-        if not overlays:
+        if not self.current_frame:
             return
 
-        metrics = QtGui.QFontMetrics(painter.font())
-        margin, spacing = 20, 20
+        self.annotations.set_tool(tool)
+        self.annotations.set_enabled(enabled)
 
-        # Resolve overlay anchor position
-        if position == "top_left":
-            x = rect.left() + margin
-            y = rect.top() + margin  # 40
-            align = "left"
-        elif position == "top_center":
-            x = rect.center().x()
-            y = rect.top() + margin  # 40
-            align = "center"
-        elif position == "top_right":
-            x = rect.right() - margin
-            y = rect.top() + margin  # 40
-            align = "right"
-        elif position == "bottom_left":
-            x = rect.left() + margin
-            y = rect.bottom() - margin  # 40
-            align = "left"
-        elif position == "bottom_center":
-            x = rect.center().x()
-            y = rect.bottom() - metrics.descent() - 10
-            align = "center"
-        elif position == "bottom_right":
-            x = rect.right() - margin
-            y = rect.bottom() - margin  # 40
-            align = "right"
-        elif position == "center":
-            x = rect.center().x()
-            y = rect.center().y()
-            align = "center"
-        else:
+        self.annotations.set_image_size(self.image_width, self.image_height)
+        self.annotations.set_eraser_radius(10)
+
+        self.annotations.set_txt_font(font)
+
+    def mousePressEvent(self, event):
+        if not self.annotations.enabled:
             return
 
-        # Bottom positions render upward
-        reverse_vertical = position in ["bottom_left", "bottom_center", "bottom_right"]
+        point = self.widget_to_image_point(event.position().toPoint())
 
-        # Draw overlays
-        for key, context in overlays.items():
-            if not context.get("checked"):
-                continue
+        self.annotations.mousePressEvent(point)
 
-            typed = context.get("type", "text")
+        self.update()
 
-            # Draw image overlay
-            if typed == "image":
-                pixmap = context["value"]
-                scaled = pixmap.scaledToHeight(50, QtCore.Qt.SmoothTransformation)
-                draw_x = x
+    def mouseMoveEvent(self, event):
+        if not self.annotations.enabled:
+            return
 
-                # Horizontal alignment
-                if align == "center":
-                    draw_x -= scaled.width() / 2
-                elif align == "right":
-                    draw_x -= scaled.width()
+        if not (event.buttons() & QtCore.Qt.LeftButton):
+            return
 
-                # Vertical direction (TOP / BOTTOM DIRECTION)
-                if reverse_vertical:
-                    draw_y = y - scaled.height()
-                else:
-                    draw_y = y
+        point = self.widget_to_image_point(event.position().toPoint())
 
-                # Set overlay opacity
-                opacity = context.get("opacity", 1.0)
-                painter.setOpacity(opacity)
+        self.annotations.mouseMoveEvent(point)
 
-                # Draw image
-                path = painter.drawPixmap(int(draw_x), int(draw_y), scaled)
+        self.update()
 
-                # Reset Opacity
-                painter.setOpacity(1.0)
+    def mouseReleaseEvent(self, event):
 
-                # Vertical spacing offset
-                offset = scaled.height() + 10
+        if not self.annotations.enabled:
+            return
 
-                if reverse_vertical:
-                    y -= offset
-                else:
-                    y += offset
+        point = self.widget_to_image_point(event.position().toPoint())
 
-            # Draw text overlay
-            else:
-                # Dynamic overlay text
-                if key == "frame":
-                    text = f"Frame: {str(self.current_frame).zfill(constants.FRAME_PADDING)}"
+        self.annotations.mouseReleaseEvent(point)
 
-                elif key == "resolution":
-                    text = f"{self.image_width} x {self.image_height}"
-                else:
-                    text = (
-                        f"{context['label']}: {context['value']}"
-                        if context.get("label")
-                        else context["value"]
-                    )
+        self.update()
 
-                # Create font
-                font = Font(None, **context["font"])
-
-                # Calculate text bounds
-                path = QtGui.QPainterPath()
-                path.addText(0, 0, font, text)
-
-                bounds = path.boundingRect()
-                text_width = bounds.width()
-
-                draw_x = x
-
-                # Horizontal alignment
-                if align == "center":
-                    draw_x -= text_width / 2
-                elif align == "right":
-                    draw_x -= text_width
-
-                # Draw text
-                self.draw_overlay_text(painter, draw_x, y, text, context["font"])
-
-                # Vertical spacing
-                offset = spacing + context["font"].get("spacing", 0)
-
-                if reverse_vertical:
-                    y -= offset
-                else:
-                    y += offset
-
-    def draw_overlay_text(self, painter, x, y, text, font_data):
+    def widget_to_image_point(self, point):
         """
-        Draw overlay text.
+        Convert widget position to normalized image space.
+        """
 
-        Args:
-            painter (QtGui.QPainter):
-                Painter object.
+        rect = self.display_rect
 
-            x (float):
-                Draw X position.
+        x = (point.x() - rect.left()) / float(rect.width())
+        y = (point.y() - rect.top()) / float(rect.height())
 
-            y (float):
-                Draw Y position.
+        x = max(0.0, min(1.0, x))
+        y = max(0.0, min(1.0, y))
 
-            text (str):
-                Overlay text.
+        return (x, y)
 
-            font_data (dict):
-                Font configuration.
+    def image_to_widget_point(self, point):
+        """
+        Convert normalized image space to widget coordinates.
+        """
+
+        rect = self.display_rect
+
+        x = rect.left() + (point[0] * rect.width())
+        y = rect.top() + (point[1] * rect.height())
+
+        return QtCore.QPointF(x, y)
+
+    def undo_strokes(self):
+        """
+        Undo current frame annotation.
+        """
+
+        self.annotations.undo()
+
+        self.update()
+
+    def clear_strokes(self):
+        """
+        clear current frame annotation.
+        """
+
+        self.annotations.clear_all()
+
+        self.update()
+
+    def render_current_frame(self):
+        """
+        Render source frame with annotations.
 
         Returns:
-            QtGui.QPainterPath:
-                Generated text path.
+            QImage
         """
 
-        # Configure font
-        font = Font(None, **font_data)
-        painter.setFont(font)
+        if self.frame is None:
+            return None
 
-        # Text colors
-        fill_color = QtGui.QColor(*font_data.get("fillColor", (255, 255, 255)))
-        stroke_color = QtGui.QColor(*font_data.get("strokeColor", (0, 0, 0)))
+        frame = self.frame.copy()
 
-        stroke_width = font_data.get("stroke", 2)
+        height, width, channels = frame.shape
+        frame = numpy.ascontiguousarray(frame)
 
-        # Build text path
-        path = QtGui.QPainterPath()
-        path.addText(x, y, font, text)
+        if channels == 4:
+            image = QtGui.QImage(
+                frame.data, width, height, width * 4, QtGui.QImage.Format_RGBA8888
+            ).copy()
+        else:
+            image = QtGui.QImage(
+                frame.data,
+                width,
+                height,
+                width * 3,
+                QtGui.QImage.Format_RGB888,
+            ).copy()
 
-        # Draw text stroke
-        if stroke_width > 0:
-            pen = QtGui.QPen(stroke_color)
-            pen.setWidth(stroke_width)
-            painter.strokePath(path, pen)
+        painter = QtGui.QPainter(image)
 
-        # Set text opacity
-        opacity = font_data.get("opacity", 1.0)
-        painter.setOpacity(opacity)
+        self.annotations.set_frame(self.current_frame)
 
-        # Draw text fill
-        painter.fillPath(path, fill_color)
+        image_rect = QtCore.QRect(
+            0,
+            0,
+            width,
+            height,
+        )
 
-        return path
+        self.annotations.draw(
+            painter,
+            point_converter=lambda point: QtCore.QPointF(
+                point[0] * width,
+                point[1] * height,
+            ),
+            rect=image_rect,
+        )
+
+        painter.end()
+
+        return image
+
+    def save_frame(self, filepath, post_process=False):
+        image = self.render_current_frame()
+
+        if image:
+            utils.makedirs(filepath)
+            image.save(filepath)
+            LOGGER.info(f"Succeed, render to {filepath}")
+
+            if post_process:
+                self.render_finished.emit(filepath)
+        else:
+            LOGGER.error(f"Failure render to {filepath}")
+
+            if post_process:
+                self.render_finished.emit(None)
 
 
 if __name__ == "__main__":

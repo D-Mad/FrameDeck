@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt custom timeline widget module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module contains the custom timeline widget used by the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/timeline.py
+
+Description:
+    This module contains the custom timeline widget used by the Review Player application.
 
 The timeline widget is responsible for:
 
@@ -43,6 +47,8 @@ import constants
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
+
+from widgets.styles import StrokePen
 
 
 class TimelineWidget(QtWidgets.QWidget):
@@ -88,9 +94,9 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # Timeline settings
         self.timeline_margin = 50
-        self.start_frame = constants.START_FRAME
-        self.end_frame = constants.START_FRAME + constants.DEFAULT_FRAMES
-        self.current_frame = constants.START_FRAME
+        self.start_frame = constants.RP_START_FRAME
+        self.end_frame = constants.RP_START_FRAME + constants.RP_DEFAULT_FRAMES
+        self.current_frame = constants.RP_START_FRAME
 
         # Cached frame storage
         self.cached_frames = set()
@@ -162,7 +168,7 @@ class TimelineWidget(QtWidgets.QWidget):
         # Calculate total frame count
         total_frames = self.end_frame - self.start_frame + 1
 
-        if total_frames <= 0:
+        if total_frames <= 1:
             return
 
         # Compute timeline scaling
@@ -192,7 +198,9 @@ class TimelineWidget(QtWidgets.QWidget):
         )
 
         # Draw playhead line
-        painter.setPen(QtGui.QPen(QtGui.QColor(255, 80, 80), 2))
+        pen = StrokePen((255, 80, 80), thickness=2)
+        painter.setPen(pen)
+
         painter.drawLine(current_x, 0, current_x, height)
 
         # Current frame label

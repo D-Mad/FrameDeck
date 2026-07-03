@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QLayout wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt layout wrapper classes used throughout the Review Player UI.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/layouts.py
+
+Description:
+    This module provides reusable Qt layout wrapper classes used throughout the Review Player UI.
 
 Responsibilities:
     - Simplify layout creation
@@ -13,6 +17,8 @@ Responsibilities:
     - Provide layout utility helpers
     - Provide reusable spacer widgets
     - Provide splitter wrappers
+    - Support recursive layout traversal.
+    - Support dynamic layout cleanup.
 
 Features:
     - Vertical layouts
@@ -23,6 +29,9 @@ Features:
     - Spacer items
     - Margin customization
     - Spacing customization
+    - Grid layouts.
+    - Recursive child lookup.
+    - Horizontal separator frames.
 
 Architecture:
     Widgets
@@ -34,18 +43,106 @@ Architecture:
     Window/UI Composition
 
 Notes:
-    This module is used by:
-        - Main window layouts
-        - Viewer layouts
-        - Playlist layouts
-        - Toolbar layouts
-        - Settings dialogs
+    - All layouts provide consistent spacing and configuration.
+    - Layout cleanup is performed using deleteLater().
+    - Recursive traversal supports nested layouts.
 """
 
 from __future__ import absolute_import
 
 from PySide6 import QtCore
 from PySide6 import QtWidgets
+
+
+class GridLayout(QtWidgets.QGridLayout):
+    """
+    Custom grid layout.
+
+    Provides a QGridLayout with configurable spacing, margins, recursive child lookup, and layout cleanup utilities.
+    """
+
+    def __init__(self, parent, *args, **kwargs):
+        """
+        Initialize grid layout.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            *args:
+                Additional positional arguments.
+
+            **kwargs:
+                space (list[int], optional):
+                    Horizontal and vertical spacing.
+
+                margins (tuple[int, int, int, int], optional):
+                    Layout margins in the form
+                    (left, top, right, bottom).
+        """
+
+        # Initialize QGridLayout
+        super(GridLayout, self).__init__(parent)
+
+        # Layout spacing
+        self.space = kwargs.get("space", [10, 10])
+
+        # Layout margins
+        self.margins = kwargs.get("margins", (10, 10, 10, 10))
+
+        # Apply horizontal spacing
+        self.setHorizontalSpacing(self.space[0])
+
+        # Apply vertical spacing
+        self.setVerticalSpacing(self.space[1])
+
+        # Apply margins
+        self.setContentsMargins(*self.margins)
+
+    def getChildren(self):
+        """
+        Return all child widgets and layouts.
+
+        Recursively traverses nested layouts and returns every widget and layout found.
+
+        Returns:
+            list:
+                Collection of widgets and layouts.
+        """
+
+        # Start traversal from current layout
+        stack = [self]
+
+        # Collected children
+        children = list()
+
+        while stack:
+            # Get next layout
+            layout = stack.pop()
+
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+
+                # Collect widget
+                if item.widget():
+                    children.append(item.widget())
+
+                # Collect nested layout
+                if item.layout():
+                    children.append(item.layout())
+                    stack.append(item.layout())
+
+        return children
+
+    def clear(self):
+        """
+        Remove all widgets and layouts.
+
+        Deletes all child widgets and nested layouts contained within the layout hierarchy.
+        """
+
+        for child in self.getChildren():
+            child.deleteLater()
 
 
 class VerticalLayout(QtWidgets.QVBoxLayout):
@@ -102,6 +199,29 @@ class VerticalLayout(QtWidgets.QVBoxLayout):
         self.setSpacing(self.space)
         self.setContentsMargins(*self.margins)
 
+    def getChildren(self):
+        stack = [self]
+        children = list()
+
+        while stack:
+            layout = stack.pop()
+
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+
+                if item.widget():
+                    children.append(item.widget())
+
+                if item.layout():
+                    children.append(item.layout())
+                    stack.append(item.layout())
+
+        return children
+
+    def clear(self):
+        for child in self.getChildren():
+            child.deleteLater()
+
 
 class HorizontalLayout(QtWidgets.QHBoxLayout):
     """Custom horizontal layout wrapper.
@@ -156,6 +276,21 @@ class HorizontalLayout(QtWidgets.QHBoxLayout):
         self.setSpacing(self.space)
         self.setContentsMargins(*self.margins)
 
+    def getChildren(self):
+        children = list()
+
+        for index in range(self.count()):
+            widget = self.itemAt(index).widget()
+            if not widget:
+                continue
+            children.append(widget)
+
+        return children
+
+    def clear(self):
+        for child in self.getChildren():
+            child.deleteLater()
+
 
 class HorizontalSplitter(QtWidgets.QSplitter):
     """Horizontal splitter widget.
@@ -191,6 +326,41 @@ class HorizontalSplitter(QtWidgets.QSplitter):
 
         # Set Horizontal Orientation
         self.setOrientation(QtCore.Qt.Horizontal)
+
+
+class VerticalSplitter(QtWidgets.QSplitter):
+    """Vertical splitter widget.
+
+    This wrapper provides a reusable Vertical Qt splitter used throughout the UI.
+
+    Features:
+        - Vertical orientation
+        - Resizable panels
+        - Dynamic UI layouts
+
+    Args:
+        parent (QWidget):
+            Parent widget.
+
+    Example:
+        >>> splitter = VerticalSplitter(self)
+    """
+
+    def __init__(self, parent, **kwargs):
+        """Initialize vertical splitter.
+
+        Args:
+            parent (QWidget):
+                Parent widget.
+
+            **kwargs:
+                Reserved for future extension.
+        """
+
+        # Initialize QSplitter
+        super(VerticalSplitter, self).__init__(parent)
+
+        self.setOrientation(QtCore.Qt.Vertical)
 
 
 class HorizontalSpacer(QtWidgets.QSpacerItem):
@@ -237,6 +407,46 @@ class VerticalSpacer(QtWidgets.QSpacerItem):
         super(VerticalSpacer, self).__init__(
             20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
+
+
+class HorizontalLineFrame(QtWidgets.QFrame):
+    """
+    Horizontal separator line.
+
+    Provides a reusable horizontal divider used to visually separate interface sections.
+    """
+
+    def __init__(self, parent, *args, **kwargs):
+        """
+        Initialize horizontal separator.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+
+            *args:
+                Additional positional arguments.
+
+            **kwargs:
+                Additional optional arguments.
+        """
+
+        # Initialize QFrame
+        super(HorizontalLineFrame, self).__init__(parent)
+
+        # Border line width
+        self.setLineWidth(1)
+
+        # Mid line width
+        self.setMidLineWidth(0)
+
+        # Horizontal frame shape
+        self.setFrameShape(QtWidgets.QFrame.HLine)
+
+        # Sunken appearance
+        self.setFrameShadow(QtWidgets.QFrame.Sunken)
+
+        # Alternative style = QtWidgets.QFrame.Plain
 
 
 if __name__ == "__main__":

@@ -1,10 +1,14 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player Qt QComboBox wrapper module.
-WARNING! All changes made in this file will be lost when recompiling source file!
 
-This module provides reusable Qt combobox widgets used throughout the Review Player application.
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./widgets/comboboxs.py
+
+Description:
+    This module provides reusable Qt combobox widgets used throughout the Review Player application.
 
 Responsibilities:
     - Context-based combobox handling
@@ -48,6 +52,7 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.styles import Font
+from widgets.styles import WaitCursor
 
 
 class ContextCombobox(QtWidgets.QComboBox):
@@ -189,6 +194,13 @@ class ContextCombobox(QtWidgets.QComboBox):
 
         # Store active context
         self.context = self.contextList[index]
+
+    def findByKey(self, value, key=None):
+        key = key or self.key
+
+        result = next(filter(lambda x: x[key] == value, self.contextList), None)
+
+        return result
 
 
 class FbsCombobox(ContextCombobox):
@@ -353,6 +365,45 @@ class ProjectCombobox(ContextCombobox):
 
         # Emit project context
         self.project_changed.emit(self.context)
+
+    def setProjects(self, contextList=None):
+        """
+        Collect and set the project block area
+        """
+        if contextList:
+            result = contextList
+        else:
+            with WaitCursor():
+                from scripts import Projects
+
+                result = Projects.get()
+
+        self.setItems(contextList=result)
+
+
+class ReviewTypeCombobox(ContextCombobox):
+
+    def __init__(self, parent, **kwargs):
+        kwargs["contextList"] = constants.REVIEW_TYPES
+        kwargs["key"] = "value"
+
+        super(ReviewTypeCombobox, self).__init__(parent, **kwargs)
+
+
+class StatusTypeCombobox(ContextCombobox):
+
+    def __init__(self, parent, **kwargs):
+        kwargs["contextList"] = constants.STATUS_LIST
+
+        super(StatusTypeCombobox, self).__init__(parent, **kwargs)
+
+        self.defatlt = next(filter(lambda x: x[self.key] == "Viewed", self.contextList), dict())
+        self.setValue(self.defatlt)
+
+    def value(self, key=None):
+        key = key or self.key
+
+        return self.context.get(key)
 
 
 if __name__ == "__main__":

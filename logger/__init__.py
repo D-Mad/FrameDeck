@@ -1,8 +1,13 @@
 """
 Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-Author: Subin. Gopi (subing85@gmail.com).
-Description: Review Player logging utility module. Centralized logging configuration for the Review Player framework.
-WARNING! All changes made in this file will be lost when recompiling source file!
+
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./logger/__init__.py
+
+Description:
 
 The logger system is designed to:
     - Standardize logging output
