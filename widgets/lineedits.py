@@ -189,5 +189,26 @@ class FontSizeSpinBox(QtWidgets.QSpinBox):
         self.setValue(value)
 
 
+class InputLineEdit(QtWidgets.QLineEdit):
+
+    def __init__(self, parent, **kwargs):
+        super(InputLineEdit, self).__init__(parent)
+
+        if kwargs.get("readonly"):
+            self.setReadOnly(True)
+
+    def setValue(self, value, **kwargs):
+        if value is None:
+            self.clear()
+            return
+
+        value = value if isinstance(value, str) else str(value)
+        self.setText(value)
+
+    def getValue(self):
+        value = self.text().strip()
+        return value or None
+
+
 if __name__ == "__main__":
     pass

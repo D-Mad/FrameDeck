@@ -148,6 +148,7 @@ from widgets.buttons import OpenButton
 from widgets.buttons import LoopButton
 from widgets.buttons import MoveButton
 from widgets.buttons import UndoButton
+from widgets.buttons import OcioButton
 from widgets.buttons import ColorButton
 from widgets.buttons import ClearButton
 from widgets.buttons import ArrowButton
@@ -213,7 +214,7 @@ class ViewFrame(QtWidgets.QFrame):
         # Viewer Toolbar
         # --------------------------------------------------
         # Annotation and viewer controls
-        self.viewToolbarLayout = ViewToolbarLayout(None)
+        self.viewToolbarLayout = ViewToolbarLayout(None, space=10, margins=(5, 5, 5, 5))
         self.verticallayout.addLayout(self.viewToolbarLayout)
 
         # --------------------------------------------------
@@ -233,7 +234,7 @@ class ViewFrame(QtWidgets.QFrame):
         # Playback Toolbar
         # --------------------------------------------------
         # Playback control toolbar
-        self.timelineToolbarLayout = TimelineToolbarLayout(None)
+        self.timelineToolbarLayout = TimelineToolbarLayout(None, space=10, margins=(5, 5, 5, 5))
         self.verticallayout.addLayout(self.timelineToolbarLayout)
 
 
@@ -307,6 +308,9 @@ class ViewToolbarLayout(HorizontalLayout):
         ViewerWidget / ViewFrame
     """
 
+    # Signal emitted when click ocio button
+    ocio_trigger = QtCore.Signal(bool)
+
     # Signal emitted when current AOV changes
     aov_changed = QtCore.Signal(str)
 
@@ -357,6 +361,12 @@ class ViewToolbarLayout(HorizontalLayout):
         Build viewer toolbar user interface.
 
         """
+
+        # --------------------------------------------------
+        # OCIO Selection
+        # --------------------------------------------------
+        self.ocioButton = OcioButton(None)
+        self.addWidget(self.ocioButton)
 
         # --------------------------------------------------
         # AOV Selection
@@ -509,6 +519,9 @@ class ViewToolbarLayout(HorizontalLayout):
         # Signal Connections
         # --------------------------------------------------
 
+        #
+        self.ocioButton.clicked.connect(self.call_ocio)
+
         # AOV selection
         self.aovsCombobox.currentTextChanged.connect(self.set_current_aov)
 
@@ -565,6 +578,9 @@ class ViewToolbarLayout(HorizontalLayout):
 
         # Update watermark menu contents
         self.watermarkMenuButton.menu.update_watermarks(context, **kwargs)
+
+    def call_ocio(self):
+        self.ocio_trigger.emit(True)
 
     def set_aovs(self, typed, aovs):
         """
@@ -928,7 +944,7 @@ class TimelineToolbarLayout(HorizontalLayout):
         """
 
         # Open media button
-        self.openButton = OpenButton(None, tooltip="Open Media (Ctrl+O)", width=32, height=32)
+        self.openButton = OpenButton(None, tooltip="Open Media (Ctrl+O)", width=22, height=22)
         self.addWidget(self.openButton)
 
         # Left spacer
@@ -937,16 +953,16 @@ class TimelineToolbarLayout(HorizontalLayout):
 
         # Previous frame button
         self.backwordButton = BackwordButton(
-            None, tooltip="Backword Frame (<)", width=32, height=32
+            None, tooltip="Backword Frame (<)", width=22, height=22
         )
         self.addWidget(self.backwordButton)
 
         # Play / Pause button
-        self.playPauseButton = PlayPauseButton(None, tooltip="Play (space)", width=42, height=42)
+        self.playPauseButton = PlayPauseButton(None, tooltip="Play (space)", width=32, height=32)
         self.addWidget(self.playPauseButton)
 
         # Next frame button
-        self.forwardButton = ForwardButton(None, tooltip="Forward Frame (>)", width=32, height=32)
+        self.forwardButton = ForwardButton(None, tooltip="Forward Frame (>)", width=22, height=22)
         self.addWidget(self.forwardButton)
 
         # Right spacer
@@ -1147,7 +1163,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         surfaceFormat = QtGui.QSurfaceFormat()
-        surfaceFormat.setSamples(8)
+        surfaceFormat.setSamples(value)
         self.setFormat(surfaceFormat)
 
     def set_frame(self, frame):

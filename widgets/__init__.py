@@ -35,10 +35,12 @@ from PySide6 import QtWidgets
 
 from ocio import OCIOProcessor
 
+from widgets.ocio import OcioWidget
 from widgets.viewer import ViewFrame
 from widgets.pixmaps import PathPixmap
 from widgets.buttons import HelpButton
 from widgets.dialogs import FileDialog
+from widgets.buttons import ThemeButton
 from playback.player import MediaPlayer
 from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
@@ -97,6 +99,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Currently selected project
         self.current_project = None
 
+        self.current_theme = constants.DEFAULT_THEME
+
+        self.ocio_widget = OcioWidget(None)
+
         # Build UI
         self.setupUi()
 
@@ -137,6 +143,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.horizontallayout_footer = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
         self.verticallayout.addLayout(self.horizontallayout_footer)
 
+        self.themeButton = ThemeButton(self)
+        self.horizontallayout_footer.addWidget(self.themeButton)
+
         self.copyrightLabel = CopyrightLabel(self)
         self.horizontallayout_footer.addWidget(self.copyrightLabel)
 
@@ -169,6 +178,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # --------------------------------------------------------------------
         # Viewer Toolbar Layout Signal Connections
         # --------------------------------------------------------------------
+
+        self.viewframe.viewToolbarLayout.ocio_trigger.connect(self.call_ocio)
+        self.ocio_widget.ocio_changed.connect(self.player.set_ocio)
+
+        ########################################################################
+
+
         self.viewframe.viewToolbarLayout.aov_changed.connect(self.player.set_aov)
 
         self.viewframe.viewToolbarLayout.thicknes_changed.connect(
@@ -208,7 +224,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe.timelineToolbarLayout.trigger_timeline.connect(self.trigger_timeline)
         self.viewframe.timelineToolbarLayout.fps_chanaged.connect(self.update_fps)
 
+        self.themeButton.clicked.connect(self.change_theme)
         self.helpButton.clicked.connect(self.help)
+
 
         # Keyboard Shortcuts
         # Play / Pause
@@ -240,7 +258,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.showMaximized()
 
         # Apply stylesheet theme
-        SetStylesheet(self, theme=constants.DEFAULT_THEME)
+        SetStylesheet(self, theme=self.current_theme)
 
         # Initial splitter sizes
         self.splitter.setSizes([446, 1040, 386])
@@ -335,6 +353,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe.timeline.set_range(
             constants.RP_START_FRAME, constants.RP_START_FRAME + (self.player.frame_count - 1)
         )
+    
+    def call_ocio(self, *args):
+        SetStylesheet(self.ocio_widget, theme=self.current_theme)
+        self.ocio_widget.show()
 
     def reset_video_fps(self):
         """
@@ -415,7 +437,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Toggle playback loop state.
         """
-
         self.player.set_loop(enabled)
 
     def set_draw_enabled(self, tool, enabled, font):
@@ -465,13 +486,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Update player FPS
         self.player.set_fps(fps)
+    
+    def change_theme(self):
+        index = (constants.GUI_THEMES.index(self.current_theme) + 1) % len(constants.GUI_THEMES)
+        self.current_theme = constants.GUI_THEMES[index]
+
+        # Apply stylesheet theme
+        SetStylesheet(self, theme=self.current_theme)
 
     def help(self):
         """
         Open support or documentation URL.
         """
 
-        print(self.splitter.sizes())
         LOGGER.info(f"Support, {constants.WEBLINK}")
 
         # Open help URL in browser

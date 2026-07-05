@@ -187,22 +187,6 @@ class MediaPlayer(QtCore.QObject):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.next_frame)
 
-    def _set_playbutton(self, playbutton):
-        """Set playback button widget.
-
-        Stores the playback button reference so playback
-        state can update the UI button state.
-
-        Args:
-            playbutton:
-                Playback UI button widget.
-
-        Example:
-            >>> player.set_playbutton(play_button)
-        """
-
-        self.playbutton = playbutton
-
     def load(self, path):
         """Load media into the player.
 
@@ -246,6 +230,7 @@ class MediaPlayer(QtCore.QObject):
         self.start_frame = constants.RP_START_FRAME
         self.current_frame = self.start_frame
         self.end_frame = constants.RP_START_FRAME + (self.frame_count)  # - 1
+        self.current_aov = "rgb"
 
         # Reset Cache
         self.cache.clear()
@@ -279,46 +264,6 @@ class MediaPlayer(QtCore.QObject):
             else:  # Stop Playback
                 self.current_frame = self.end_frame
                 self.stop()
-
-    def update_frame(self):
-        """Load and display current frame.
-
-        Frame update flow:
-            1. Check frame cache
-            2. Read frame if needed
-            3. Cache frame
-            4. Emit playback signals
-
-        Emits:
-            frame_ready:
-                Current image buffer.
-
-            frame_changed:
-                Current frame number.
-
-            cache_changed:
-                Cached frame list.
-
-        Notes:
-            Cached frames avoid repeated disk reads.
-        """
-
-        # Read From Cache
-        if self.cache.cache and self.current_frame in self.cache.cache:
-            frame = self.cache.cache[self.current_frame]
-        else:  # Read From Media Reader
-            frame = self.reader.get_frame(self.current_frame, aov=self.current_aov)
-
-        # Store Frame Into Cache
-        self.cache.add(self.current_frame, frame)
-        self.cache_changed.emit(self.cache.cached_frames())
-
-        # Emit Viewer Signals
-        self.frame_ready.emit(frame)
-        self.frame_changed.emit(self.current_frame)
-
-        # Store Displayed Frame
-        self.displayed_frame = self.current_frame
 
     def toggle_play_pause(self):
         """Toggle playback state.
@@ -467,7 +412,6 @@ class MediaPlayer(QtCore.QObject):
             >>> player.set_aov("rgba")
             >>> player.set_aov("depth")
         """
-
         # Validate AOV
         if not aov:
             return
@@ -577,6 +521,10 @@ class MediaPlayer(QtCore.QObject):
             ... )
         """
 
+        # Reset Frame Cache
+        self.cache.clear()
+        self.cache_changed.emit([])
+
         # Store OCIO Processor
         self.ocio_processor = processor
 
@@ -589,8 +537,57 @@ class MediaPlayer(QtCore.QObject):
         # Store OCIO View
         self.view = view
 
+        self.ocio_processor.set_display_transform(input_space, display, view)
+
         # Refresh Current Frame
         self.update_frame()
+
+    def update_frame(self):
+        """Load and display current frame.
+
+        Frame update flow:
+            1. Check frame cache
+            2. Read frame if needed
+            3. Cache frame
+            4. Emit playback signals
+
+        Emits:
+            frame_ready:
+                Current image buffer.
+
+            frame_changed:
+                Current frame number.
+
+            cache_changed:
+                Cached frame list.
+
+        Notes:
+            Cached frames avoid repeated disk reads.
+        """
+        # Validate Reader
+        if not self.reader:
+            return
+
+        # Read From Cache
+        if self.cache.cache and self.current_frame in self.cache.cache:
+            frame = self.cache.cache[self.current_frame]
+        else:  # Read From Media Reader
+            frame = self.reader.get_frame(
+                self.current_frame,
+                aov = self.current_aov,
+                ocio_processor = self.ocio_processor,
+            )
+
+        # Store Frame Into Cache
+        self.cache.add(self.current_frame, frame)
+        self.cache_changed.emit(self.cache.cached_frames())
+
+        # Emit Viewer Signals
+        self.frame_ready.emit(frame)
+        self.frame_changed.emit(self.current_frame)
+
+        # Store Displayed Frame
+        self.displayed_frame = self.current_frame
 
 
 if __name__ == "__main__":
