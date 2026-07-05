@@ -276,6 +276,18 @@ class RemoveButton(IconButton):
     name = "remove"
 
 
+class ThemeButton(IconButton):
+    """Theme button."""
+
+    name = "theme"
+
+
+class OcioButton(IconButton):
+    """Ocio button."""
+
+    name = "ocio"
+
+
 class HelpButton(IconButton):
     """Help/documentation button."""
 

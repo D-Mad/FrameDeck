@@ -829,10 +829,10 @@ class AttachmentLayout(HorizontalLayout):
             return
 
         # Extract display filename
-        filname = utils.fileName(self.filepath, extension=True)
+        filename = utils.fileName(self.filepath, extension=True)
 
         # Update button label
-        self.attachemntButton.setText(filname)
+        self.attachemntButton.setText(filename)
 
         # Notify parent widget
         self.add_attachment.emit(self.filepath)

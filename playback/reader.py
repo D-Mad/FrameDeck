@@ -174,6 +174,18 @@ class VideoReader(object):
 
         return result
 
+
+    def read(container):
+        for packet in container.demux():
+
+            if packet.stream.type == "video":
+                for frame in packet.decode():
+                    yield "video", frame
+
+            elif packet.stream.type == "audio":
+                for frame in packet.decode():
+                    yield "audio", frame
+
     def get_frame(self, *args, **kwrags):
         """Decode next sequential video frame.
 
@@ -355,7 +367,7 @@ class SequenceReader(object):
 
         self.fps = fps or self.fps
 
-    def get_frame(self, current_frame, aov="rgb"):
+    def get_frame(self, current_frame, aov="rgb", ocio_processor=None):
         """Read image frame from sequence.
 
         Args:
@@ -432,6 +444,10 @@ class SequenceReader(object):
         # Expand Single Channel To RGB
         if image.shape[2] == 1:
             image = numpy.repeat(image, 3, axis=2)
+
+        # Add OCIO
+        if ocio_processor and ocio_processor.enabled:
+            image = ocio_processor.process_image(image)
 
         # Convert Float Image To Preview Image
         image = numpy.clip(image, 0.0, 1.0)

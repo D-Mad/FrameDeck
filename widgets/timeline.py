@@ -160,7 +160,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # Draw background
         painter = QtGui.QPainter(self)
-        painter.fillRect(self.rect(), QtGui.QColor(40, 40, 40))
+        painter.fillRect(self.rect(), QtGui.QColor(52, 52, 52))
 
         width = self.width()
         height = self.height()

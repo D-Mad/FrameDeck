@@ -290,7 +290,7 @@ class AovsCombobox(QtWidgets.QComboBox):
         self.setStyleSheet("QComboBox {background: transparent; border: none;}")
 
         # Minimum width
-        self.setMinimumSize(QtCore.QSize(150, 0))
+        # self.setMinimumSize(QtCore.QSize(100, 0))
 
         # Size policy
         sizepolicy = QtWidgets.QSizePolicy(
@@ -404,6 +404,37 @@ class StatusTypeCombobox(ContextCombobox):
         key = key or self.key
 
         return self.context.get(key)
+
+
+class NormalCombobox(QtWidgets.QComboBox):
+
+    def __init__(self, parent, **kwargs):
+        super(NormalCombobox, self).__init__(parent)
+
+        self.values = kwargs.get("values")
+
+        if self.values:
+            self.setItems(values=self.values)
+    
+    def setItems(self, values=None):
+        self.values = values or self.values
+
+        self.clear()
+        self.addItems([str(x) for x in self.values])
+
+    def setValue(self, value, **kwargs):
+        index = self.values.index(value)
+        self.setCurrentIndex(index)
+
+    def getValue(self):
+        index = self.currentIndex()
+        if not self.values:
+            return
+
+        value = None if self.values[index] == "null" else self.values[index]
+        return value
+
+
 
 
 if __name__ == "__main__":

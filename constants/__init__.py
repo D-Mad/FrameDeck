@@ -119,7 +119,7 @@ WINDOW_SIZE = [1400, 800]
 
 MAXIMIZE = False
 
-GUI_THEMES = ["dark", "light"]
+GUI_THEMES = ["dark", "light", "auto"]
 
 DEFAULT_THEME = GUI_THEMES[0]
 
