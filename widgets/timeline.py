@@ -42,6 +42,8 @@ Cache Visualization Modes:
 
 from __future__ import absolute_import
 
+import math
+
 import constants
 
 from PySide6 import QtGui
@@ -97,8 +99,6 @@ class TimelineWidget(QtWidgets.QWidget):
         self.start_frame = constants.VL_START_FRAME
         self.end_frame = constants.VL_START_FRAME + constants.VL_DEFAULT_FRAMES
         self.current_frame = constants.VL_START_FRAME
-
-        print("\nself.current_frame", self.current_frame, "\n")
 
         # Cached frame storage
         self.cached_frames = set()
@@ -177,6 +177,9 @@ class TimelineWidget(QtWidgets.QWidget):
         usable_width = width - (self.timeline_margin * 2)
         pixels_per_frame = usable_width / (total_frames - 1)
 
+        target_labels = 8
+        major_step = math.ceil(total_frames / target_labels)
+
         # Draw frame ticks
         for frame in range(self.start_frame, self.end_frame + 1):
 
@@ -184,12 +187,13 @@ class TimelineWidget(QtWidgets.QWidget):
             x = int(self.timeline_margin + ((frame - self.start_frame) * pixels_per_frame))
 
             # Major tick every 10 frames
-            if frame % 10 == 0 or frame in [self.start_frame, self.end_frame]:
+            if frame % major_step == 0 or frame in [self.start_frame, self.end_frame]:
                 painter.setPen(QtGui.QColor(180, 180, 180))
                 painter.drawLine(x, 0, x, 25)
 
                 # Draw frame number
                 painter.drawText(x + 2, 40, str(frame))
+
             else:  # Minor ticks
                 painter.setPen(QtGui.QColor(100, 100, 100))
                 painter.drawLine(x, 10, x, 20)

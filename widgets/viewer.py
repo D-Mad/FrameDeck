@@ -130,7 +130,6 @@ import utils
 import numpy
 import logger
 
-import resources
 import constants
 
 from OpenGL import GL
@@ -141,28 +140,30 @@ from PySide6 import QtWidgets
 from PySide6 import QtOpenGLWidgets
 
 from widgets.buttons import TxtButton
-from widgets.pixmaps import PathPixmap
 from widgets.annotations import Sketch
-from widgets.buttons import HelpButton
 from widgets.buttons import OpenButton
 from widgets.buttons import LoopButton
 from widgets.buttons import MoveButton
 from widgets.buttons import UndoButton
 from widgets.buttons import OcioButton
+
 from widgets.buttons import ColorButton
 from widgets.buttons import ClearButton
 from widgets.buttons import ArrowButton
-from widgets.buttons import PencilButton
+from widgets.sliders import VolumeSlider
+
+
 from widgets.buttons import PencilButton
 from widgets.buttons import EraserButton
 from widgets.buttons import RenderButton
 from widgets.buttons import RecapsButton
 from widgets.labels import ToolNameLabel
 from widgets.labels import ThicknesLabel
+
 from widgets.comboboxs import FbsCombobox
 from widgets.buttons import ForwardButton
 from widgets.buttons import EllipseButton
-from widgets.buttons import BackwordButton
+from widgets.buttons import BackwardButton
 from widgets.layouts import VerticalLayout
 from widgets.comboboxs import AovsCombobox
 from widgets.buttons import RectangleButton
@@ -214,7 +215,7 @@ class ViewFrame(QtWidgets.QFrame):
         # Viewer Toolbar
         # --------------------------------------------------
         # Annotation and viewer controls
-        self.viewToolbarLayout = ViewToolbarLayout(None, space=10, margins=(5, 5, 5, 5))
+        self.viewToolbarLayout = ViewToolbarLayout(None, space=20, margins=(5, 5, 5, 5))
         self.verticallayout.addLayout(self.viewToolbarLayout)
 
         # --------------------------------------------------
@@ -308,6 +309,9 @@ class ViewToolbarLayout(HorizontalLayout):
         ViewerWidget / ViewFrame
     """
 
+    # Signal emitted when click open button
+    open_trigger = QtCore.Signal(bool)
+
     # Signal emitted when click ocio button
     ocio_trigger = QtCore.Signal(bool)
 
@@ -361,6 +365,10 @@ class ViewToolbarLayout(HorizontalLayout):
         Build viewer toolbar user interface.
 
         """
+
+        # Open media button
+        self.openButton = OpenButton(None, tooltip="Open Media (Ctrl+O)", width=22, height=22)
+        self.addWidget(self.openButton)
 
         # --------------------------------------------------
         # OCIO Selection
@@ -519,6 +527,9 @@ class ViewToolbarLayout(HorizontalLayout):
         # Signal Connections
         # --------------------------------------------------
 
+        # Open media action
+        self.openButton.clicked.connect(self.open)
+
         #
         self.ocioButton.clicked.connect(self.call_ocio)
 
@@ -578,6 +589,17 @@ class ViewToolbarLayout(HorizontalLayout):
 
         # Update watermark menu contents
         self.watermarkMenuButton.menu.update_watermarks(context, **kwargs)
+
+    def open(self):
+        """
+        Trigger open media action.
+
+        Emits timeline open request.
+        """
+
+        # Notify timeline controller
+
+        self.open_trigger.emit(False)
 
     def call_ocio(self):
         self.ocio_trigger.emit(True)
@@ -834,7 +856,7 @@ class TimelineToolbarLayout(HorizontalLayout):
         OpenButton:
             Opens media files.
 
-        BackwordButton:
+        BackwardButton:
             Moves to previous frame.
 
         PlayPauseButton:
@@ -856,7 +878,7 @@ class TimelineToolbarLayout(HorizontalLayout):
             ↓
         Media Loader
 
-        Backword Button
+        Backward Button
             ↓
         Timeline Event
             ↓
@@ -896,7 +918,7 @@ class TimelineToolbarLayout(HorizontalLayout):
             Supported actions:
 
                 - open
-                - backword
+                - Backward
                 - play_pause
                 - forward
                 - loop
@@ -912,6 +934,9 @@ class TimelineToolbarLayout(HorizontalLayout):
 
     # Signal emitted when timeline tools clicked
     trigger_timeline = QtCore.Signal(str, bool)
+
+    # Signal emitted when volume value changes
+    volume_changed = QtCore.Signal(float)
 
     def __init__(self, parent, *args, **kwargs):
         """
@@ -942,20 +967,28 @@ class TimelineToolbarLayout(HorizontalLayout):
 
         Creates playback controls, FPS selector, spacers, and signal connections used by the timeline toolbar.
         """
+        # FPS selector combobox
+        self.fpsCombobox = FbsCombobox(None)
 
-        # Open media button
-        self.openButton = OpenButton(None, tooltip="Open Media (Ctrl+O)", width=22, height=22)
-        self.addWidget(self.openButton)
+        # Listen for FPS changes
+        self.fpsCombobox.fps_changed.connect(self.update_fps)
+        self.addWidget(self.fpsCombobox)
+
+        # Loop playback button
+        self.loopButton = LoopButton(
+            None, tooltip="Loop the timeline (Ctrl+L)", width=32, height=32
+        )
+        self.addWidget(self.loopButton)
 
         # Left spacer
         self.horizontalspacer1 = HorizontalSpacer()
         self.addItem(self.horizontalspacer1)
 
         # Previous frame button
-        self.backwordButton = BackwordButton(
-            None, tooltip="Backword Frame (<)", width=22, height=22
+        self.backwardButton = BackwardButton(
+            None, tooltip="Backward Frame (<)", width=22, height=22
         )
-        self.addWidget(self.backwordButton)
+        self.addWidget(self.backwardButton)
 
         # Play / Pause button
         self.playPauseButton = PlayPauseButton(None, tooltip="Play (space)", width=32, height=32)
@@ -969,24 +1002,11 @@ class TimelineToolbarLayout(HorizontalLayout):
         self.horizontalspacer2 = HorizontalSpacer()
         self.addItem(self.horizontalspacer2)
 
-        # Loop playback button
-        self.loopButton = LoopButton(
-            None, tooltip="Loop the timeline (Ctrl+L)", width=42, height=32
-        )
-        self.addWidget(self.loopButton)
-
-        # FPS selector combobox
-        self.fpsCombobox = FbsCombobox(None)
-
-        # Listen for FPS changes
-        self.fpsCombobox.fps_changed.connect(self.update_fps)
-        self.addWidget(self.fpsCombobox)
-
-        # Open media action
-        self.openButton.clicked.connect(self.open)
+        self.volumeSlider = VolumeSlider(None)
+        self.addWidget(self.volumeSlider)
 
         # Previous frame action
-        self.backwordButton.clicked.connect(self.backword)
+        self.backwardButton.clicked.connect(self.backward)
 
         # Play / Pause action
         self.playPauseButton.clicked.connect(self.play_pause)
@@ -997,27 +1017,18 @@ class TimelineToolbarLayout(HorizontalLayout):
         # Loop action
         self.loopButton.toggled.connect(self.loop)
 
-    def open(self):
-        """
-        Trigger open media action.
+        self.volumeSlider.valueChanged.connect(self.volume_control)
 
-        Emits timeline open request.
-        """
-
-        # Notify timeline controller
-
-        self.trigger_timeline.emit("open", False)
-
-    def backword(self):
+    def backward(self):
         """
         Trigger previous frame action.
 
-        Emits timeline backword request.
+        Emits timeline Backward request.
         """
 
         # Notify timeline controller
 
-        self.trigger_timeline.emit("backword", False)
+        self.trigger_timeline.emit("backward", False)
 
     def play_pause(self):
         """
@@ -1053,6 +1064,9 @@ class TimelineToolbarLayout(HorizontalLayout):
         # Notify timeline controller
 
         self.trigger_timeline.emit("loop", enabled)
+
+    def volume_control(self, value):
+        self.volume_changed.emit(value / 100)
 
     def reset_fps(self, typed, fps):
         """

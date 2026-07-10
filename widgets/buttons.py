@@ -142,7 +142,7 @@ class OpenButton(IconButton):
     name = "open"
 
 
-class BackwordButton(IconButton):
+class BackwardButton(IconButton):
     """Backward frame/playback button."""
 
     name = "backward"

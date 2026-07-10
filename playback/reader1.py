@@ -25,6 +25,29 @@ Reader Types:
     SequenceReader:
         Handles image sequence reading using OpenImageIO.
 
+Supported Formats:
+    Video:
+        - MP4
+        - MOV
+        - AVI
+
+    Image Sequence:
+        - EXR
+        - PNG
+        - JPG
+        - JPEG
+
+Architecture:
+    Media File
+        ↓
+    Reader
+        ↓
+    NumPy Image Buffer
+        ↓
+    Playback Cache
+        ↓
+    Viewer Rendering
+
 Notes:
     - Video playback uses generator-based decoding.
     - EXR images are converted to uint8 preview images.
@@ -43,54 +66,51 @@ import constants
 
 
 class MovieReader(object):
-    """
-    Decode movie files using PyAV.
+    """Video media reader.
+
+    This class handles video playback using PyAV.
 
     Responsibilities:
-        - Open and close movie files.
-        - Decode video and audio packets.
-        - Seek to a playback time.
-        - Build a frame-to-time lookup table.
-        - Provide movie metadata (FPS, duration, frame count).
-        - Expose audio stream information.
-
-    Features:
-        - Video decoding.
-        - Audio decoding.
-        - Timestamp-based seeking.
-        - Frame-to-time conversion.
-        - Frame-to-PTS conversion.
-        - Movie metadata access.
+        - Video container management
+        - Frame decoding
+        - FPS extraction
+        - Sequential frame reading
 
     Supported Formats:
-        Video:
-            - MP4
-            - MOV
-            - AVI
+        - MP4
+        - MOV
+        - AVI
 
-    Architecture:
-        Movie File
-            │
-            ▼
-        PyAV Container
-            │
-            ├── Video Stream
-            ├── Audio Stream
-            │
-            ▼
-        Packet Generator
-            │
-            ▼
-        Decoded Video / Audio Frames
+    Attributes:
+        media_type (str):
+            Media type identifier.
+
+        path (str):
+            Video file path.
+
+        container:
+            PyAV container object.
+
+        stream:
+            Video stream object.
+
+        frame_generator:
+            Sequential frame decoder generator.
+
+    Example:
+        >>> reader = MovieReader("/show/shot010.mov")
+        >>> frame = reader.get_frame()
     """
 
     def __init__(self, path):
-        """
-        Initialize the movie reader.
+        """Initialize video reader.
+
+        Opens video container and prepares
+        sequential frame decoding.
 
         Args:
             path (str):
-                Movie file path.
+                Video file path.
 
         Example:
             >>> reader = MovieReader("/show/shot010.mov")
@@ -99,287 +119,194 @@ class MovieReader(object):
         # Reader Type
         self.media_type = "movie"
 
-        # Open media container.
+        # Media Path
+        self.path = path
+
+        # Timeline State
+        self.current_frame = constants.VL_START_FRAME
+
+        self.container = None
+
+        # Open Video Container
         self.container = av.open(path)
 
-        # Media streams.
+        # Cache the primary video stream.
+
+        # Create video and audio stream. Every supported movie is expected to contain at least one video stream.
         self.video_stream = self.container.streams.video[0]
+
+        # Cache the primary audio stream if one exists. Some movie files may not contain an audio track.
         self.audio_stream = (
             self.container.streams.audio[0] if self.container.streams.audio else None
         )
 
-        # Decoder state.
-        self.packet_generator = None
+        # Number of video frames that have been decoded.
+        self.video_frame_index = 0
 
-        # Timeline lookup table.
-        self.frame_table = list()
+        # Number of audio frames that have been decoded.
+        self.audio_frame_index = 0
 
-        # Decoded frames waiting to be returned.
-        self.pending_frames = []
-
-        self.open()
-
-    def open(self):
-        """
-        Initialize the packet generator.
-        """
-
-        # Active streams.
-        streams = [self.video_stream]
-
+        # Create a packet generator for the media container.
+        # The returned packet sequence preserves the original interleaving of the media, allowing synchronized decoding of video and audio.
         if self.audio_stream:
-            streams.append(self.audio_stream)
+            # Demux both video and audio streams.
+            self.packet_generator = self.container.demux(self.video_stream, self.audio_stream)
+        else:
+            # Demux only the video stream when no audio track is present.
+            self.packet_generator = self.container.demux(self.video_stream)
 
-        # Create packet iterator.
-        self.packet_generator = self.container.demux(*streams)
-
-    def build_frame_table(self):
-        """
-        Build the movie frame lookup table.
-
-        Example:
-            [
-                {"frame": 0, "pts": 0, "time": 0.0},
-                {"frame": 1, "pts": 512, "time": 0.041666},
-                {"frame": 2, "pts": 1024, "time": 0.083333},
-            ]
-        """
-
-        # Clear the table
-        self.frame_table.clear()
-
-        # Start from beginning.
-        self.container.seek(0, stream=self.video_stream)
-
-        frame_number = 0
-
-        # Decode all video frames.
-        for packet in self.container.demux(self.video_stream):
-            for frame in packet.decode():
-                context = {"frame": frame_number, "pts": frame.pts, "time": frame.time}
-                self.frame_table.append(context)
-                frame_number += 1
-
-        # Restore playback position.
-        self.container.seek(0, stream=self.video_stream)
-
-        self.open()
-
-    def _next_packet(self):
-        """
-        Decode the next available packet.
-
-        Returns:
-            tuple | None:
-                ("video", VideoFrame),
-                ("audio", AudioFrame),
-                or None at end of stream.
-        """
-
-        while True:
-            try:
-                packet = next(self.packet_generator)
-            except StopIteration:
-                return None
-
-            if packet.stream == self.video_stream:
-                for frame in packet.decode():
-                    return ("video", frame)
-
-            elif self.audio_stream and packet.stream == self.audio_stream:
-                for frame in packet.decode():
-                    return ("audio", frame)
-
-    def next_packet_old(self):
-        # Return already-decoded frames.
-        if self.decoded_frames:
-            return self.decoded_frames.popleft()
-
-        while True:
-            try:
-                packet = next(self.packet_generator)
-            except StopIteration:
-                return None
-
-            if packet.stream == self.video_stream:
-                for frame in packet.decode():
-                    self.decoded_frames.append(("video", frame))
-
-            elif self.audio_stream and packet.stream == self.audio_stream:
-                for frame in packet.decode():
-                    self.decoded_frames.append(("audio", frame))
-
-    def next_packet(self):
-        """
-        Return the next decoded media frame.
-
-        Returns:
-            tuple[str, av.Frame] | None:
-                ("video", frame), ("audio", frame), or None when EOF.
-        """
-
-        while True:
-            # Return already-decoded frames first.
-            if self.pending_frames:
-                return self.pending_frames.pop(0)
-
-            try:
-                packet = next(self.packet_generator)
-            except StopIteration:
-                return None
-
-            if packet.stream == self.video_stream:
-                for frame in packet.decode():
-                    self.pending_frames.append(("video", frame))
-
-            elif self.audio_stream and packet.stream == self.audio_stream:
-                for frame in packet.decode():
-                    self.pending_frames.append(("audio", frame))
-
-    def seek_time(self, seconds):
-        """
-        Seek to a playback time.
-
-        Args:
-            seconds (float):
-                Playback time in seconds.
-
-        Returns:
-            av.VideoFrame | None:
-                First decoded frame at or after the requested time.
-        """
-
-        # Convert seconds to stream timestamp.
-        timestamp = int(seconds / float(self.video_stream.time_base))
-
-        # Seek to nearest keyframe.
-        self.container.seek(timestamp, stream=self.video_stream, backward=True)
-
-        # Restart packet iterator.
-        self.open()
-
-        while True:
-            result = self.next_packet()
-
-            if result is None:
-                return None
-
-            media_type, frame = result
-
-            if media_type != "video":
-                continue
-
-            if frame.time >= seconds:
-                return frame
-
-    def frame_to_time(self, frame_index):
-        """
-        Convert a frame index to playback time.
-
-        Args:
-            frame_index (int):
-                Zero-based frame index.
-
-        Returns:
-            float:
-                Playback time in seconds.
-        """
-
-        return self.frame_table[frame_index]["time"]
-
-    def frame_to_pts(self, frame_index):
-        """
-        Convert a frame index to presentation timestamp.
-
-        Args:
-            frame_index (int):
-                Zero-based frame index.
-
-        Returns:
-            int:
-                Presentation timestamp (PTS).
-        """
-
-        return self.frame_table[frame_index]["pts"]
-
-    def get_fps(self, rounded=0):
-        """
-        Return the movie frame rate.
-
-        Args:
-            rounded (int):
-                Decimal precision.
-
-        Returns:
-            float:
-                Frames per second.
-        """
-
-        fps = float(self.video_stream.average_rate)
-
-        if rounded == 0:
-            return fps
-        result = round(fps, rounded)
-        return result
+        self.frame_table = []
+        self.build_frame_table()
+        self.container.seek(0)
 
     def frame_count(self):
-        """
-        Return the total number of video frames.
+        """Return total video frame count.
 
         Returns:
             int:
                 Total frame count.
+
+        Example:
+            >>> count = reader.frame_count()
         """
 
         return int(self.video_stream.frames)
 
-    def duration(self):
-        """
-        Return the movie duration.
+    def get_fps(self, rounded=0):
+        """Return video FPS.
+
+        Args:
+            rounded (int, optional):
+                Decimal rounding precision.
 
         Returns:
             float:
-                Duration in seconds.
+                Video frame rate.
+
+        Example:
+            >>> fps = reader.get_fps()
+
+            >>> fps = reader.get_fps(2)
         """
 
-        return float(self.container.duration / 1000000)
+        # Read Stream FPS
+        fps = float(self.video_stream.average_rate)
 
-    def sample_rate(self):
-        """
-        Return the movie duration.
+        # Return Original FPS
+        if rounded == 0:
+            return fps
 
-        Returns:
-            float:
-                Duration in seconds.
-        """
+        # Return Rounded FPS
+        result = round(fps, rounded)
 
-        if self.audio_stream:
-            return self.audio_stream.rate
-        return 0
+        return result
 
-    def channels(self):
-        """
-        Return the number of audio channels.
+    def width(self):
+        """Return frame width."""
+        return self.video_stream.width
 
-        Returns:
-            int:
-                Channel count.
-        """
-
-        if self.audio_stream:
-            return self.audio_stream.codec_context.channels
-
-        return 0
+    def height(self):
+        """Return frame height."""
+        return self.video_stream.height
 
     def has_audio(self):
+        """Return whether the movie contains audio."""
+        return self.audio_stream is not None
+
+    def sample_rate(self):
+        """Return audio sample rate."""
+        if not self.audio_stream:
+            return None
+
+        return self.audio_stream.rate
+
+    def channels(self):
+        """Return number of audio channels."""
+        if not self.audio_stream:
+            return None
+
+        return self.audio_stream.channels
+
+    def next_packet(self):
         """
-        Return whether the movie contains an audio stream.
+        Decode and return the next available media frame.
+
+        This method iterates through the packet generator produced by the media container and decodes packets until a valid video or audio frame is available.
+
+        Video frames and audio frames are returned individually in the order they are decoded, preserving the original presentation sequence of the media.
+
+        Internal frame counters are updated for each successfully decoded frame.
 
         Returns:
-            bool
+            tuple[str, av.VideoFrame | av.AudioFrame] | None:
+                Returns one of the following:
+
+                - ("video", VideoFrame) for a decoded video frame.
+                - ("audio", AudioFrame) for a decoded audio frame.
+                - None when the end of the media stream has been reached.
         """
 
-        return self.audio_stream is not None
+        # Continue decoding until a valid frame is found or the stream ends.
+        while True:
+            try:
+                # Retrieve the next encoded packet from the demuxer.
+                packet = next(self.packet_generator)
+            except StopIteration:
+                # No more packets remain in the media container.
+                return None
+
+            # Decode video packets.
+            if packet.stream == self.video_stream:
+
+                # A single packet may decode into one or more frames.
+                for frame in packet.decode():
+
+                    # Increment the decoded video frame counter.
+                    self.video_frame_index += 1
+
+                    # Return the decoded video frame.
+                    return ("video", frame)
+
+            # Decode audio packets.
+            elif self.audio_stream and packet.stream == self.audio_stream:
+
+                # A single packet may decode into one or more audio frames.
+                for frame in packet.decode():
+
+                    # Increment the decoded audio frame counter.
+                    self.audio_frame_index += 1
+
+                    # Return the decoded audio frame.
+                    return ("audio", frame)
+
+    def get_frame(self, *args, **kwrags):
+        """Decode next sequential video frame.
+
+        Returns:
+            numpy.ndarray:
+                RGB image buffer.
+
+            None:
+                If playback reaches end of stream.
+
+        Notes:
+            Uses generator-based decoding for
+            memory-efficient playback.
+
+        Example:
+            >>> frame = reader.get_frame()
+        """
+
+        try:
+            # Decode Next Frame
+            frame = next(self.frame_generator)
+            # Advance Timeline Frame
+            self.current_frame += 1
+            # Convert To RGB Image
+            image = frame.to_ndarray(format="rgb24")
+            return image
+        except StopIteration:
+            return None
 
     def get_available_aovs(self):
         """Return available AOV names.
@@ -394,10 +321,61 @@ class MovieReader(object):
 
         return list()
 
+    def seek(self, frame):
+        """
+        Seek to a timeline frame and return the decoded video frame.
+
+        Args:
+            frame (int):
+                Timeline frame number.
+
+        Returns:
+            av.VideoFrame | None
+        """
+
+        # Timeline frame -> zero-based frame index.
+        frame_index = frame - constants.VL_START_FRAME
+
+        # Clamp.
+        # frame_index = max(0, min(frame_index, self.frame_count() - 1))
+
+        # Frame -> seconds.
+        seconds = frame_index / self.get_fps()
+
+        # Seconds -> stream timestamp.
+        timestamp = int(seconds / float(self.video_stream.time_base))
+
+        # Seek to nearest keyframe.
+        self.container.seek(timestamp, stream=self.video_stream, backward=True)
+
+        streams = [self.video_stream]
+
+        if self.audio_stream:
+            streams.append(self.audio_stream)
+
+        self.packet_generator = self.container.demux(*streams)
+
+        # Reset counters.
+        self.video_frame_index = frame_index
+        self.audio_frame_index = 0
+
+        # Decode until requested timestamp.
+        while True:
+            result = self.next_packet()
+
+            if result is None:
+                return None
+
+            media_type, video_frame = result
+
+            if media_type != "video":
+                continue
+
+            if video_frame.pts >= timestamp:
+                return video_frame
+
     def close(self):
-        """
-        Release the opened media file.
-        """
+        """Close the movie container."""
 
         if self.container:
             self.container.close()
@@ -406,15 +384,6 @@ class MovieReader(object):
         self.packet_generator = None
         self.video_stream = None
         self.audio_stream = None
-
-        self.video_frame_index = 0
-        self.audio_frame_index = 0
-
-        self.frame_table.clear()
-
-        # self._fps = 0.0
-        # self._frame_count = 0
-        # self._duration = 0.0
 
 
 class SequenceReader(object):
@@ -443,17 +412,6 @@ class SequenceReader(object):
         - Alpha extraction
         - Depth extraction
         - AOV discovery
-
-    Architecture:
-        Image Sequence File
-            ↓
-        Reader
-            ↓
-        NumPy Image Buffer
-            ↓
-        Playback Cache
-            ↓
-        Viewer Rendering
 
     Attributes:
         files (list):

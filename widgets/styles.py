@@ -52,7 +52,6 @@ from __future__ import absolute_import
 import qdarktheme
 
 import constants
-import resources
 
 from PySide6 import QtGui
 from PySide6 import QtCore

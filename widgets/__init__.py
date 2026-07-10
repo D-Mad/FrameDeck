@@ -41,7 +41,9 @@ from widgets.pixmaps import PathPixmap
 from widgets.buttons import HelpButton
 from widgets.dialogs import FileDialog
 from widgets.buttons import ThemeButton
+from playback.player import MoviePlayer
 from playback.player import MediaPlayer
+
 from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
 from widgets.labels import CopyrightLabel
@@ -180,12 +182,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Viewer Toolbar Layout Signal Connections
         # --------------------------------------------------------------------
 
+        self.viewframe.viewToolbarLayout.open_trigger.connect(self.open_media)
         self.viewframe.viewToolbarLayout.ocio_trigger.connect(self.call_ocio)
         self.ocio_widget.ocio_changed.connect(self.player.set_ocio)
 
         ########################################################################
 
-        self.viewframe.viewToolbarLayout.aov_changed.connect(self.player.set_aov)
+        # self.viewframe.viewToolbarLayout.aov_changed.connect(self.player.set_aov)
 
         self.viewframe.viewToolbarLayout.thicknes_changed.connect(
             self.viewframe.viewer.annotations.set_thickness
@@ -223,6 +226,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # --------------------------------------------------------------------
         self.viewframe.timelineToolbarLayout.trigger_timeline.connect(self.trigger_timeline)
         self.viewframe.timelineToolbarLayout.fps_chanaged.connect(self.update_fps)
+        self.viewframe.timelineToolbarLayout.volume_changed.connect(self.player.volume_changed)
 
         self.themeButton.clicked.connect(self.change_theme)
         self.helpButton.clicked.connect(self.help)
@@ -234,11 +238,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Previous frame
         self.backwordShortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self)
-        self.backwordShortcut.activated.connect(self.backword_frame)
+        self.backwordShortcut.activated.connect(self.backward_frame)
 
         # Next frame
         self.forwardShortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self)
-        self.forwardShortcut.activated.connect(self.forward_frame)
+        self.forwardShortcut.activated.connect(self.backward_frame)
 
         # Open media
         self.openShortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self)
@@ -353,6 +357,11 @@ class MainWindow(QtWidgets.QMainWindow):
             constants.VL_START_FRAME, constants.VL_START_FRAME + (self.player.frame_count - 1)
         )
 
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+    def open_media(self, *args):
+        self.openMedia()
+
     def call_ocio(self, *args):
         SetStylesheet(self.ocio_widget, theme=self.current_theme)
         self.ocio_widget.show()
@@ -384,11 +393,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reset_video_fps()
 
     def trigger_timeline(self, typed, enabled):
-        if typed == "open":
-            self.openMedia()
 
-        if typed == "backword":
-            self.backword_frame()
+        print("\ntyped", typed)
+        if typed == "backward":
+            self.backward_frame()
 
         if typed == "play_pause":
             self.toggle_play_pause()
@@ -399,12 +407,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if typed == "loop":
             self.set_loop(enabled)
 
-    def backword_frame(self):
+    def backward_frame(self):
         """
         Move playback backward by one frame.
         """
 
-        self.player.backword_frame()
+        self.player.backward_frame()
 
         # Sync FPS display
         self.reset_video_fps()
