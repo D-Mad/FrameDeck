@@ -15,7 +15,6 @@ Description:
 
 Features:
     * Horizontal playback volume control.
-    * VLC-inspired gradient volume indicator.
     * Thin marker-style handle.
     * Configurable initial volume.
     * Fixed toolbar-friendly size.
