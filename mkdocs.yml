@@ -1,5 +1,5 @@
 site_name: Viewline docs
-site_url: https://github.com/subing85
+site_url: https://subing85.github.io/viewline/
 use_directory_urls: true
 
 theme:
