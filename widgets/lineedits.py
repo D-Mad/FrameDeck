@@ -49,7 +49,6 @@ Notes:
 
 from __future__ import absolute_import
 
-from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 

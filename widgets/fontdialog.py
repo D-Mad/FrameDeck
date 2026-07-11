@@ -65,11 +65,14 @@ from PySide6 import QtWidgets
 
 from widgets.buttons import TextButton
 from widgets.buttons import ColorButton
-from widgets.labels import CopyrightLabel
 from widgets.buttons import TextToolButton
+
+from widgets.labels import CopyrightLabel
+
 from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalLayout
+
 from widgets.lineedits import FontSizeSpinBox
 
 

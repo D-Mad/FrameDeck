@@ -165,7 +165,7 @@ class MovieReader(object):
 
         self.open()
 
-    def _next_packet(self):
+    def next_packet_old(self):
         """
         Decode the next available packet.
 
@@ -189,25 +189,6 @@ class MovieReader(object):
             elif self.audio_stream and packet.stream == self.audio_stream:
                 for frame in packet.decode():
                     return ("audio", frame)
-
-    def next_packet_old(self):
-        # Return already-decoded frames.
-        if self.decoded_frames:
-            return self.decoded_frames.popleft()
-
-        while True:
-            try:
-                packet = next(self.packet_generator)
-            except StopIteration:
-                return None
-
-            if packet.stream == self.video_stream:
-                for frame in packet.decode():
-                    self.decoded_frames.append(("video", frame))
-
-            elif self.audio_stream and packet.stream == self.audio_stream:
-                for frame in packet.decode():
-                    self.decoded_frames.append(("audio", frame))
 
     def next_packet(self):
         """
@@ -411,10 +392,6 @@ class MovieReader(object):
         self.audio_frame_index = 0
 
         self.frame_table.clear()
-
-        # self._fps = 0.0
-        # self._frame_count = 0
-        # self._duration = 0.0
 
 
 class SequenceReader(object):

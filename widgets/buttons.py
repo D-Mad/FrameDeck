@@ -373,7 +373,7 @@ class ColorButton(QtWidgets.QPushButton):
         self.height = kwargs.get("height", 22)
 
         # Default color (red)
-        self.color = (255, 0, 0)
+        self.color = kwargs.get("color", (255, 0, 0))
 
         # Fixed size lock
         self.locked = False if kwargs.get("locked") == False else True

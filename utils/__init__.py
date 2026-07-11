@@ -65,8 +65,6 @@ import logger
 import resources
 import constants
 
-from pathlib import Path
-
 LOGGER = logger.getLogger(__name__)
 
 

@@ -96,9 +96,11 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.styles import WaitCursor
-from widgets.layouts import VerticalLayout
 from widgets.labels import ProjectIconLabel
+
+from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalLayout
+
 from widgets.comboboxs import ProjectCombobox
 from widgets.treewidgets import PlaylistTreewidget
 

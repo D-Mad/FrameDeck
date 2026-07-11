@@ -139,41 +139,44 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 from PySide6 import QtOpenGLWidgets
 
-from widgets.buttons import TxtButton
 from widgets.annotations import Sketch
+
+from widgets.buttons import TxtButton
 from widgets.buttons import OpenButton
 from widgets.buttons import LoopButton
 from widgets.buttons import MoveButton
 from widgets.buttons import UndoButton
 from widgets.buttons import OcioButton
-
 from widgets.buttons import ColorButton
 from widgets.buttons import ClearButton
 from widgets.buttons import ArrowButton
-from widgets.sliders import VolumeSlider
-
-
 from widgets.buttons import PencilButton
 from widgets.buttons import EraserButton
 from widgets.buttons import RenderButton
 from widgets.buttons import RecapsButton
-from widgets.labels import ToolNameLabel
-from widgets.labels import ThicknesLabel
-
-from widgets.comboboxs import FbsCombobox
 from widgets.buttons import ForwardButton
 from widgets.buttons import EllipseButton
 from widgets.buttons import BackwardButton
-from widgets.layouts import VerticalLayout
-from widgets.comboboxs import AovsCombobox
 from widgets.buttons import RectangleButton
 from widgets.buttons import PlayPauseButton
+from widgets.buttons import WatermarkMenuButton
+
+from widgets.sliders import VolumeSlider
+
+from widgets.labels import ThicknesLabel
+from widgets.labels import ToolNameLabel
+
+from widgets.comboboxs import FbsCombobox
+from widgets.comboboxs import AovsCombobox
+
 from widgets.timeline import TimelineWidget
+
+from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalLayout
 from widgets.layouts import HorizontalSpacer
+
 from widgets.lineedits import ThicknesSpinBox
 from widgets.fontdialog import TxtInputDialog
-from widgets.buttons import WatermarkMenuButton
 
 LOGGER = logger.getLogger(__name__)
 
@@ -452,7 +455,9 @@ class ViewToolbarLayout(HorizontalLayout):
         self.addWidget(self.radiusSpinBox)
 
         # Annotation color picker
-        self.colorButton = ColorButton(None, tooltip="Pick Color", width=22, height=22)
+        self.colorButton = ColorButton(
+            None, tooltip="Pick Color", color=constants.DEFAULT_SKETCH_COLOR, width=22, height=22
+        )
         self.addWidget(self.colorButton)
 
         # --------------------------------------------------

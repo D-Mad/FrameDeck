@@ -128,6 +128,8 @@ FONT_SIZE = 12
 AVERAGE_FONT_SIZE = 10
 SMALL_FONT_SIZE = 8
 
+DEFAULT_SKETCH_COLOR = (255, 170, 0)
+
 OPEN_EXTENSIONS = ["exr", "png", "jpg", "jpeg", "mp4", "mov", "avi"]
 
 FPS_VALUES = [

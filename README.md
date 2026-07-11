@@ -1,93 +1,49 @@
-# Review Player
 
-A professional Python-based review player framework for VFX, animation, and post-production workflows.
 
-This project is designed as a playback and review foundation inspired by internal studio review tools used across the animation and VFX industry.
+## Viewline
 
-The goal of this project is to provide a lightweight, extensible, and production-friendly framework for media playback, image sequence review, OpenEXR workflows, and OCIO-based color management.
+Viewline is a professional Python-based review player framework for VFX, animation, and post-production workflows.
+It provides accurate frame-based and time-based playback for image sequences and movie files while integrating seamlessly with production management and publishing workflows.
+
+This project is to provide a lightweight, extensible, and production-friendly framework for media playback, image sequence review, OpenEXR workflows, and OCIO-based color management.
 
 <img width="1848" height="958" alt="image" src="https://github.com/user-attachments/assets/c113466d-2739-4dce-abb7-c966797285ee" />
 
-<<<<<<< HEAD
 
----
-# bug
+## Core Responsibilities
+* Review image sequences and movie files.
+* Frame-accurate playback.
+* Audio and video synchronization.
+* Timeline navigation and scrubbing.
+* Playback controls (Play, Pause, Stop, Loop, Frame Step).
+* OpenColorIO (OCIO) color management. (in progress)
+* Cache visualization.
+* AOV (Arbitrary Output Variable) switching.
+* Overlay information (frame number, resolution, FPS, metadata).
+* Snapshot and annotation support.
+* Pipeline integration with published versions and review notes.
 
-* Clear all draws
-* Resrt Review Type, Status
-* Smooth brush
-* Documntation
----
-
----
-
-The goal of this project is to build a lightweight and pipeline-friendly media review tool focused on animation and VFX workflows.
-
-Current features include:
-
-• Image sequence and video playback
-• EXR and AOV support
-• OpenGL-based viewer
-• Timeline scrubbing and playback cache
-• Watermark and overlay system
-• Playlist/version browsing workflow
 
 The project is built primarily using Python 3.10, PySide6, OpenGL, OpenImageIO, PyAV, and OCIO.
 
 This is still an early beta release focused mainly on core architecture, playback workflow, and UI foundations. There is still a lot to improve, but the project has reached a stage where I’m comfortable sharing progress publicly.
 
-Planned areas of development include 
-
-annotation tools
-comparison modes
-improved caching
-audio support
-deeper production pipeline integration
-
----
-
-=======
->>>>>>> main
----
-
-# Features
-
-## Viewer
-
-* Video playback
-* Image sequence playback
-* OpenEXR workflow support
-* OpenColorIO (OCIO) integration *(in progress)*
-* Frame-accurate stepping
-* Timeline scrubbing
-* OpenGL-based viewer
-* Dynamic fit-to-window display
-* Aspect ratio preservation
-* Frame stepping
-* Loop playback
-* Playback overlays / burn-ins
-* Cached frame visualization
-* AOV switching support
-
----
-
 ## Playback
 
 Supported formats:
 
-### Video
+## Video
 
 * MP4
 * MOV
 * AVI
 
-### Image Sequences
+## Image Sequences
 
 * PNG
 * JPEG
 * EXR
 
----
 
 ## Color Management
 
@@ -97,86 +53,192 @@ Supported formats:
 * Display transform selection *(in progress)*
 * View transform selection *(in progress)*
 
----
-
-# Project Structure
-
-```text
-review_player
-├── constants
-│   └── __init__.py
-├── logger
-│   └── __init__.py
-├── main.py
-├── ocio
-│   └── __init__.py
-├── playback
-│   ├── cache.py
-│   ├── player.py
-│   └── reader.py
-├── playlist
-│   └── __init__.py
-├── resources
-│   ├── icons
-│   ├── __init__.py
-│   └── presets
-│       ├── projects.json
-│       ├── versions.json
-│       └── watermarks.json
-├── utils
-│   └── __init__.py
-└── widgets
-    ├── buttons.py
-    ├── comboboxs.py
-    ├── dialogs.py
-    ├── __init__.py
-    ├── labels.py
-    ├── layouts.py
-    ├── menus.py
-    ├── pixmaps.py
-    ├── playlist.py
-    ├── styles.py
-    ├── timeline.py
-    ├── treewidgets.py
-    ├── viewer.py
-    └── widgetItems.py
-```
 
 ---
+## Studio Integration (How to customized based on studio workflows?)
 
-# Playlist Customization
 
-The playlist system is designed to be customized based on studio workflows.
+Viewline ships with a lightweight JSON-based implementation that allows the application to run immediately without requiring a production tracking system.
 
-Enhance the playlist module:
+In a production environment, studios should replace these JSON examples with queries to their own production management system (for example ShotGrid, FTrack, or an in-house database).
 
-```text
-./review_player/playlist/__init__.py
+The default implementation demonstrates how Viewline expects data to be structured. Only the data retrieval and submission logic needs to be customized.
+The Viewline itself does not require modification.
+
+* **Projects**
+* **Versions**
+* **Review notes**
+
+
+
+## Projects
+
+* Projects provide the top-level playlist displayed in the Review Player.
+* The default implementation reads project information from a JSON file.
+* Replace this implementation with your studio's production tracking query.
+
+**Modify the following method:**
+
+```
+./scripts/__init__.py
+
+class Projects
+
+    @classmethod
+    def get(cls):
 ```
 
-### Projects Class
+**Default Example**
 
-Update the `Projects` class to query project playlist data.
+The sample project data is located in:
 
-The returned data structure should match:
-
-```text
-./review_player/resources/presets/projects.json
+```
+./resources/presets/projects.json
 ```
 
-### Versions Class
+<span style="color:green;">Use this file as a reference for the expected data structure.</span>
 
-Update the `Versions` class to query media/version data.
+The returned data should contain the information required to populate the Project Browser, such as:
 
-The returned data structure should match:
+* Project Name
+* Description
+* Thumbnail
+
+*Studios are free to include additional metadata if required.*
+
+
+
+## Versions
+* Versions represent published media available for review.
+* The default implementation reads version information from a JSON file.
+* Studios should replace this implementation with queries to their production tracking system.
+
+**Modify the following method:**
+
+```
+./scripts/__init__.py
+
+class Versions
+
+    @classmethod
+    def get(cls):
+```
+
+**Default Example**
+
+Example version data is located in:
+
+```
+./resources/presets/versions.json
+```
+
+<span style="color:green;">Use this file as a reference for the expected data structure.</span>
+
+**The returned data typically includes:**
+
+* Version Name
+* Media Path
+* Thumbnail Path
+* project
+* entity (Shot)
+* task
+* Status
+* Description
+* Created At
+* Created By
+
+*Additional metadata may be included depending on the studio workflow.*
+
+
+
+## Review Notes
+* Review Notes are used to display existing comments and submit new feedback during playback.
+* The default implementation stores review notes in a JSON file.
+* Production environments should replace this implementation with database queries and write operations.
+
+**Modify the following method for query existing review notes:**
+
+```
+./scripts/__init__.py
+
+class Review
+
+    @classmethod
+    def get(cls):
+```
+
+This method should return all review notes associated with the selected version.
+
+
+**Modify the following method for create new review notes:**
+
+```
+./scripts/__init__.py
+
+class Review
+
+    @classmethod
+    def set(cls):
+```
+
+This method should submit newly created review notes to your production tracking system.
+
+The default implementation demonstrates the expected data structure only.
+
+
+**Default Example**
+
+Example review data is located in:
+
+```
+./resources/presets/reviews.json
+```
+
+*Use this file as a reference when integrating with your production database.*
+
+
+**Data Flow**, The default application follows the workflow below.
 
 ```text
-./review_player/resources/presets/versions.json
+
+    Projects
+        │
+        ▼
+    Project Browser
+        │
+        ▼
+    Versions
+        │
+        ▼
+    Media Player
+        │
+        ▼
+    Review Notes
+        │
+        ├── Query Existing Notes
+        │
+        └── Submit New Notes
+
 ```
+
+Only the highlighted data providers need to be replaced for studio integration.
+
+## Why JSON?
+
+The JSON files included with Viewline are intended solely as reference implementations.
+
+They allow developers to:
+
+* Understand the expected data structure.
+* Run Viewline without a production tracking system.
+* Prototype integrations quickly.
+* Test the Review Player independently.
+
+Once integration is complete, the JSON files are no longer required and can be replaced entirely by your production tracking system.
 
 ---
 
-# Architecture Overview
+## Architecture Overview
 
 The project separates playback into multiple independent systems.
 
@@ -192,13 +254,12 @@ Viewer Rendering
 Timeline / UI
 ```
 
----
 
-# Python Version
+## Python Version
 
 python-3.10.10 or +
 
-# Dependencies
+## Dependencies
 
 | Library     | Purpose                 |
 | ----------- | ----------------------- |
@@ -209,46 +270,40 @@ python-3.10.10 or +
 | OpenImageIO | Image sequence reading  |
 | OpenColorIO | Color management        |
 
----
 
-# Required Libraries
+## Required Libraries
 
-```text
-requests: 2.32.2
-    certifi: 2024.2.2
-    idna: 3.7
-    urllib3: 2.2.1
-    charset-normalizer: 3.3.2
+```yml
+    requests: 2.32.2
+        certifi: 2024.2.2
+        idna: 3.7
+        urllib3: 2.2.1
+        charset-normalizer: 3.3.2
 
-PySide6: 6.9.0
-    shiboken6: 6.9.0
-    PySide6-Essentials: 6.9.0
-    PySide6-Addons: 6.9.0
+    PySide6: 6.9.0
+        shiboken6: 6.9.0
+        PySide6-Essentials: 6.9.0
+        PySide6-Addons: 6.9.0
 
-pyqtdarktheme: 2.1.0
-    darkdetect: 0.7.1
+    pyqtdarktheme: 2.1.0
+        darkdetect: 0.7.1
 
-OpenImageIO: 3.0.4.0
+    OpenImageIO: 3.0.4.0
 
-PyOpenGL: 3.1.9
-opencolorio: 2.5.0
-av: 17.0.0
-numpy: 1.26.4
+    PyOpenGL: 3.1.9
+    opencolorio: 2.5.0
+    av: 17.0.0
+    numpy: 1.26.4
 ```
 
----
-
-# Recommended OCIO Config
-
-## ACES 1.3 Config
+## Recommended OCIO Config ACES 1.3
 
 Official repository:
 
 ```text
-https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES
+    https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES
 ```
 
----
 
 # EXR Support
 
@@ -270,31 +325,6 @@ rgba.R rgba.G rgba.B
 Ci.R Ci.G Ci.B
 ```
 
----
-
-# OCIO Workflow (In Progress)
-
-Typical workflow:
-
-```text
-EXR (ACEScg)
-    ↓
-OCIO Display Transform
-    ↓
-sRGB Monitor
-```
-
----
-
-# Recommended Professional Workflow
-
-| Input      | Display |
-| ---------- | ------- |
-| ACEScg     | Rec709  |
-| Linear     | sRGB    |
-| UtilityRaw | Raw     |
-
----
 
 # Current Limitations
 
@@ -310,7 +340,6 @@ Known limitations:
 * No HDR display pipeline yet
 * No audio synchronization
 * No annotation system
-
 ---
 
 # Future Roadmap
@@ -322,7 +351,6 @@ Known limitations:
 * Smart frame cache
 * GPU upload pipeline
 
----
 
 ## Viewer
 
@@ -333,7 +361,7 @@ Known limitations:
 * Fit modes
 * Pixel inspection
 
----
+
 
 ## Timeline
 
@@ -343,7 +371,6 @@ Known limitations:
 * Notes/comments
 * In/out ranges
 
----
 
 ## EXR Features
 
@@ -353,17 +380,6 @@ Known limitations:
 * Metadata viewer
 * Multi-part EXR support
 
----
-
-## Review System
-
-* Task integration
-* Version integration
-* Notes/comments
-* Draw annotations
-* Review sessions
-
----
 
 ## Integrations
 
@@ -371,14 +387,15 @@ Known limitations:
 * FFmpeg render export
 * Editorial workflow
 
----
 
+---
 # Author
 
-Subin Gopi
+Subin Gopi *subing85@gmail.com*
 
 ---
-
 # License
 
 This project is intended as a free educational and production workflow framework for the animation and VFX industry.
+
+---

@@ -56,12 +56,14 @@ from PySide6 import QtWidgets
 
 from widgets.labels import RightLabel
 from widgets.buttons import TextButton
-from widgets.layouts import GridLayout
 from widgets.dialogs import FileDialog
-from widgets.layouts import VerticalLayout
 from widgets.lineedits import InputLineEdit
+
+from widgets.layouts import GridLayout
+from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalLayout
+
 from widgets.comboboxs import NormalCombobox
 
 from ocio import OCIOProcessor

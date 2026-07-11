@@ -45,14 +45,10 @@ Notes:
     - Processing currently uses CPU transforms.
     - GPU processing is not implemented yet.
     - Images are expected to be NumPy float32 arrays.
-"""
 
-from __future__ import absolute_import
 
-import numpy
-import PyOpenColorIO
+WHat is OCIO conecpt ? (ocio helper)
 
-"""
 Image
    │
    ▼
@@ -241,7 +237,7 @@ Why there are so many Color Spaces?
             Raw
             Linear
 
-    Most of these are never selected by artists dir ectly; they're there so OCIO can accurately convert between formats.    
+    Most of these are never selected by artists dir ectly; they're there so OCIO can accurately convert between formats.
 
 For My Review Player, will typically expose only a few user-selectable options.
 
@@ -266,9 +262,9 @@ Quick analogy
     Concept	Real-world analogy
 
     Color Space	The language the image is written in (ACEScg, sRGB, LogC4, etc.)
-    
+
     Display	The type of monitor you're viewing it on (sRGB, Rec.709, P3)
-    
+
     View	The "look" or transform applied for that monitor (Film, Raw, SDR, HDR)
 
 So the overall flow is:
@@ -297,7 +293,7 @@ Display vs view?
 
     This is probably the most confusing part of OCIO. The easiest way to understand it is:
 
-    
+
 
         Display = Where are you viewing the image? (The monitor/device)
         View = How do you want the image to look on that display? (The transform/look)
@@ -434,6 +430,11 @@ Display vs view?
     Monitor
 
 """
+
+from __future__ import absolute_import
+
+import numpy
+import PyOpenColorIO
 
 
 class OCIOProcessor(object):

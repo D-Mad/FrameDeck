@@ -1,3 +1,58 @@
+"""
+Copyright (c) 2026, Motion-Craft Technology All rights reserved.
+
+Author:
+    Subin. Gopi (subing85@gmail.com).
+
+Module:
+    ./playback/player.py
+
+Description:
+    The main playback controller used by the Review Player framework.
+
+The media player is responsible for:
+    - Playback control
+    - Timeline frame navigation
+    - Frame caching
+    - Reader management
+    - AOV switching
+    - Playback looping
+    - FPS timing
+    - OCIO integration
+    - UI signal communication
+
+Architecture:
+    Media Reader
+        ↓
+    Frame Cache
+        ↓
+    OCIO Processing
+        ↓
+    Viewer Rendering
+        ↓
+    Timeline/UI
+
+Supported Readers:
+    - MovieReader
+    - SequenceReader
+
+Signals:
+    frame_ready(object):
+        Emits decoded image/frame buffer.
+
+    frame_changed(int):
+        Emits current displayed frame number.
+
+    cache_changed(list):
+        Emits currently cached frame numbers.
+
+Notes:
+    - Playback uses QTimer-based frame stepping.
+    - Current cache system is CPU memory only.
+    - Threaded decoding is not implemented yet.
+    - GPU upload pipeline is not implemented yet.
+"""
+
 from __future__ import absolute_import
 
 import numpy
@@ -19,84 +74,205 @@ LOGGER = logger.getLogger(__name__)
 
 
 class BasePlayer(QtCore.QObject):
-    # Playback Signals
+    """Base class for media playback.
+
+    This class defines the common playback signals shared by both movie and image sequence players. Concrete player implementations
+    should inherit from this class and emit these signals during playback.
+
+    Signals:
+        frame_ready (numpy.ndarray):
+            Emitted whenever a decoded frame is ready for display.
+
+        frame_changed (int):
+            Emitted when the current timeline frame changes.
+
+        cache_changed (list):
+            Emitted when cached frames are updated.
+
+        timeline_actived (bool):
+            Emitted when playback starts or stops.
+    """
+
+    # Image ready for display.
     frame_ready = QtCore.Signal(object)
+
+    # Current timeline frame changed.
     frame_changed = QtCore.Signal(int)
+
+    # Cached frame list updated.
     cache_changed = QtCore.Signal(list)
+
+    # Playback state changed.
     timeline_actived = QtCore.Signal(int)
 
 
 class MediaPlayer(BasePlayer):
+    """High-level media player.
+
+    This class automatically creates either a MoviePlayer or SequencePlayer depending on the media type. It provides a
+    common interface so the rest of the application does not need to know how the media is stored.
+
+    Example:
+        >>> player = MediaPlayer()
+        >>> player.load("movie.mov")
+        >>> player.toggle_play_pause()
+    """
 
     def __init__(self):
+        """Initialize media player."""
+
         super().__init__()
 
+        # Active player implementation.
         self.player = None
 
-    def load(self, path):
+        # Active OCIO processor
+        self.ocio_processor = None
 
-        # Destroy previous player.
+        # Current input color space.
+        self.input_space = None
+
+        # Active display.
+        self.display = None
+
+        # Active view.
+        self.view = None
+
+    def load(self, path):
+        """Load media.
+
+        The media type is automatically detected from the file
+        extension. Existing players are destroyed before creating
+        a new one.
+
+        Args:
+            path (str):
+                Movie file or image sequence path.
+        """
+
+        # Destroy previously loaded player.
         if self.player:
             self.player.deleteLater()
             self.player = None
 
-        # Detect Media Type
+        # Detect media type from file extension.
         extension = utils.fileExtension(path, dot=False)
 
-        # Create Reader
+        # Create appropriate playback implementation.
         if extension in ["mp4", "mov", "avi"]:
             self.player = MoviePlayer()
         else:
             self.player = SequencePlayer()
 
-        # self.player.frame_ready.connect(lambda x: self.frame_ready.emit(x))
-        # self.player.frame_changed.connect(lambda x: self.frame_changed.emit(x))
-        # self.player.cache_changed.connect(lambda x: self.cache_changed.emit(x))
-        # self.player.timeline_actived.connect(lambda x: self.timeline_actived.emit(x))
+        if self.ocio_processor:
+            self.player.set_ocio(self.ocio_processor, self.input_space, self.display, self.view)
 
-        # Forward signals.
+        # Forward internal player signals.
         self.player.frame_ready.connect(self.frame_ready)
         self.player.frame_changed.connect(self.frame_changed)
         self.player.cache_changed.connect(self.cache_changed)
         self.player.timeline_actived.connect(self.timeline_actived)
 
+        # Load media.
         self.player.load(path)
 
     @property
     def reader(self):
+        """Return active media reader."""
+
         return self.player.reader
 
     @property
     def frame_count(self):
+        """Return total timeline frames."""
+
         return self.player.frame_count
 
     @property
     def is_playing(self):
+        """Return playback state."""
+
         return self.player.is_playing
 
     def volume_changed(self, value):
+        """Set playback volume.
+
+        Args:
+            value (int):
+                Volume percentage (0-100).
+        """
+
         self.player.volume_changed(value)
 
     def toggle_play_pause(self):
+        """Toggle playback state."""
+
         self.player.toggle_play_pause()
 
     def backward_frame(self):
+        """Step backward one frame."""
+
         self.player.backward_frame()
 
     def forward_frame(self):
+        """Step forward one frame."""
+
         self.player.forward_frame()
 
     def set_loop(self, enabled):
+        """Enable or disable looping.
+
+        Args:
+            enabled (bool):
+                Loop playback state.
+        """
+
         self.player.set_loop()
 
     def seek(self, frame):
+        """Seek to timeline frame.
+
+        Args:
+            frame (int):
+                Target timeline frame.
+        """
+
         self.player.seek(frame)
 
     def set_aov(self, aov):
+        """Set active AOV.
+
+        Args:
+            aov (str):
+                AOV name.
+        """
+
         self.player.set_aov(aov)
 
     def set_ocio(self, processor, input_space, display, view):
-        self.player.set_ocio(processor, input_space, display, view)
+        """Configure OCIO display transform.
+
+        Args:
+            processor (Processor):
+                OCIO processor.
+
+            input_space (str):
+                Source color space.
+
+            display (str):
+                OCIO display.
+
+            view (str):
+                OCIO view.
+        """
+
+        if self.player:
+            self.player.set_ocio(processor, input_space, display, view)
+        else:
+            self.ocio_processor = processor
+            self.input_space = input_space
+            self.display = display
+            self.view = view
 
 
 class SequencePlayer(BasePlayer):
@@ -124,37 +300,6 @@ class SequencePlayer(BasePlayer):
 
         cache_changed(list):
             Emits cached frame numbers.
-
-    Attributes:
-        reader:
-            Current media reader instance.
-
-        cache (FrameCache):
-            In-memory frame cache.
-
-        current_frame (int):
-            Current playback frame.
-
-        start_frame (int):
-            Timeline start frame.
-
-        end_frame (int):
-            Timeline end frame.
-
-        frame_count (int):
-            Total media frame count.
-
-        current_aov (str):
-            Current active AOV/layer.
-
-        is_playing (bool):
-            Playback state.
-
-        loop_enabled (bool):
-            Loop playback state.
-
-        timer (QtCore.QTimer):
-            Playback timer.
 
     Example:
         >>> player = MediaPlayer()
@@ -338,9 +483,7 @@ class SequencePlayer(BasePlayer):
         # Update Playback State
         self.is_playing = False
 
-        # Restore Displayed Frame
-        # self.current_frame = self.displayed_frame
-
+        # Emit the false
         self.timeline_actived.emit(self.is_playing)
 
     def set_loop(self, enabled):
@@ -531,7 +674,9 @@ class SequencePlayer(BasePlayer):
         # Store OCIO View
         self.view = view
 
-        self.ocio_processor.set_display_transform(input_space, display, view)
+        # Configure the processor using the selected display transform.
+        if self.ocio_processor:
+            self.ocio_processor.set_display_transform(input_space, display, view)
 
         # Refresh Current Frame
         self.update_frame()
@@ -588,49 +733,91 @@ class SequencePlayer(BasePlayer):
 
 
 class MoviePlayer(BasePlayer):
+    """Movie playback engine.
+
+    This class is responsible for playback of compressed movie files
+    using PyAV/FFmpeg. It coordinates video decoding, audio playback,
+    timeline synchronization, frame buffering, seeking and display.
+
+    Responsibilities:
+        * Decode movie frames.
+        * Decode audio frames.
+        * Synchronize video and audio playback.
+        * Manage playback timeline.
+        * Support frame stepping.
+        * Support timeline seeking.
+        * Support loop playback.
+        * Apply OCIO display transforms.
+        * Maintain decoded frame buffers.
+    """
 
     def __init__(self):
+        """Initialize movie player."""
+
         super().__init__()
 
-        # Frame Cache
+        # Frame Cache, Cache decoded frames for faster access.
         self.cache = FrameCache(max_size=constants.VL_FRAME_CACHE_MAX_SIZE)
 
-        # Playback Reader
+        # Media Reader
         self.reader = None
+
+        # Audio playback engine.
         self.audio_player = AudioPlayer()
 
+        # Decoded Buffers, Buffered decoded video frames.
         self.video_queue = deque()
+
+        # Buffered decoded audio frames.
         self.audio_queue = deque()
 
+        # Playback Timer
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_playback)
 
+        # High-resolution playback clock.
         self.elapsed_timer = QtCore.QElapsedTimer()
 
+        # Playback position (seconds).
         self.playback_offset = 0.0
 
+        # Current playback state.
         self.is_playing = False
+
+        # Loop playback state.
         self.loop_enabled = False
 
-        # Timeline State
+        # Timeline start frame.
         self.start_frame = constants.VL_START_FRAME
+
+        # Total timeline frames.
         self.frame_count = 0
 
-        # Playback FPS
+        # Playback frame rate.
         self.fps = None
 
-        # Active AOV
+        # Active image layer (AOV).
         self.current_aov = "rgb"
 
-        # OCIO State
+        # Active OCIO processor
         self.ocio_processor = None
+
+        # Current input color space.
         self.input_space = None
+
+        # Active display.
         self.display = None
+
+        # Active view.
         self.view = None
 
     def reset(self):
-        """
-        Reset the current playback session.
+        """Reset playback session.
+
+        Stops playback, closes the current media reader, clears decoded frame buffers and restores the playback state to its initial values.
+
+        Notes:
+            This method is called before loading a new movie.
         """
 
         # Stop playback.
@@ -655,501 +842,910 @@ class MoviePlayer(BasePlayer):
         self.is_playing = False
 
     def load(self, path):
+        """Load a movie into the player.
 
-        # Create Reader
+        This method resets the current playback session, opens the specified movie, initializes audio playback (if available),
+        displays the first frame, and preloads the initial decode buffers.
+
+        Playback flow:
+            1. Reset previous playback session.
+            2. Create movie reader.
+            3. Initialize audio output.
+            4. Read movie information.
+            5. Display the first frame.
+            6. Pre-buffer video and audio packets.
+            7. Notify the timeline that the cache is empty.
+
+        Args:
+            path (str):
+                Absolute path to the movie file.
+
+        Notes:
+            The movie is loaded in a paused state. Playback does not
+            begin until :meth:`play` is called.
+        """
+
+        # Reset the previous playback session and release resources.
         self.reset()
+
+        # Open the movie file and create a playback reader.
         self.reader = MovieReader(path)
 
+        # Initialize the audio output device when an audio stream exists.
         if self.reader.has_audio():
             self.audio_player.initialize(
                 self.reader.sample_rate(),
                 self.reader.channels(),
             )
 
+        # Store total timeline frame count.
         self.frame_count = self.reader.frame_count()
 
-        # Display first frame.
+        # Seek to the first timeline frame and display it immediately.
         self.seek(self.start_frame)
 
-        # Pre-buffer.
+        # Decode a small number of packets ahead of playback.
         self.fill_movie_queue()
 
+        # Notify listeners that the playback cache starts empty.
         self.cache_changed.emit([])
 
     def current_playback_time(self):
+        """Return the current playback position.
+
+        The playback position is represented as elapsed time in seconds from the beginning of the movie.
+
+        Returns:
+            float:
+                Current playback time in seconds.
+
+        Notes:
+            During playback, the current position is calculated from the stored playback offset plus the elapsed running time.
+
+            When playback is paused, only the stored playback offset is returned.
+        """
+
+        # While playing, combine the stored playback position with the elapsed time measured by the high-resolution timer.
         if self.is_playing:
             return self.playback_offset + self.elapsed_timer.elapsed() / 1000.0
 
+        # When paused, return the last stored playback position.
         return self.playback_offset
 
     def seek(self, frame):
+        """Seek to a timeline frame.
 
-        # Stop playback.
+        Moves playback to the requested timeline frame without starting playback.
+        Video and audio buffers are flushed, the decoder is repositioned, and the requested frame is displayed immediately.
+
+        Playback flow:
+            1. Pause playback if currently playing.
+            2. Convert timeline frame to playback time.
+            3. Seek the movie decoder.
+            4. Update playback clock.
+            5. Clear decoded frame buffers.
+            6. Flush pending audio samples.
+            7. Display the requested frame.
+            8. Pre-buffer upcoming video and audio packets.
+
+        Args:
+            frame (int):
+                Timeline frame number.
+
+        Notes:
+            The playback position is synchronized using movie time rather than frame numbers.
+            This provides accurate seeking regardless of frame rate or movie time base.
+        """
+
+        # Pause playback before repositioning the decoder.
         if self.is_playing:
             self.pause()
 
-        # Convert timeline frame to seconds.
+        # Convert the timeline frame into playback time (seconds).
         seconds = (frame - self.start_frame) / self.reader.get_fps()
 
-        # Seek decoder.
+        # Reposition the movie decoder.
         video_frame = self.reader.seek_time(seconds)
 
+        # Stop if the requested position could not be decoded.
         if video_frame is None:
             return
 
-        # Update playback clock.
+        # Synchronize the playback clock with the decoded frame.
         self.playback_offset = video_frame.time
 
-        # Flush buffers.
+        # Discard buffered frames from the previous playback position.
         self.video_queue.clear()
         self.audio_queue.clear()
 
+        # Remove queued audio samples to prevent playback mismatch.
         self.audio_player.flush()
 
-        # Display immediately.
+        # Display the requested frame immediately.
         self.display_video_frame(video_frame)
 
-        # Decode new packets.
+        # Decode upcoming packets ready for playback.
         self.fill_movie_queue()
 
     def update_playback(self):
+        """Update playback.
+
+        This method is called repeatedly by the playback timer while the movie is playing.
+        It keeps the playback pipeline synchronized by decoding additional packets, updating the playback position,
+        displaying ready video frames, and submitting ready audio frames.
+
+        Playback flow:
+            1. Decode additional media packets.
+            2. Read the current playback time.
+            3. Detect end of movie.
+            4. Restart playback if looping.
+            5. Otherwise pause playback.
+            6. Display all video frames ready for presentation.
+            7. Submit all audio frames ready for playback.
+
+        Notes:
+            This method is connected to the playback timer and is executed approximately every 5 milliseconds during playback.
+
+            Video and audio synchronization is driven by playback time, ensuring both streams remain aligned regardless of decoding speed.
+        """
+
+        # Decode additional packets to keep the playback buffers filled.
         self.fill_movie_queue()
 
+        # Calculate the current playback position.
         current_time = self.current_playback_time()
 
-        if self.video_queue:
-            last = self.video_queue[-1]
-            first = self.video_queue[0]
+        # Stop or restart playback when the movie reaches the end.
+        if current_time >= self.reader.duration():
 
-            print(
-                f"time={current_time:.6f}",
-                f"first={first.time:.6f}",
-                f"last={last.time:.6f}",
-                f"queue={len(self.video_queue)}",
-            )
-
-        # End of movie.
-        if current_time >= self.reader.duration():  #  and not self.video_queue:
-
+            # Restart from the beginning when loop playback is enabled.
             if self.loop_enabled:
                 self.restart()
+
+            # Otherwise pause playback at the end of the movie.
             else:
                 self.pause()
 
             return
 
+        # Display all video frames whose presentation time has been reached.
         self.display_video(current_time)
+
+        # Submit all audio frames whose playback time has been reached.
         self.play_audio(current_time)
 
     def fill_movie_queue(self):
+        """Decode and buffer media frames.
+
+        Decodes movie packets until the target video and audio buffer sizes are reached. Maintaining a small buffer ahead of the
+        current playback position helps prevent playback stalls caused by decoding delays.
+
+        Buffer targets:
+            * Video : 5 decoded frames
+            * Audio : 20 decoded frames
+
+        Notes:
+            Video and audio packets are decoded independently and stored in separate queues.
+            These queues are continuously refilled during playback by :meth:`update_playback`.
+        """
+
+        # Continue decoding until both playback buffers reach their target sizes.
         while len(self.video_queue) < 5 or len(self.audio_queue) < 20:
+
+            # Decode the next available media frame.
             result = self.reader.next_packet()
 
+            # Stop when the decoder reaches end-of-file.
             if result is None:
                 break
 
             media_type, frame = result
 
+            # Store decoded video frames.
             if media_type == "video":
                 self.video_queue.append(frame)
+
+            # Store decoded audio frames.
             else:
                 self.audio_queue.append(frame)
 
     def display_video(self, current_time):
+        """Display ready video frames.
 
-        # playback_time = self.playback_offset + (self.elapsed_timer.elapsed() / 1000.0)
+        Displays every decoded video frame whose presentation time is less than or equal to the current playback position.
 
+        Frames are removed from the playback queue after being displayed, ensuring each frame is shown only once.
+
+        Args:
+            current_time (float):
+                Current playback position in seconds.
+
+        Notes:
+            Video presentation is driven entirely by playback time rather than frame numbers.
+            This keeps playback synchronized with the movie's presentation timestamps (PTS).
+        """
+
+        # Display every frame whose presentation time has been reached.
         while self.video_queue:
 
+            # Peek at the next decoded frame.
             frame = self.video_queue[0]
+
+            # Stop when the next frame belongs to the future.
             if frame.time > current_time:
                 break
 
+            # Remove the frame from the playback buffer.
             self.video_queue.popleft()
 
+            # Display the decoded frame.
             self.display_video_frame(frame)
 
     def display_video_frame(self, frame):
+        """Display a decoded video frame.
 
+        Converts a decoded PyAV video frame into an RGB image suitable for display, optionally applies an OpenColorIO display transform,
+        determines the corresponding timeline frame number, and emits playback signals for the viewer.
+
+        Playback flow:
+            1. Convert the decoded frame into an RGB image.
+            2. Apply the active OCIO display transform (optional).
+            3. Convert playback time into a timeline frame.
+            4. Emit the image for display.
+            5. Notify the timeline of the current frame.
+
+        Args:
+            frame (av.VideoFrame):
+                Decoded video frame.
+
+        Emits:
+            frame_ready (numpy.ndarray):
+                Image buffer ready for display.
+
+            frame_changed (int):
+                Current timeline frame number.
+
+        Notes:
+            Timeline frame numbers are calculated from the movie presentation timestamp (PTS) rather than decoder order,
+            ensuring accurate synchronization with playback time.
+        """
+
+        # Convert the decoded video frame into an RGB NumPy image.
         image = frame.to_ndarray(format="rgb24")
 
+        # Apply the active OCIO display transform when enabled.
         if self.ocio_processor:
+            # Convert the image into floating-point values expected by OCIO.
             image = image.astype(numpy.float32) / 255.0
+
+            # Apply the configured display transform.
             image = self.ocio_processor.process_image(image)
+
+            # Convert the processed image back to 8-bit RGB.
             image = (numpy.clip(image, 0.0, 1.0) * 255.0).astype(numpy.uint8)
 
-        # Timeline frame.
+        # Convert playback time into the corresponding timeline frame.
         frame_number = self.start_frame + round(frame.time * self.reader.get_fps())
 
+        # Send the image to the viewer.
         self.frame_ready.emit(image)
 
+        # Send the image to the viewer.
         self.frame_changed.emit(frame_number)
 
     def play_audio(self, current_time):
+        """Submit ready audio frames for playback.
 
+        Sends decoded audio frames to the audio output device when their presentation time has been reached.
+
+        Playback flow:
+            1. Read the next buffered audio frame.
+            2. Compare its presentation time with the current playback time.
+            3. Stop if the frame belongs to the future.
+            4. Check whether the audio device can accept more samples.
+            5. Remove the frame from the queue.
+            6. Write the audio samples to the output device.
+
+        Args:
+            current_time (float):
+                Current playback position in seconds.
+
+        Notes:
+            Audio playback is synchronized using presentation timestamps (PTS) rather than timeline frame numbers.
+
+            Audio frames remain buffered until both conditions are met:
+
+            * Their presentation time has been reached.
+            * The audio output device is ready to receive additional data.
+        """
+
+        # Continue submitting audio frames while they are ready.
         while self.audio_queue:
 
+            # Peek at the next decoded audio frame.
             frame = self.audio_queue[0]
 
+            # Stop if the frame belongs to the future.
             if frame.time > current_time:
                 break
 
+            # Wait until the audio device has buffer space available.
             if not self.audio_player.can_accept_frame(frame):
                 break
 
+            # Remove the frame from the playback buffer.
             self.audio_queue.popleft()
 
+            # Submit the decoded audio samples to the output device.
             self.audio_player.write(frame)
 
     def restart(self):
+        """Restart playback from the beginning.
 
+        Resets the playback position to the first timeline frame, rebuilds the playback buffers, and immediately resumes playback.
+
+        Playback flow:
+            1. Reset playback time.
+            2. Seek to the first timeline frame.
+            3. Restart playback.
+
+        Notes:
+            This method is primarily used when loop playback is enabled and the movie reaches the end of its duration.
+
+        See Also:
+            play()
+            seek()
+        """
+
+        # Reset playback position to the beginning of the movie.
         self.playback_offset = 0.0
 
+        # Seek to the first timeline frame.
         self.seek(self.start_frame)
 
+        # Resume playback.
         self.play()
 
     def toggle_play_pause(self):
         """Toggle playback state.
 
-        Behavior:
-            - Stops playback if currently playing
-            - Starts playback if currently stopped
+        Switches the current playback state between playing and paused.
 
-        Example:
-            >>> player.toggle_play_pause()
+        Playback flow:
+            1. Check the current playback state.
+            2. Pause playback if the movie is playing.
+            3. Resume playback if the movie is paused.
+
+        Notes:
+            This method is typically connected to the Play/Pause toolbar button and keyboard shortcuts.
+
+            Playback always resumes from the current playback position.
+            The movie is never restarted unless :meth:`restart` or :meth:`seek` is explicitly called.
+
+        See Also:
+            play()
+            pause()
         """
 
-        # Toggle Playback State
+        # Pause playback when the movie is currently playing.
         if self.is_playing:
             self.pause()
+
+        # Otherwise resume playback from the current position.
         else:
             self.play()
 
     def play(self):
+        """Start or resume playback.
 
+        Starts the playback timer, resumes audio playback, and begins advancing the movie from the current playback position.
+
+        Playback flow:
+            1. Ignore the request if playback is already active.
+            2. Restart the playback timer.
+            3. Resume audio playback.
+            4. Start the playback update timer.
+            5. Mark the player as playing.
+
+        Notes:
+            Playback always resumes from the current playback position.
+            To restart the movie from the beginning, call
+            :meth:`restart` instead.
+
+        See Also:
+            pause()
+            restart()
+        """
+
+        # Ignore duplicate play requests.
         if self.is_playing:
             return
 
+        # Start measuring elapsed playback time.
         self.elapsed_timer.restart()
+
+        # Resume audio playback.
         self.audio_player.play()
+
+        # Start the playback update loop.
         self.timer.start(5)
+
+        # Update playback state.
         self.is_playing = True
 
-    def pause(self):
+        # Notify the UI that playback has started.
+        self.timeline_actived.emit(self.is_playing)
 
+    def pause(self):
+        """Pause playback.
+
+        Stops movie playback while preserving the current playback position. Playback can later be resumed from the same position by calling :meth:`play`.
+
+        Playback flow:
+            1. Ignore the request if playback is already paused.
+            2. Store the current playback position.
+            3. Stop the playback update timer.
+            4. Pause audio playback.
+            5. Update playback state.
+            6. Notify the user interface.
+
+        Notes:
+            The current playback position is stored in
+            :attr:`playback_offset`, allowing playback to resume from the exact pause position.
+
+        Emits:
+            timeline_actived (bool):
+                Emitted after playback has been paused.
+
+        See Also:
+            play()
+            restart()
+        """
+
+        # Ignore duplicate pause requests.
         if not self.is_playing:
             return
 
+        # Store the elapsed playback time before stopping.
         self.playback_offset += self.elapsed_timer.elapsed() / 1000.0
 
+        # Stop the playback update loop.
         self.timer.stop()
 
+        # Pause audio playback while keeping queued samples.
         self.audio_player.pause()
 
+        # Update playback state.
         self.is_playing = False
 
+        # Notify listeners that playback has paused.
         self.timeline_actived.emit(self.is_playing)
 
     def forward_frame(self):
+        """Advance playback by one frame.
 
+        Moves the playback position forward by a single frame without starting playback.
+
+        Playback flow:
+            1. Read the current playback time.
+            2. Advance by one frame duration.
+            3. Convert playback time into a timeline frame.
+            4. Seek to the new frame.
+
+        Notes:
+            Frame stepping is calculated using playback time instead of frame indices.
+            This ensures accurate stepping regardless of the movie frame rate or time base.
+
+        See Also:
+            backward_frame()
+            seek()
+        """
+
+        # Read the current playback position.
         current = self.current_playback_time()
 
+        # Advance by one frame duration.
         current += 1.0 / self.reader.get_fps()
 
+        # Convert playback time into a timeline frame.
         frame = self.start_frame + round(current * self.reader.get_fps())
 
+        # Display the requested frame.
         self.seek(frame)
 
     def backward_frame(self):
+        """Move playback back by one frame.
 
+        Moves the playback position backward by a single frame without starting playback.
+
+        Playback flow:
+            1. Read the current playback time.
+            2. Move back by one frame duration.
+            3. Clamp the playback position to the beginning.
+            4. Convert playback time into a timeline frame.
+            5. Seek to the new frame.
+
+        Notes:
+            Playback time is never allowed to become negative.
+
+            Frame stepping is calculated using playback time instead of frame indices.
+            This provides consistent behavior across all supported frame rates.
+
+        See Also:
+            forward_frame()
+            seek()
+        """
+
+        # Read the current playback position.
         current = self.current_playback_time()
 
+        # Move back by one frame duration.
         current -= 1.0 / self.reader.get_fps()
 
+        # Prevent playback before the beginning of the movie.
         current = max(0.0, current)
 
+        # Convert playback time into a timeline frame.
         frame = self.start_frame + round(current * self.reader.get_fps())
 
+        # Display the requested frame.
         self.seek(frame)
 
     def set_loop(self, enabled):
-        """Enable or disable playback looping.
+        """Enable or disable loop playback.
+
+        Updates the playback loop state. When loop playback is enabled, the movie automatically restarts after reaching the end.
 
         Args:
             enabled (bool):
-                Loop playback state.
+                True to enable loop playback, otherwise False.
 
-        Example:
-            >>> player.set_loop(True)
+        Notes:
+            Loop playback is evaluated by :meth:`update_playback` when the current playback time reaches the movie duration.
+
+        See Also:
+            restart()
+            update_playback()
         """
 
-        # Update Loop State
+        # Store the loop playback state.
         self.loop_enabled = enabled
 
     def volume_changed(self, value):
-        # self.audio_player.volume = value
+        """Update playback volume.
+
+        Sets the output volume of the audio playback device.
+
+        Args:
+            value (int):
+                Playback volume as a percentage.
+
+                Typical range:
+                    0   = Mute
+                    100 = Original volume
+
+        Notes:
+            The volume is applied immediately without interrupting playback.
+
+        See Also:
+            AudioPlayer.set_volume()
+        """
+
+        # Forward the new volume level to the audio device.
         self.audio_player.set_volume(value)
 
     def set_aov(self, aov):
-        pass
+        """Set the active image layer (AOV).
 
-    def set_ocio(self, processor, input_space, display, view):
+        Updates the active Arbitrary Output Variable (AOV) used for playback.
 
-        # Store OCIO Processor
-        self.ocio_processor = processor
-
-        # Store OCIO Input Space
-        self.input_space = input_space
-
-        # Store OCIO Display
-        self.display = display
-
-        # Store OCIO View
-        self.view = view
-
-        self.ocio_processor.set_display_transform(input_space, display, view)
-
-    def update_sequence(self):
-        """Load and display current frame.
-
-        Frame update flow:
-            1. Check frame cache
-            2. Read frame if needed
-            3. Cache frame
-            4. Emit playback signals
-
-        Emits:
-            frame_ready:
-                Current image buffer.
-
-            frame_changed:
-                Current frame number.
-
-            cache_changed:
-                Cached frame list.
+        Args:
+            aov (str):
+                Name of the image layer to display.
 
         Notes:
-            Cached frames avoid repeated disk reads.
+            Movie playback currently supports only the default RGB layer.
+
+            Image sequence playback may override this method to support multi-layer formats such as OpenEXR.
+
+        See Also:
+            SequencePlayer.set_aov()
         """
 
-        # Validate Reader
-        if not self.reader:
-            return
+        # Store the active image layer.
+        self.current_aov = aov
 
-        if self.cache.cache and self.current_frame in self.cache.cache:
-            # Read From Cache
-            frame = self.cache.cache[self.current_frame]
-        else:
-            # Read From Media Reader
-            frame = self.reader.get_frame(
-                self.current_frame,
-                aov=self.current_aov,
-                ocio_processor=self.ocio_processor,
-            )
+    def set_ocio(self, processor, input_space, display, view):
+        """Configure the OpenColorIO display transform.
 
-        # Store Frame Into Cache
-        self.cache.add(self.current_frame, frame)
-        self.cache_changed.emit(self.cache.cached_frames())
+        Stores the OpenColorIO processor and display settings used to convert decoded movie frames into the desired display color space before presentation.
 
-        # Emit Viewer Signals
-        self.frame_ready.emit(frame)
-        self.frame_changed.emit(self.current_frame)
+        Args:
+            processor (OcioProcessor):
+                OpenColorIO image processor.
+
+            input_space (str):
+                Source color space of the media.
+
+            display (str):
+                OCIO display device.
+
+            view (str):
+                OCIO display view.
+
+        Notes:
+            The configured processor is applied to every displayed video frame by :meth:`display_video_frame`.
+
+            Passing ``None`` as the processor disables OCIO processing.
+
+        See Also:
+            display_video_frame()
+        """
+
+        # Store the active OCIO processor.
+        self.ocio_processor = processor
+
+        # Store the source color space.
+        self.input_space = input_space
+
+        # Store the active display.
+        self.display = display
+
+        # Store the active display view.
+        self.view = view
+
+        # Configure the processor using the selected display transform.
+        if self.ocio_processor:
+            self.ocio_processor.set_display_transform(input_space, display, view)
 
 
 class AudioPlayer(QtCore.QObject):
-    """
-    Audio output wrapper around QAudioSink.
+    """Audio playback device.
 
-    Responsible only for audio playback.
+    Responsible for playback of decoded PCM audio using the Qt Multimedia framework.
+
+    Responsibilities:
+        * Initialize the audio output device.
+        * Start, pause and stop playback.
+        * Accept decoded audio frames.
+        * Submit PCM samples to the output device.
+        * Flush buffered audio after seeking.
+        * Control playback volume.
+        * Release audio resources.
+
+    Notes:
+        Audio frames supplied by MovieReader are converted into 16-bit PCM samples before being written to the Qt audio device.
     """
 
     def __init__(self):
+        """Initialize the audio player.
+
+        Creates the audio playback controller. The actual audio device is created later by :meth:`initialize`.
+
+        Notes:
+            The playback device remains uninitialized until a movie with an audio stream is loaded.
+        """
+
         super().__init__()
 
+        # Qt audio playback device.
         self.audio_sink = None
+
+        # Writable PCM output stream.
         self.io_device = None
 
+        # Audio format information.
         self.sample_rate = 0
         self.channels = 0
 
+        # Playback volume (0.0 - 1.0).
         self.volume = 1.0
 
-    # ------------------------------------------------------------------
-    # Initialization
-    # ------------------------------------------------------------------
-
     def initialize(self, sample_rate, channels):
-        """
-        Initialize the audio device.
+        """Initialize the audio output device.
+
+        Creates a Qt audio playback device using the specified sample rate and channel configuration.
 
         Args:
             sample_rate (int):
                 Audio sample rate.
 
             channels (int):
-                Number of audio channels.
+                Number of playback channels.
+
+        Notes:
+            Existing audio devices are automatically released before creating a new one.
         """
 
+        # Release the previous audio device.
         self.close()
 
+        # Store audio format information.
         self.sample_rate = sample_rate
         self.channels = channels
 
+        # Configure the playback format.
         fmt = QtMultimedia.QAudioFormat()
         fmt.setSampleRate(sample_rate)
         fmt.setChannelCount(channels)
         fmt.setSampleFormat(QtMultimedia.QAudioFormat.Int16)
 
+        # Create the Qt audio playback device.
         self.audio_sink = QtMultimedia.QAudioSink(fmt)
 
+        # Increase the playback buffer size for smoother playback.
         self.audio_sink.setBufferSize(65536)
 
+        # Restore the current playback volume.
         self.audio_sink.setVolume(self.volume)
 
+        # Playback stream will be created on first play().
         self.io_device = None
 
-    # ------------------------------------------------------------------
-    # Playback
-    # ------------------------------------------------------------------
-
     def play(self):
-        """
-        Start audio playback.
+        """Start or resume audio playback.
+
+        Playback flow:
+            1. Ignore playback when no audio device exists.
+            2. Create the output stream if playback has not started.
+            3. Otherwise resume playback.
+
+        Notes:
+            The first playback call creates the writable output stream. Subsequent calls simply resume playback.
         """
 
+        # Ignore playback when audio is unavailable.
         if self.audio_sink is None:
             return
 
+        # Create the output stream on first playback.
         if self.io_device is None:
-
             self.io_device = self.audio_sink.start()
 
+        # Resume playback.
         else:
-
             self.audio_sink.resume()
 
     def pause(self):
-        """
-        Pause playback.
+        """Pause audio playback.
+
+        Temporarily suspends playback while preserving queued audio samples.
+
+        Notes:
+            Playback can later resume from the same position by calling :meth:`play`.
         """
 
+        # Suspend playback.
         if self.audio_sink:
-
             self.audio_sink.suspend()
 
     def stop(self):
-        """
-        Stop playback.
+        """Stop audio playback.
+
+        Stops playback and destroys the active output stream.
+
+        Notes:
+            Unlike :meth:`pause`, playback resumes from the beginning after calling :meth:`play`.
         """
 
+        # Stop playback.
         if self.audio_sink:
-
             self.audio_sink.stop()
 
+            # Output stream becomes invalid.
             self.io_device = None
 
-    # ------------------------------------------------------------------
-    # Buffer
-    # ------------------------------------------------------------------
-
-    def flush(self):
-        """
-        Flush pending audio.
-        """
-
-        self.pause()
-
-        self.play()
-
     def can_accept_frame(self, frame):
-        """
-        Return True if enough buffer space is available.
+        """Return whether the playback device can accept another frame.
+
+        Args:
+            frame (av.AudioFrame):
+                Decoded audio frame.
+
+        Returns:
+            bool:
+                True when sufficient playback buffer space exists.
         """
 
+        # Audio device unavailable.
         if self.audio_sink is None:
             return False
 
+        # Playback has not started.
         if self.io_device is None:
             return False
 
+        # Calculate the required PCM buffer size.
         required = frame.samples * self.channels * 2
 
+        # Compare against the available playback buffer.
         return self.audio_sink.bytesFree() >= required
 
     def write(self, frame):
-        """
-        Write decoded audio frame.
+        """Write a decoded audio frame.
+
+        Converts decoded audio into signed 16-bit PCM samples before submitting them to the Qt audio output device.
+
+        Args:
+            frame (av.AudioFrame):
+                Decoded audio frame.
         """
 
+        # Ignore invalid frames.
         if frame is None:
             return
 
+        # Playback stream unavailable.
         if self.io_device is None:
             return
 
+        # Convert decoded audio into a NumPy array.
         pcm = frame.to_ndarray()
 
+        # Convert floating-point samples into signed 16-bit PCM.
         if pcm.dtype == numpy.float32:
-
             pcm = (numpy.clip(pcm, -1.0, 1.0) * 32767.0).astype(numpy.int16)
 
+        # Interleave multi-channel audio.
         if pcm.ndim == 2:
-
             pcm = pcm.T.reshape(-1)
 
+        # Submit samples to the playback device.
         self.io_device.write(pcm.tobytes())
 
-    # ------------------------------------------------------------------
-    # Settings
-    # ------------------------------------------------------------------
-
     def set_volume(self, volume):
-        """
-        Set playback volume.
+        """Set playback volume.
 
         Args:
             volume (float):
-                Range [0.0, 1.0].
+                Playback volume between 0.0 and 1.0.
+
+        Notes:
+            Volume changes are applied immediately without interrupting playback.
         """
 
+        # Clamp the requested volume.
         self.volume = max(0.0, min(volume, 1.0))
 
+        # Apply the new volume.
         if self.audio_sink:
-
             self.audio_sink.setVolume(self.volume)
 
-    # ------------------------------------------------------------------
-    # Cleanup
-    # ------------------------------------------------------------------
-
     def close(self):
-        """
-        Release audio device.
+        """Release audio resources.
+
+        Stops playback and destroys the current Qt audio device.
+
+        Notes:
+            Called automatically when loading a new movie or shutting down the player.
         """
 
+        # Destroy the playback device.
         if self.audio_sink:
-
             self.audio_sink.stop()
-
             self.audio_sink.deleteLater()
 
+        # Reset playback resources.
         self.audio_sink = None
         self.io_device = None
 
     def flush(self):
-        """
-        Clear pending audio.
+        """Flush buffered audio samples.
 
-        Recreates the underlying audio output so playback resumes
-        with an empty buffer.
+        Clears all queued audio samples from the playback device.
+
+        Notes:
+            This method is typically called after seeking to prevent playback of samples belonging to the previous timeline position.
         """
 
+        # Ignore when audio is unavailable.
         if self.audio_sink is None:
             return
 
+        # Clear buffered samples.
         self.audio_sink.reset()
 
+        # Create a fresh writable stream.
         self.io_device = self.audio_sink.start()
 
 

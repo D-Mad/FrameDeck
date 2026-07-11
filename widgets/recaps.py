@@ -90,20 +90,27 @@ from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 from widgets.styles import WaitCursor
+
 from widgets.labels import RightLabel
+from widgets.labels import ImageViewLabel
+
 from widgets.dialogs import FileDialog
+
 from widgets.buttons import TextButton
 from widgets.buttons import RemoveButton
 from widgets.buttons import AttachButton
-from widgets.labels import ImageViewLabel
-from widgets.messagebox import MessageBox
 from widgets.buttons import SnapshotButton
+
+from widgets.messagebox import MessageBox
+
 from widgets.layouts import VerticalLayout
 from widgets.layouts import VerticalSplitter
 from widgets.layouts import HorizontalSpacer
 from widgets.layouts import HorizontalLayout
-from widgets.textedits import ReviewTextEdit
 from widgets.layouts import HorizontalLineFrame
+
+from widgets.textedits import ReviewTextEdit
+
 from widgets.comboboxs import ReviewTypeCombobox
 from widgets.comboboxs import StatusTypeCombobox
 

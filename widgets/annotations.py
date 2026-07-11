@@ -105,7 +105,6 @@ Notes:
 
 from __future__ import absolute_import
 
-import math
 import copy
 import uuid
 
@@ -113,7 +112,6 @@ import constants
 
 from PySide6 import QtGui
 from PySide6 import QtCore
-from PySide6 import QtWidgets
 
 from widgets.styles import Font
 from widgets.styles import StrokePen
@@ -171,7 +169,7 @@ class Sketch(object):
         self.drawing = False
 
         # Brush configuration, active brush color
-        self.color = (255, 0, 0)
+        self.color = constants.DEFAULT_SKETCH_COLOR
 
         # ----------------------------
         # Brush configuration

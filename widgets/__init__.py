@@ -36,21 +36,26 @@ from PySide6 import QtWidgets
 from ocio import OCIOProcessor
 
 from widgets.ocio import OcioWidget
+
 from widgets.viewer import ViewFrame
+
 from widgets.pixmaps import PathPixmap
+from widgets.pixmaps import NamePixmapIcon
+
 from widgets.buttons import HelpButton
-from widgets.dialogs import FileDialog
 from widgets.buttons import ThemeButton
-from playback.player import MoviePlayer
+
+from widgets.dialogs import FileDialog
+from widgets.dialogs import OpenMediaDialog
+
 from playback.player import MediaPlayer
 
 from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
 from widgets.labels import CopyrightLabel
-from widgets.pixmaps import NamePixmapIcon
-from widgets.layouts import VerticalLayout
-from widgets.dialogs import OpenMediaDialog
 from widgets.playlist import PlaylistWidget
+
+from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalLayout
 from widgets.layouts import HorizontalSplitter
 
@@ -393,8 +398,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reset_video_fps()
 
     def trigger_timeline(self, typed, enabled):
-
-        print("\ntyped", typed)
         if typed == "backward":
             self.backward_frame()
 
