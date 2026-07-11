@@ -11,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # Upgraded v3 -> v4
+        uses: actions/checkout@v6  # Upgraded to v6 for Node.js 24 support
 
       - name: Set up Python
-        uses: actions/setup-python@v5  # Upgraded v4 -> v5
+        uses: actions/setup-python@v6  # Upgraded to v6 for Node.js 24 support
         with:
           python-version: '3.x'
 
@@ -27,10 +27,10 @@ jobs:
           mkdocs build
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5  # Upgraded v3 -> v5
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3  # Upgraded v1 -> v3 (Fixes the error!)
+        uses: actions/upload-pages-artifact@v3
         with:
           path: ./site
 
@@ -50,4 +50,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4  # Upgraded v2 -> v4
+        uses: actions/deploy-pages@v4
