@@ -1,6 +1,6 @@
 site_name: Viewline docs
 site_url: https://github.com/subing85
-use_directory_urls: false
+use_directory_urls: ture
 
 theme:
   name: readthedocs
