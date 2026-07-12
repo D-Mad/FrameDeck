@@ -19,6 +19,15 @@ The OpenColorIO configuration file must also be available.
 
 ---
 
+### Download latest version
+
+<p>
+    <a href="https://github.com/subing85/viewline/releases" download>
+        📥 Viewline
+    </a>
+</p>
+
+
 ### Windows
 
 Create a launcher batch file (`viewline.bat`) similar to the following.
