@@ -1,0 +1,86 @@
+# Bug Report
+
+Thank you for taking the time to report an issue. Please complete this template with as much detail as possible. Accurate and complete information helps us reproduce and resolve the problem more quickly.
+
+---
+
+## Summary
+
+Provide a brief description of the issue.
+
+**Summary:**
+
+---
+
+## Environment
+
+| Item | Value |
+|------|-------|
+| Application Version | |
+| Operating System | |
+| Python Version | |
+| Graphics Card | |
+| Media Type | |
+
+---
+
+## Steps to Reproduce
+
+Describe the steps required to reproduce the issue.
+
+1.
+2.
+3.
+
+---
+
+## Expected Result
+
+Describe what you expected to happen.
+
+---
+
+## Actual Result
+
+Describe what actually happened.
+
+---
+
+## Error Message
+
+If an error message or Python traceback was displayed, paste it below.
+
+```text
+
+```
+
+---
+
+## Attachments
+
+Please attach any relevant files.
+
+- [ ] Screenshot(s)
+- [ ] Screen Recording (optional)
+- [ ] Sample Media (optional)
+- [ ] Crash Report
+- [ ] Other  (optional)
+
+---
+
+## Additional Information
+
+Include any additional information that may help us reproduce or diagnose the issue.
+
+---
+
+## Contact Information *(Optional)*
+
+| Item | Value |
+|------|-------|
+| Name | |
+| Email | |
+
+---
+
+**Thank you for your bug report.** Your feedback helps us improve Viewline.

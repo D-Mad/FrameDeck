@@ -1,5 +1,6 @@
 # Welcome to <img src="resources/viewline.png" alt="Demo" width="32" height="32" style="vertical-align: middle;"> Viewline Docs 
 
+
 <p style="text-align: justify;">
 <span style="color:green;">Viewline</span> is a professional Python-based review player framework for VFX, animation, and post-production workflows. It provides accurate frame-based and time-based playback for image sequences and movie files while integrating seamlessly with production management and publishing workflows.
 </p>

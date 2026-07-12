@@ -17,17 +17,20 @@ Before creating a bug report, please verify the following:
 
 Download the template below, complete all relevant fields, and attach it to your email.
 
+
 <p>
-    <a href="downloads/BugReport.md" download>
-        📥 Download BugReport.md
+    <a href="resources/bug-report.md.txt" download>
+        📥 Download Bug-Report.md
     </a>
 </p>
 
+
 <p>
-    <a href="downloads/BugReport.docx" download>
-        📥 Download BugReport.docx
+    <a href="resources/bug-report.docx" download>
+        📥 Download Bug-Report.docx
     </a>
 </p>
+
 
 ---
 
