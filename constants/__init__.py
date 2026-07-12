@@ -8,7 +8,7 @@ Module:
     ./constants/__init__.py
 
 Description:
-    This module contains all application-wide configuration values used throughout the Review Player framework.
+    This module contains all application-wide configuration values used throughout the Viewline framework.
 
 The constants defined here are shared across:
     - Playback systems
@@ -89,7 +89,7 @@ Attributes:
 Example:
     >>> import constants
     >>> print(constants.VL_TOOL_NAME)
-    MC - Review Player
+    MC - Viewline
 
     >>> fps = constants.DEFULT_FPS["value"]
     >>> print(fps)
@@ -109,9 +109,9 @@ from __future__ import absolute_import
 
 STUDIO_NAME = "motion-craft"
 
-VL_TOOL_NAME = "MC - Review Player"
+VL_TOOL_NAME = "MC - Viewline"
 
-VL_TOOL_ICON = "mc-review-player"
+VL_TOOL_ICON = "mc-viewline"
 
 VL_VERSION = "0.0.1-beta.1"
 

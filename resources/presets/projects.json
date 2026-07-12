@@ -5,7 +5,7 @@
         "code": "TST-1",
         "name": "Test-01",
         "created_at": "2026-03-15 12:19:13:AM",
-        "image": "D:/works/developments/review_player/resources/icons/poster-01.png",
+        "image": "/icons/test-project-01",
         "sg_description": "pipeline test 01 project"
     },
     {
@@ -14,17 +14,8 @@
         "code": "TST-2",
         "name": "Test Dev Project 2",
         "created_at": "2026-04-01 11:32:30:PM",
-        "image": "D:/works/developments/review_player/resources/icons/poster-02.png",
+        "image": "/icons/test-project-02.png",
         "sg_description": "test 02"
-    },
-    {
-        "type": "Project",
-        "id": 289,
-        "code": "TST-4",
-        "name": "Test Project 4",
-        "created_at": "2026-04-24 08:04:37:PM",
-        "image": "D:/works/developments/review_player/resources/icons/poster-03.png",
-        "sg_description": "dev test project"
     },
     {
         "type": "Project",
@@ -32,7 +23,7 @@
         "code": "SCE",
         "name": "Super Chase",
         "created_at": "2026-04-26 10:41:45:PM",
-        "image": "D:/works/developments/review_player/resources/icons/poster-05.png",
+        "image": "/icons/super-chase.png",
         "sg_description": null
     }
 ]

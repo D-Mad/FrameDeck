@@ -6,5 +6,8 @@ theme:
   name: readthedocs
 
 nav:
-  - Home: home.md
-  - Playback: playback.md
+  - Home: index.md
+  - Architecture: architecture.md
+  - Studio Integration: integration.md
+  - How to Run?: call.md
+  - Support: support.md  
