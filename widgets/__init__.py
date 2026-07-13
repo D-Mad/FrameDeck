@@ -510,10 +510,10 @@ class MainWindow(QtWidgets.QMainWindow):
         Open support or documentation URL.
         """
 
-        LOGGER.info(f"Support, {constants.WEBL_DOC_INK}")
+        LOGGER.info(f"Support, {constants.WEB_DOC_LINK}")
 
         # Open help URL in browser
-        utils.openUrl(constants.WEBL_DOC_INK)
+        utils.openUrl(constants.WEB_DOC_LINK)
 
 
 if __name__ == "__main__":
