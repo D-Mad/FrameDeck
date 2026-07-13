@@ -2,7 +2,7 @@
 
 Found an issue while using **Viewline**? I appreciate your feedback.
 
-Please report bugs by emailing the completed bug report template to the support team.
+Please report bugs by emailing the completed bug report template to me.
 
 
 Before creating a bug report, please verify the following:

@@ -1,4 +1,4 @@
-# Welcome to <img src="resources/viewline.png" alt="Demo" width="32" height="32" style="vertical-align: middle;"> Viewline Docs 
+# Welcome to <img src="resources/viewline.png" alt="Demo" width="32" height="32" style="vertical-align: middle;"> Viewline Doc
 
 
 <p style="text-align: justify;">
