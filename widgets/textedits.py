@@ -56,6 +56,7 @@ Notes:
 
 from __future__ import absolute_import
 
+from PySide6 import QtCore
 from PySide6 import QtWidgets
 
 
@@ -94,9 +95,11 @@ class ReviewTextEdit(QtWidgets.QTextEdit):
 
         # Fixed-height vertical sizing policy
         sizepolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed
         )
         self.setSizePolicy(sizepolicy)
+
+        self.setMinimumSize(QtCore.QSize(0, 80))
 
     def getValue(self):
         """

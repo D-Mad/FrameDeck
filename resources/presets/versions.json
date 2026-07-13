@@ -2,7 +2,7 @@
     {
         "type": "Version",
         "id": 2996,
-        "code": "sample PNG",
+        "code": "shot-101",
         "project": {
             "id": 358,
             "name": "Super Chase",
@@ -32,7 +32,7 @@
     {
         "type": "Version",
         "id": 2997,
-        "code": "RUN shot-info-101",
+        "code": "shot-102",
         "project": {
             "id": 358,
             "name": "Super Chase",

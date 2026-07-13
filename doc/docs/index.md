@@ -17,7 +17,7 @@ This project is to provide a lightweight, extensible, and production-friendly fr
 * Frame-accurate playback.
 * Audio and video synchronization.
 * Timeline navigation and scrubbing.
-* Playback controls (Play, Pause, Stop, Loop, Frame Step).
+* Playback controls (Play, Pause, Loop, Frame Step).
 * OpenColorIO (OCIO) color management. (in progress)
 * Cache visualization.
 * AOV (Arbitrary Output Variable) switching.

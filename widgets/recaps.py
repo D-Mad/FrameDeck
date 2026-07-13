@@ -286,6 +286,7 @@ class OutputWidget(QtWidgets.QScrollArea):
             importlib.reload(scripts)
 
             from scripts import Review
+
             valid, result = Review.get(self.context, reverse=True)
 
         if not valid:

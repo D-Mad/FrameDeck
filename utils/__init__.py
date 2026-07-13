@@ -554,7 +554,7 @@ def copyFile(source, destination, delete=False):
     return pathResolver(copiedFile)
 
 
-def redirectPreset(preset, traget):
+def redirectPreset(preset, target):
     context_list = resources.getPreset(preset)
 
     for context in context_list:
@@ -566,36 +566,52 @@ def redirectPreset(preset, traget):
             folder = dirname(context["image"])
 
             source = pathResolver(resources.CURRENT_PATH, filename=context["image"])
-            destination = pathResolver(traget, folders=[folder], filename=f"{numid}.{extension}")
+            destination = pathResolver(target, folders=[folder], filename=f"{numid}.{extension}")
 
             context["image"] = f"{folder}/{numid}.{extension}"
 
             copyFile(source, destination)
-        
+
         if context.get("media"):
+            # Resolve source files
             filepath = pathResolver(resources.CURRENT_PATH, filename=context["media"])
-
             files = getSequence(filepath)
+
+            if not files:
+                continue
+
+            # Generate unique numeric ID and extract path components once
             numid = numericId()
+            folder = dirname(context["media"])
+            base_name = fileName(context["media"])
+            extension = fileExtension(context["media"])
 
-            for file in files:
-                folder = dirname(context["media"])
-                filename = fileName(context["media"])
-                extension = fileExtension(context["media"])
+            if len(files) > 1:
+                # For image sequences (e.g., render.####.exr)
+                name_parts = base_name.rsplit(".", 1)
+                padding = name_parts[1] if len(name_parts) > 1 else "####"  # e.g., "####"
 
-                filenames = filename.rsplit(".", 1)
+                # Update context once for the whole sequence pattern
+                context["media"] = f"{folder}/{numid}.{padding}.{extension}"
 
-                if len(filenames) > 1:
-                    new_filename = f"{numid}.{filenames[1]}.{extension}"
-                else:
-                    new_filename = f"{numid}.{extension}"
+                # Copy each file in the sequence
+                for file in files:
+                    # Assuming individual files in the sequence have actual frame numbers,
+                    # we extract the frame number from the current file name to keep them unique
+                    actual_frame = fileName(file).rsplit(".", 2)[1]  # Extracts the frame number
 
-                context["media"] = f"{folder}/{numid}.{extension}"
+                    new_filename = f"{numid}.{actual_frame}.{extension}"
+                    destination = pathResolver(target, folders=[folder], filename=new_filename)
+                    copyFile(file, destination)
+            else:
+                # For single files (e.g., .mp4)
+                file = files[0]
+                new_filename = f"{numid}.{extension}"
 
-                destination = pathResolver(traget, folders=[folder], filename=new_filename)
-
+                context["media"] = f"{folder}/{new_filename}"
+                destination = pathResolver(target, folders=[folder], filename=new_filename)
                 copyFile(file, destination)
-    
+
     return context_list
 
 
