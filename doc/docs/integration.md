@@ -54,7 +54,10 @@ class Projects
 
 <span style="color:green;">Use this file as a reference for the expected data structure.</span>
 
+<p style="text-align: justify;">
 The returned data should contain the information required to populate the Project Browser, such as:
+</p>
+
 
 ```json
     {
@@ -141,9 +144,12 @@ class Versions
 
 
 ## Review Notes
->* Review Notes are used to display existing comments and submit new feedback during playback.
->* The default implementation stores review notes in a JSON file.
->* Production environments should replace this implementation with database queries and write operations.
+
+>* <p style="text-align: justify;">Review Notes are used to display existing comments and submit new feedback during playback.</p>
+>* <p style="text-align: justify;">The default implementation stores review notes in a JSON file.</p>
+>* <p style="text-align: justify;">Production environments should replace this implementation with database queries and write operations.</p>
+
+
 
 **1, Modify the following method for <span style="color:green;">query</span> existing review notes:**
 
