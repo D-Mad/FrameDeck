@@ -63,6 +63,7 @@ from widgets.styles import SetStylesheet
 from widgets.playlist import PlaylistWidget
 from widgets.shotstrip import ShotSequenceWidget
 from widgets.cachemanager import CacheManagerDialog
+from widgets.comments import CommentSidebar
 from widgets.videoexport import VideoExportDialog
 from widgets.imageexport import ImageSequenceExportDialog
 
@@ -186,6 +187,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recapsWidget = RecapsWidget(self)
         self.splitter.addWidget(self.recapsWidget)
 
+        self.commentSidebar = CommentSidebar(self)
+        self.commentSidebar.set_sketch(self.viewframe.viewer.annotations)
+        self.commentDock = QtWidgets.QDockWidget("Review Comments", self)
+        self.commentDock.setObjectName("CommentDock")
+        self.commentDock.setAllowedAreas(
+            QtCore.Qt.DockWidgetArea.LeftDockWidgetArea
+            | QtCore.Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self.commentDock.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetClosable
+            | QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetMovable
+        )
+        self.commentDock.setWidget(self.commentSidebar)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self.commentDock)
+
         # Editorial-style horizontal shot track for playlist ordering.
         self.shotSequenceWidget = ShotSequenceWidget(self)
         self.verticallayout.addWidget(self.shotSequenceWidget)
@@ -228,6 +244,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.compare_player.frame_ready.connect(self._set_secondary_frame)
         self.player.frame_changed.connect(self._on_primary_frame_changed)
         self.player.frame_changed.connect(self.viewframe.viewer.set_current_frame)
+        self.player.frame_changed.connect(self.commentSidebar.set_current_frame)
         self.player.cache_changed.connect(self._on_primary_cache_changed)
         self.player.playback_finished.connect(self.play_next_playlist_item)
 
@@ -263,6 +280,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.viewframe.viewToolbarLayout.undo_stack.connect(self.viewframe.viewer.undo_strokes)
         self.viewframe.viewToolbarLayout.clear_stack.connect(self.viewframe.viewer.clear_strokes)
+        self.viewframe.viewToolbarLayout.clear_stack.connect(
+            self.annotation_state_changed
+        )
 
         self.viewframe.viewToolbarLayout.water_marks.connect(
             self.viewframe.viewer.set_overlay_option
@@ -282,6 +302,13 @@ class MainWindow(QtWidgets.QMainWindow):
             lambda _tool: self.exit_annotation_mode()
         )
         self.viewframe.viewer.fullscreen_requested.connect(self.toggle_fullscreen)
+        self.viewframe.viewer.comment_pin_clicked.connect(self.add_pinned_comment)
+        self.commentSidebar.add_requested.connect(self.add_frame_comment)
+        self.commentSidebar.pin_requested.connect(self.begin_pinned_comment)
+        self.commentSidebar.pin_cancel_requested.connect(self.cancel_pinned_comment)
+        self.commentSidebar.jump_requested.connect(self.jump_to_comment)
+        self.commentSidebar.done_requested.connect(self.toggle_comment_done)
+        self.commentSidebar.delete_requested.connect(self.delete_comment)
 
         # self.recapsWidget.inputWidget.trigger_snapshot.connect(self.render_snapshot)
 
@@ -423,6 +450,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionClearFrame = QtGui.QAction("Clear Notes on Frame", self)
         self.actionClearFrame.setIcon(NamePixmapIcon("clear"))
         self.actionClearFrame.triggered.connect(self.viewframe.viewer.clear_strokes)
+        self.actionClearFrame.triggered.connect(self.annotation_state_changed)
         edit_menu.addAction(self.actionClearFrame)
 
         self.actionFit = QtGui.QAction("Fit Image", self)
@@ -451,6 +479,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionRecaps.setIcon(NamePixmapIcon("txt"))
         self.actionRecaps.toggled.connect(self.recapsWidget.set_current_recaps)
         view_menu.addAction(self.actionRecaps)
+        self.actionComments = QtGui.QAction("Review Comments", self, checkable=True)
+        self.actionComments.setIcon(NamePixmapIcon("txt"))
+        self.actionComments.setShortcut(QtGui.QKeySequence("Ctrl+Alt+C"))
+        self.actionComments.setChecked(True)
+        self.actionComments.toggled.connect(self.commentDock.setVisible)
+        self.commentDock.visibilityChanged.connect(self.actionComments.setChecked)
+        view_menu.addAction(self.actionComments)
 
         self.actionPlay = QtGui.QAction("Play / Pause", self)
         self.actionPlay.setIcon(NamePixmapIcon("play"))
@@ -670,6 +705,39 @@ class MainWindow(QtWidgets.QMainWindow):
             QFrame#ViewerPanel { background: #090a0c; border: 1px solid #34373c; }
             QWidget#SourcesPanel { background: #202226; border: 1px solid #34373c; }
             QFrame#ShotTimelinePanel { background: #202226; border: 1px solid #34373c; }
+            QDockWidget#CommentDock {
+                color: #d5d7d9;
+                font-weight: 600;
+            }
+            QDockWidget#CommentDock::title {
+                background: #202226;
+                border-bottom: 1px solid #34373c;
+                padding: 7px 9px;
+                text-align: left;
+            }
+            QWidget#CommentSidebar { background: #202226; }
+            QLabel#CommentCount {
+                background: #30343a;
+                border: 1px solid #464b52;
+                border-radius: 8px;
+                color: #d3a347;
+                min-width: 20px;
+                padding: 1px 5px;
+            }
+            QLabel#CommentFrameLabel {
+                color: #aeb3b8;
+                font-size: 11px;
+                font-weight: 700;
+                padding-top: 4px;
+            }
+            QTreeWidget#CommentTree::item { min-height: 25px; }
+            QPlainTextEdit#CommentEditor {
+                background: #15171a;
+                border: 1px solid #3b3f45;
+                border-radius: 3px;
+                color: #e1e3e5;
+                padding: 5px;
+            }
             QTreeWidget, QListWidget, QScrollArea {
                 background: #15171a;
                 alternate-background-color: #1b1e21;
@@ -1028,6 +1096,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Clear current viewer frame
         self.viewframe.viewer.clear()
         self.viewframe.viewer.reset_view()
+        self.commentSidebar.set_source_available(False)
+        self.commentSidebar.refresh()
 
         if not filepath:
             return
@@ -1309,6 +1379,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.primary_compare_frame = None
         self.viewframe.viewer.clear()
         self.viewframe.viewer.reset_view()
+        self.commentSidebar.set_source_available(False)
+        self.commentSidebar.refresh()
         self.viewframe.timeline.set_range(constants.VL_START_FRAME, constants.VL_START_FRAME)
         self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
         if hasattr(self, "sourceStatusLabel"):
@@ -1592,6 +1664,76 @@ class MainWindow(QtWidgets.QMainWindow):
             return entry["start"] + int(local_frame) - constants.VL_START_FRAME
         return int(local_frame)
 
+    def add_frame_comment(self, text):
+        """Add an unpinned comment to the viewer's current local frame."""
+        frame = self.viewframe.viewer.annotations.current_frame
+        if frame is None or not self.current_source_filepath:
+            return
+        if self.viewframe.viewer.annotations.add_comment(frame, text) is None:
+            return
+        self._save_current_notes()
+        self.commentSidebar.clear_editor()
+        self.commentSidebar.refresh()
+        self.viewframe.viewer.update()
+        self.statusBar().showMessage(f"Comment added at frame {frame}", 2500)
+
+    def begin_pinned_comment(self, text):
+        """Arm one-click comment placement in the image area."""
+        if not text.strip() or not self.current_source_filepath:
+            return
+        self.exit_annotation_mode()
+        if self.actionGammaCheck.isChecked():
+            self.actionGammaCheck.setChecked(False)
+        if self.actionExposureCheck.isChecked():
+            self.actionExposureCheck.setChecked(False)
+        self.commentSidebar.set_pin_mode(True)
+        self.viewframe.viewer.set_comment_pin_mode(True)
+        self.statusBar().showMessage(
+            "Click the image to place the comment pin; Esc cancels", 5000
+        )
+
+    def add_pinned_comment(self, x, y):
+        """Commit the armed sidebar text at normalized viewer coordinates."""
+        text = self.commentSidebar.editor.toPlainText().strip()
+        frame = self.viewframe.viewer.annotations.current_frame
+        if text and frame is not None and self.current_source_filepath:
+            self.viewframe.viewer.annotations.add_comment(frame, text, x=x, y=y)
+            self._save_current_notes()
+            self.commentSidebar.clear_editor()
+            self.commentSidebar.refresh()
+            self.viewframe.viewer.update()
+            self.statusBar().showMessage(f"Pinned comment added at frame {frame}", 2500)
+        self.viewframe.viewer.set_comment_pin_mode(False)
+
+    def cancel_pinned_comment(self):
+        self.viewframe.viewer.set_comment_pin_mode(False)
+        self.commentSidebar.set_pin_mode(False)
+        self.statusBar().showMessage("Comment pin cancelled", 2000)
+
+    def jump_to_comment(self, local_frame):
+        self.seek(self._timeline_frame_for_local(local_frame))
+
+    def toggle_comment_done(self, frame, comment_id):
+        state = self.viewframe.viewer.annotations.toggle_comment_done(frame, comment_id)
+        if state is None:
+            return
+        self._save_current_notes()
+        self.commentSidebar.refresh()
+        self.viewframe.viewer.update()
+
+    def delete_comment(self, frame, comment_id):
+        if not self.viewframe.viewer.annotations.delete_comment(frame, comment_id):
+            return
+        self._save_current_notes()
+        self.commentSidebar.refresh()
+        self.viewframe.viewer.update()
+
+    def annotation_state_changed(self):
+        """Persist and refresh after a toolbar/menu Clear Notes action."""
+        self._save_current_notes()
+        self.commentSidebar.refresh()
+        self.viewframe.viewer.update()
+
     def jump_to_annotation(self, step):
         """Seek to the previous/next frame holding a note or comment."""
         annotations = self.viewframe.viewer.annotations
@@ -1633,6 +1775,10 @@ class MainWindow(QtWidgets.QMainWindow):
             from widgets import notestore
 
             notestore.load_notes(source, self.viewframe.viewer.annotations)
+            self.commentSidebar.set_source_available(True)
+            self.commentSidebar.set_current_frame(
+                self.viewframe.viewer.annotations.current_frame
+            )
             self.viewframe.viewer.update()
         except Exception:
             LOGGER.exception("Unable to load annotation notes")
@@ -1913,6 +2059,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.playlistWidget,
                 self.recapsWidget,
                 self.shotSequenceWidget,
+                self.commentDock,
             )
             self._fullscreen_visibility = {
                 widget: not widget.isHidden() for widget in chrome
@@ -1936,6 +2083,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def handle_escape(self):
         if self.isFullScreen():
             self.actionFullscreen.setChecked(False)
+            return
+        if self.viewframe.viewer.comment_pin_mode:
+            self.cancel_pinned_comment()
             return
         if self.actionGammaCheck.isChecked():
             self.actionGammaCheck.setChecked(False)

@@ -1200,6 +1200,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     render_finished = QtCore.Signal(str)
     annotation_tool_finished = QtCore.Signal(str)
     fullscreen_requested = QtCore.Signal()
+    comment_pin_clicked = QtCore.Signal(float, float)
 
     def __init__(self, parent=None):
         """
@@ -1256,6 +1257,14 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self._zoom_dragging = False
         self._drag_position = QtCore.QPointF()
         self._zoom_anchor = QtCore.QPointF()
+        self.comment_pin_mode = False
+        self._comment_pin_click_guard = False
+        self._comment_pin_guard_timer = QtCore.QTimer(self)
+        self._comment_pin_guard_timer.setSingleShot(True)
+        self._comment_pin_guard_timer.setInterval(500)
+        self._comment_pin_guard_timer.timeout.connect(
+            lambda: setattr(self, "_comment_pin_click_guard", False)
+        )
 
         # Temporary display-only gamma inspection. The original frame remains
         # untouched for caching, annotations, snapshots, and exports.
@@ -1542,6 +1551,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.qimage = None
         self.base_compare_qimage = None
         self.compare_qimage = None
+        self.set_comment_pin_mode(False)
 
         # Clear annotations
         self.annotations.clear_all()
@@ -1554,6 +1564,19 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.zoom_factor = 1.0
         self.pan_offset = QtCore.QPointF(0.0, 0.0)
         self.update()
+
+    def set_comment_pin_mode(self, enabled):
+        """Make the next left click place a normalized review-comment pin."""
+        self.comment_pin_mode = bool(enabled)
+        if self.comment_pin_mode:
+            self.setCursor(QtCore.Qt.CursorShape.CrossCursor)
+        elif not (
+            self._pan_dragging
+            or self._zoom_dragging
+            or self._display_dragging
+            or self._wipe_dragging
+        ):
+            self.unsetCursor()
 
     def _fit_size(self):
         if not self.image_width or not self.image_height:
@@ -1981,6 +2004,18 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     def mousePressEvent(self, event):
         position = event.position()
         if (
+            self.comment_pin_mode
+            and event.button() == QtCore.Qt.MouseButton.LeftButton
+            and self.current_frame is not None
+            and self.display_rect.contains(position)
+        ):
+            x, y = self.widget_to_image_point(position.toPoint())
+            self._comment_pin_click_guard = True
+            self._comment_pin_guard_timer.start()
+            self.comment_pin_clicked.emit(x, y)
+            event.accept()
+            return
+        if (
             (self.gamma_check_enabled or self.exposure_check_enabled)
             and event.button() == QtCore.Qt.MouseButton.LeftButton
         ):
@@ -2161,6 +2196,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         event.accept()
 
     def mouseDoubleClickEvent(self, event):
+        if self._comment_pin_click_guard:
+            event.accept()
+            return
         if (
             event.button() == QtCore.Qt.MouseButton.LeftButton
             and not self.annotations.enabled
