@@ -119,6 +119,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._pre_fullscreen_maximized = False
         self._fullscreen_visibility = {}
         self.playlist_playback_active = False
+        # One shared loop state drives both the menu action and timeline button.
+        # During playlist playback this loops the whole edit, never one clip.
+        self.loop_enabled = False
         self._playlist_loading = False
         self.playlist_entries = list()
         self.playlist_entry_index = -1
@@ -850,6 +853,12 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             return False
 
+        # Playlist entries must finish so playback_finished can advance to the
+        # next shot. Outside playlist mode, retain the user's loop preference.
+        self.player.set_loop(
+            False if self.playlist_playback_active else self.loop_enabled
+        )
+
         self.ocio_widget.set_current_media(
             self.player.reader.input_color_space
             if self.player.reader.media_type == "sequence"
@@ -1387,7 +1396,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 next_index, constants.VL_START_FRAME, autoplay=True
             )
             return
-        if self.actionLoop.isChecked() and self.playlist_entries:
+        if self.loop_enabled and self.playlist_entries:
             self._load_playlist_entry(0, constants.VL_START_FRAME, autoplay=True)
             return
         self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
@@ -1548,10 +1557,33 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Toggle playback loop state.
         """
+        self.loop_enabled = bool(enabled)
+
+        # Loop can be changed from either the Playback menu or the timeline
+        # button. Keep both controls synchronized without recursive signals.
+        controls = [getattr(self, "actionLoop", None)]
+        timeline_button = getattr(
+            getattr(
+                getattr(self, "viewframe", None),
+                "timelineToolbarLayout",
+                None,
+            ),
+            "loopButton",
+            None,
+        )
+        controls.append(timeline_button)
+        for control in controls:
+            if control is not None and control.isChecked() != self.loop_enabled:
+                blocker = QtCore.QSignalBlocker(control)
+                control.setChecked(self.loop_enabled)
+                del blocker
+
         # In playlist mode Loop means loop the whole edit, not one shot.
-        self.player.set_loop(False if self.playlist_playback_active else enabled)
+        self.player.set_loop(
+            False if self.playlist_playback_active else self.loop_enabled
+        )
         if self.compare_active:
-            self.compare_player.set_loop(enabled)
+            self.compare_player.set_loop(self.loop_enabled)
 
     def set_draw_enabled(self, tool, enabled, font):
         self.viewframe.viewer.set_sketch_enabled(tool, enabled, font)
