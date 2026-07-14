@@ -110,6 +110,7 @@ from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalLayout
 
 from widgets.comboboxs import ProjectCombobox
+from widgets.pixmaps import NamePixmapIcon
 from widgets.treewidgets import PlaylistTreewidget
 from playback.reader import MovieReader
 from playback.reader import SequenceReader
@@ -218,51 +219,68 @@ class PlaylistWidget(QtWidgets.QWidget):
         self.verticallayout = VerticalLayout(self, space=5, margins=(0, 0, 0, 0))
 
         self.playlistHeaderLayout = QtWidgets.QHBoxLayout()
+        self.playlistHeaderLayout.setContentsMargins(8, 6, 6, 0)
+        self.playlistHeaderLayout.setSpacing(4)
         self.playlistTitleLabel = QtWidgets.QLabel("SOURCES | 0 clips")
-        self.playlistTitleLabel.setStyleSheet("font-weight: 600; padding: 4px;")
+        self.playlistTitleLabel.setObjectName("PanelTitle")
         self.playlistHeaderLayout.addWidget(self.playlistTitleLabel, 1)
 
-        self.importButton = QtWidgets.QPushButton("+ Import")
-        self.importButton.setToolTip("Import multiple videos (Ctrl+O)")
-        self.playlistHeaderLayout.addWidget(self.importButton)
-
-        self.addToPlaylistButton = QtWidgets.QPushButton("Add to Playlist")
-        self.addToPlaylistButton.setToolTip(
-            "Add the selected source clips to the end of Shot Playlist Timeline"
-        )
-        self.addToPlaylistButton.setEnabled(False)
-        self.playlistHeaderLayout.addWidget(self.addToPlaylistButton)
-
-        self.compareButton = QtWidgets.QPushButton("Compare")
-        self.compareButton.setToolTip("Ctrl+click two clips, then start A/B Wipe")
-        self.compareButton.setEnabled(False)
-        self.playlistHeaderLayout.addWidget(self.compareButton)
-
-        self.removeButton = QtWidgets.QPushButton("Remove Source")
-        self.removeButton.setToolTip(
-            "Remove selected clips from Sources and the playlist. Files are not deleted."
-        )
-        self.removeButton.setEnabled(False)
-        self.playlistHeaderLayout.addWidget(self.removeButton)
-
-        self.compareSwapButton = QtWidgets.QPushButton("Swap A/B")
-        self.compareSwapButton.setVisible(False)
-        self.playlistHeaderLayout.addWidget(self.compareSwapButton)
-
-        self.compareExitButton = QtWidgets.QPushButton("Exit Compare")
-        self.compareExitButton.setVisible(False)
-        self.playlistHeaderLayout.addWidget(self.compareExitButton)
-
-        self.clearButton = QtWidgets.QPushButton("Clear")
+        self.clearButton = QtWidgets.QToolButton(self)
+        self.clearButton.setObjectName("PanelToolButton")
+        self.clearButton.setIcon(NamePixmapIcon("clear"))
+        self.clearButton.setToolTip("Clear all Sources and Shot Playlist items")
+        self.clearButton.setFixedSize(28, 26)
         self.clearButton.setEnabled(False)
         self.playlistHeaderLayout.addWidget(self.clearButton)
         self.verticallayout.addLayout(self.playlistHeaderLayout)
 
-        self.playlistHintLabel = QtWidgets.QLabel(
-            "Drop media here  |  select one or more Sources, then Add to Playlist"
+        self.playlistActionLayout = QtWidgets.QHBoxLayout()
+        self.playlistActionLayout.setContentsMargins(6, 2, 6, 0)
+        self.playlistActionLayout.setSpacing(4)
+
+        self.importButton = QtWidgets.QPushButton("Import")
+        self.importButton.setIcon(NamePixmapIcon("open"))
+        self.importButton.setToolTip("Import multiple videos (Ctrl+O)")
+        self.playlistActionLayout.addWidget(self.importButton, 1)
+
+        self.addToPlaylistButton = QtWidgets.QPushButton("Add")
+        self.addToPlaylistButton.setObjectName("PrimaryButton")
+        self.addToPlaylistButton.setIcon(NamePixmapIcon("attach"))
+        self.addToPlaylistButton.setToolTip(
+            "Add the selected source clips to the end of Shot Playlist Timeline"
         )
+        self.addToPlaylistButton.setEnabled(False)
+        self.playlistActionLayout.addWidget(self.addToPlaylistButton, 1)
+
+        self.compareButton = QtWidgets.QPushButton("Compare")
+        self.compareButton.setToolTip("Ctrl+click two clips, then start A/B Wipe")
+        self.compareButton.setEnabled(False)
+        self.playlistActionLayout.addWidget(self.compareButton, 1)
+
+        self.removeButton = QtWidgets.QToolButton(self)
+        self.removeButton.setObjectName("PanelToolButton")
+        self.removeButton.setIcon(NamePixmapIcon("remove"))
+        self.removeButton.setFixedSize(28, 26)
+        self.removeButton.setToolTip(
+            "Remove selected clips from Sources and the playlist. Files are not deleted."
+        )
+        self.removeButton.setEnabled(False)
+        self.playlistActionLayout.addWidget(self.removeButton)
+
+        self.compareSwapButton = QtWidgets.QPushButton("Swap A/B")
+        self.compareSwapButton.setVisible(False)
+        self.playlistActionLayout.addWidget(self.compareSwapButton, 1)
+
+        self.compareExitButton = QtWidgets.QPushButton("Exit Compare")
+        self.compareExitButton.setVisible(False)
+        self.playlistActionLayout.addWidget(self.compareExitButton, 1)
+        self.verticallayout.addLayout(self.playlistActionLayout)
+
+        self.playlistHintLabel = QtWidgets.QLabel(
+            "Drop media here. Select one or more Sources, then Add."
+        )
+        self.playlistHintLabel.setObjectName("PanelHint")
         self.playlistHintLabel.setWordWrap(True)
-        self.playlistHintLabel.setStyleSheet("color: #999; padding: 0 4px 4px 4px;")
         self.verticallayout.addWidget(self.playlistHintLabel)
 
         self.compareControls = QtWidgets.QFrame(self)
@@ -440,7 +458,11 @@ class PlaylistWidget(QtWidgets.QWidget):
         self.compareOpacityLabel.setEnabled(mode == "overlay")
 
     def set_compare_active(self, enabled):
+        self.importButton.setVisible(not enabled)
+        self.addToPlaylistButton.setVisible(not enabled)
         self.compareButton.setVisible(not enabled)
+        self.removeButton.setVisible(not enabled)
+        self.clearButton.setVisible(not enabled)
         self.compareSwapButton.setVisible(enabled)
         self.compareExitButton.setVisible(enabled)
         self.compareControls.setVisible(enabled)

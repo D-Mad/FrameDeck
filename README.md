@@ -12,10 +12,10 @@ release builds.
 
 | Platform | Direct download | How to run |
 | --- | --- | --- |
-| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.10/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
-| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.10/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
+| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.11/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
+| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.11/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
 
-[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.10).
+[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.11).
 
 ## Highlights
 
@@ -31,6 +31,8 @@ release builds.
 - Pencil and Text notes stored per frame, with annotated-frame export.
 - RV-style wheel zoom, middle-button pan, continuous right-drag zoom, and
   double-click immersive full screen while playback remains active.
+- Production image inspection with Y-drag Gamma, E-drag Exposure, RGB/R/G/B/A/
+  Luma channel views, and 1.85:1 or 2.39:1 aspect masks.
 - Audio playback, volume/mute controls, and synchronized playlist playback.
 - Local media/proxy cache for server sources and color-aware 2K EXR previews.
 - Full-resolution JPG/PNG extraction and high-quality MP4 export.
@@ -50,6 +52,8 @@ expanded production workflow:
   editorial Shot Playlist Timeline that remains available in the new layout.
 - Smooth wheel zoom during playback, cursor-centered zoom, middle/Alt-left pan,
   right-drag continuous zoom, Fit, and immersive full screen.
+- Display-only Gamma and Exposure inspection, channel isolation, cinema masks,
+  and on-viewer value HUDs without changing source, cache, OCIO, or exports.
 - Blank startup with no bundled test project or automatically loaded media.
 
 ### Sources, playlists, and editorial playback
@@ -112,6 +116,8 @@ expanded production workflow:
 | Mouse wheel | Zoom at pointer |
 | Middle drag | Pan |
 | Right drag | Continuous zoom |
+| Y, then Left drag up/down | Gamma Check; Y or Esc resets |
+| E, then Left drag up/down | Exposure Check; E or Esc resets |
 | Double-click viewer / F11 | Toggle immersive full screen |
 | F | Fit image |
 | Esc | Exit full screen or annotation mode |

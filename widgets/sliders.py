@@ -55,23 +55,23 @@ class VolumeSlider(QtWidgets.QSlider):
     STYLE_SHEET = """
         QSlider::groove:horizontal {
             height: 5px;
-            background: #273b47;
-            border: 1px solid #405864;
+            background: #30343a;
+            border: 1px solid #44494f;
             border-radius: 2px;
         }
         QSlider::sub-page:horizontal {
-            background: #35c7b5;
+            background: #9ba3aa;
             border-radius: 2px;
         }
         QSlider::handle:horizontal {
-            background: #dce9ef;
-            border: 1px solid #101820;
+            background: #d6d8da;
+            border: 1px solid #191b1e;
             width: 11px;
             margin: -4px 0;
             border-radius: 5px;
         }
         QSlider::handle:horizontal:hover {
-            background: #f0b94d;
+            background: #d3a347;
         }
     """
 

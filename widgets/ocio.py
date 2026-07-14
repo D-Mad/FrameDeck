@@ -116,7 +116,7 @@ class OcioWidget(QtWidgets.QWidget):
 
         self.statusLabel = QtWidgets.QLabel("", project)
         self.statusLabel.setWordWrap(True)
-        self.statusLabel.setStyleSheet("color: #8fcfc7; padding-top: 8px;")
+        self.statusLabel.setStyleSheet("color: #c8cbce; padding-top: 8px;")
         project_layout.addWidget(self.statusLabel, row, 0, 1, 3)
         project_layout.setRowStretch(row + 1, 1)
         self.tabs.addTab(project, "Project Color")

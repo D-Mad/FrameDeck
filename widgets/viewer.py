@@ -1225,7 +1225,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
         # Current media frame
         self.frame = None
+        self.base_qimage = None
         self.qimage = None
+        self.base_compare_qimage = None
         self.compare_qimage = None
         self.compare_enabled = False
         self.compare_label_a = "A"
@@ -1257,6 +1259,19 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self._drag_position = QtCore.QPointF()
         self._zoom_anchor = QtCore.QPointF()
 
+        # Temporary display-only gamma inspection. The original frame remains
+        # untouched for caching, annotations, snapshots, and exports.
+        self.gamma_check_enabled = False
+        self.exposure_check_enabled = False
+        self.display_gamma = 1.0
+        self.display_exposure = 0.0
+        self.channel_view = "RGB"
+        self.aspect_mask = 0.0
+        self._gamma_lut = numpy.arange(256, dtype=numpy.uint8)
+        self._display_dragging = False
+        self._display_drag_start_y = 0.0
+        self._display_drag_start_value = 1.0
+
         self.set_samples(value=constants.VIEWER_SAMPLES_RATE)
 
         self.annotations = Sketch()
@@ -1284,7 +1299,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = frame
-        self.qimage = self._frame_to_qimage(frame)
+        self.base_qimage = self._frame_to_qimage(frame)
+        self.qimage = self._display_image(self.base_qimage)
         if self.qimage is not None:
             self.image_width = self.qimage.width()
             self.image_height = self.qimage.height()
@@ -1310,8 +1326,126 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             image_format,
         ).copy()
 
+    def _display_image(self, image):
+        """Return a display-only copy with inspection transforms applied."""
+        if (
+            image is None
+            or (
+                not self.gamma_check_enabled
+                and not self.exposure_check_enabled
+                and self.channel_view == "RGB"
+            )
+        ):
+            return image
+
+        use_rgba = image.hasAlphaChannel() or self.channel_view == "A"
+        channels = 4 if use_rgba else 3
+        result = image.convertToFormat(
+            QtGui.QImage.Format_RGBA8888
+            if use_rgba
+            else QtGui.QImage.Format_RGB888
+        )
+        buffer = result.bits()
+        pixels = numpy.ndarray(
+            (result.height(), result.width(), channels),
+            dtype=numpy.uint8,
+            buffer=buffer,
+            strides=(result.bytesPerLine(), channels, 1),
+        )
+        if self.gamma_check_enabled or self.exposure_check_enabled:
+            pixels[:, :, :3] = self._gamma_lut[pixels[:, :, :3]]
+
+        if self.channel_view in {"R", "G", "B", "A"}:
+            channel_index = {"R": 0, "G": 1, "B": 2, "A": 3}[self.channel_view]
+            channel = pixels[:, :, channel_index].copy()
+            pixels[:, :, 0] = channel
+            pixels[:, :, 1] = channel
+            pixels[:, :, 2] = channel
+            if channels == 4:
+                pixels[:, :, 3] = 255
+        elif self.channel_view == "LUMA":
+            luma = numpy.rint(
+                pixels[:, :, 0].astype(numpy.float32) * 0.2126
+                + pixels[:, :, 1].astype(numpy.float32) * 0.7152
+                + pixels[:, :, 2].astype(numpy.float32) * 0.0722
+            ).astype(numpy.uint8)
+            pixels[:, :, 0] = luma
+            pixels[:, :, 1] = luma
+            pixels[:, :, 2] = luma
+        return result
+
+    def _refresh_display_images(self):
+        self.qimage = self._display_image(self.base_qimage)
+        self.compare_qimage = self._display_image(self.base_compare_qimage)
+        self.update()
+
+    def _update_display_lut(self):
+        values = numpy.arange(256, dtype=numpy.float32) / 255.0
+        values = numpy.clip(values * (2.0 ** self.display_exposure), 0.0, 1.0)
+        values = numpy.power(values, 1.0 / self.display_gamma)
+        self._gamma_lut = numpy.rint(values * 255.0).astype(numpy.uint8)
+
+    def set_display_gamma(self, gamma):
+        """Set display-only gamma without changing decoded or exported pixels."""
+        gamma = max(0.1, min(4.0, float(gamma)))
+        if abs(gamma - self.display_gamma) < 0.001:
+            return
+        self.display_gamma = gamma
+        self._update_display_lut()
+        self._refresh_display_images()
+
+    def set_display_exposure(self, stops):
+        """Set temporary display exposure in photographic stops."""
+        stops = max(-8.0, min(8.0, float(stops)))
+        if abs(stops - self.display_exposure) < 0.001:
+            return
+        self.display_exposure = stops
+        self._update_display_lut()
+        self._refresh_display_images()
+
+    def set_gamma_check(self, enabled):
+        """Enter or leave Y-drag gamma inspection mode."""
+        self.gamma_check_enabled = bool(enabled)
+        self.exposure_check_enabled = False
+        self.display_exposure = 0.0
+        self._display_dragging = False
+        if not self.gamma_check_enabled:
+            self.display_gamma = 1.0
+            self.unsetCursor()
+        else:
+            self.setCursor(QtCore.Qt.CursorShape.SizeVerCursor)
+        self._update_display_lut()
+        self._refresh_display_images()
+
+    def set_exposure_check(self, enabled):
+        """Enter or leave E-drag exposure inspection mode."""
+        self.exposure_check_enabled = bool(enabled)
+        self.gamma_check_enabled = False
+        self.display_gamma = 1.0
+        self._display_dragging = False
+        if not self.exposure_check_enabled:
+            self.display_exposure = 0.0
+            self.unsetCursor()
+        else:
+            self.setCursor(QtCore.Qt.CursorShape.SizeVerCursor)
+        self._update_display_lut()
+        self._refresh_display_images()
+
+    def set_channel_view(self, channel):
+        channel = str(channel or "RGB").upper()
+        if channel not in {"RGB", "R", "G", "B", "A", "LUMA"}:
+            channel = "RGB"
+        if channel != self.channel_view:
+            self.channel_view = channel
+            self._refresh_display_images()
+
+    def set_aspect_mask(self, ratio):
+        self.aspect_mask = max(0.0, float(ratio or 0.0))
+        self.update()
+
     def set_compare_frame(self, frame):
-        self.compare_qimage = self._frame_to_qimage(frame)
+        self.base_compare_qimage = self._frame_to_qimage(frame)
+        self.compare_qimage = self._display_image(self.base_compare_qimage)
         self.update()
 
     def enable_compare(self, label_a="A", label_b="B"):
@@ -1346,6 +1480,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
     def disable_compare(self):
         self.compare_enabled = False
+        self.base_compare_qimage = None
         self.compare_qimage = None
         self._wipe_dragging = False
         self._flicker_timer.stop()
@@ -1405,7 +1540,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = None
+        self.base_qimage = None
         self.qimage = None
+        self.base_compare_qimage = None
         self.compare_qimage = None
 
         # Clear annotations
@@ -1659,7 +1796,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         if self.qimage is None:
             painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
             center = QtCore.QPointF(self.rect().center())
-            painter.setPen(QtGui.QPen(QtGui.QColor(55, 78, 90), 1))
+            painter.setPen(QtGui.QPen(QtGui.QColor(62, 66, 71), 1))
             painter.drawLine(
                 QtCore.QPointF(center.x(), center.y() - 85),
                 QtCore.QPointF(center.x(), center.y() + 85),
@@ -1670,9 +1807,9 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             )
             label = QtCore.QRectF(center.x() - 155, center.y() - 18, 310, 36)
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.setBrush(QtGui.QColor(31, 48, 58, 235))
+            painter.setBrush(QtGui.QColor(37, 40, 44, 235))
             painter.drawRoundedRect(label, 18, 18)
-            painter.setPen(QtGui.QColor(157, 219, 211))
+            painter.setPen(QtGui.QColor(211, 163, 71))
             painter.drawText(
                 label,
                 QtCore.Qt.AlignmentFlag.AlignCenter,
@@ -1690,6 +1827,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # avoids the legacy glDrawPixels path.
         painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, True)
         self._paint_compare_images(painter)
+        if self.aspect_mask > 0.0:
+            self._draw_aspect_mask(painter)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
         painter.setRenderHint(QtGui.QPainter.TextAntialiasing, True)
         self.annotations.draw(
@@ -1697,6 +1836,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             point_converter=self.image_to_widget_point,
             rect=self.display_rect,
         )
+        if self.gamma_check_enabled or self.exposure_check_enabled:
+            self._draw_display_adjustment_hud(painter)
         painter.end()
 
     @staticmethod
@@ -1711,6 +1852,66 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft,
             metrics.elidedText(text, QtCore.Qt.TextElideMode.ElideMiddle, width - 18),
         )
+
+    def _draw_display_adjustment_hud(self, painter):
+        """Draw a compact production-style status chip for image inspection."""
+        if self.gamma_check_enabled:
+            text = (
+                f"GAMMA CHECK  {self.display_gamma:.3f}   |   "
+                "drag up/down   |   Y/Esc reset"
+            )
+        else:
+            text = (
+                f"EXPOSURE  {self.display_exposure:+.2f} stops   |   "
+                "drag up/down   |   E/Esc reset"
+            )
+        metrics = painter.fontMetrics()
+        width = min(self.width() - 24, metrics.horizontalAdvance(text) + 28)
+        rect = QtCore.QRectF(
+            12,
+            max(12, self.height() - metrics.height() - 26),
+            width,
+            metrics.height() + 14,
+        )
+        painter.fillRect(rect, QtGui.QColor(18, 21, 24, 225))
+        painter.setPen(QtGui.QPen(QtGui.QColor(224, 174, 74), 1.0))
+        painter.drawRect(rect)
+        painter.setPen(QtGui.QColor(238, 238, 238))
+        painter.drawText(
+            rect.adjusted(12, 0, -8, 0),
+            QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft,
+            text,
+        )
+
+    def _draw_aspect_mask(self, painter):
+        """Shade image areas outside the selected cinema aspect ratio."""
+        rect = QtCore.QRectF(self.display_rect)
+        if rect.width() <= 0 or rect.height() <= 0:
+            return
+        target_height = min(rect.height(), rect.width() / self.aspect_mask)
+        picture = QtCore.QRectF(
+            rect.left(),
+            rect.center().y() - target_height * 0.5,
+            rect.width(),
+            target_height,
+        )
+        shade = QtGui.QColor(0, 0, 0, 185)
+        painter.fillRect(
+            QtCore.QRectF(rect.left(), rect.top(), rect.width(), picture.top() - rect.top()),
+            shade,
+        )
+        painter.fillRect(
+            QtCore.QRectF(
+                rect.left(),
+                picture.bottom(),
+                rect.width(),
+                rect.bottom() - picture.bottom(),
+            ),
+            shade,
+        )
+        painter.setPen(QtGui.QPen(QtGui.QColor(210, 210, 210, 120), 1.0))
+        painter.drawLine(picture.topLeft(), picture.topRight())
+        painter.drawLine(picture.bottomLeft(), picture.bottomRight())
 
     def draw_overlay(self):
         """
@@ -1782,6 +1983,21 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     def mousePressEvent(self, event):
         position = event.position()
         if (
+            (self.gamma_check_enabled or self.exposure_check_enabled)
+            and event.button() == QtCore.Qt.MouseButton.LeftButton
+        ):
+            self._display_dragging = True
+            self._display_drag_start_y = position.y()
+            self._display_drag_start_value = (
+                self.display_gamma
+                if self.gamma_check_enabled
+                else self.display_exposure
+            )
+            self.setCursor(QtCore.Qt.CursorShape.SizeVerCursor)
+            event.accept()
+            return
+
+        if (
             self.compare_enabled
             and self.compare_qimage is not None
             and self.compare_mode in {"wipe_vertical", "wipe_horizontal"}
@@ -1835,6 +2051,18 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.update()
 
     def mouseMoveEvent(self, event):
+        if self._display_dragging:
+            delta = self._display_drag_start_y - event.position().y()
+            if self.gamma_check_enabled:
+                gamma = self._display_drag_start_value * (2.0 ** (delta / 160.0))
+                self.set_display_gamma(gamma)
+            else:
+                self.set_display_exposure(
+                    self._display_drag_start_value + delta / 80.0
+                )
+            event.accept()
+            return
+
         if self._wipe_dragging:
             vertical = self.compare_mode == "wipe_vertical"
             extent = self.display_rect.width() if vertical else self.display_rect.height()
@@ -1883,6 +2111,12 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.update()
 
     def mouseReleaseEvent(self, event):
+
+        if self._display_dragging and event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._display_dragging = False
+            self.setCursor(QtCore.Qt.CursorShape.SizeVerCursor)
+            event.accept()
+            return
 
         if self._wipe_dragging and event.button() == QtCore.Qt.MouseButton.LeftButton:
             self._wipe_dragging = False

@@ -321,7 +321,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.apply_review_styles()
 
         # Initial splitter sizes
-        self.splitter.setSizes([300, 1100, 0])
+        self.splitter.setSizes([320, 1100, 0])
 
     def setupIcons(self):
         """
@@ -334,7 +334,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def setup_review_chrome(self):
         """Build an RV-inspired menu/toolbar shell around the review workspace."""
         self.playlistWidget.setObjectName("SourcesPanel")
-        self.playlistWidget.setMinimumWidth(260)
+        self.playlistWidget.setMinimumWidth(300)
         self.playlistWidget.setMaximumWidth(420)
         self.viewframe.setObjectName("ViewerPanel")
         self.shotSequenceWidget.setObjectName("ShotTimelinePanel")
@@ -479,6 +479,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionOCIO.setIcon(NamePixmapIcon("ocio"))
         self.actionOCIO.triggered.connect(self.call_ocio)
         color_menu.addAction(self.actionOCIO)
+        color_menu.addSeparator()
+        self.actionGammaCheck = QtGui.QAction("Gamma Check", self, checkable=True)
+        self.actionGammaCheck.setIcon(NamePixmapIcon("gamma"))
+        self.actionGammaCheck.setShortcut(QtGui.QKeySequence("Y"))
+        self.actionGammaCheck.setToolTip("Y: drag vertically in the viewer to adjust gamma")
+        self.actionGammaCheck.toggled.connect(self.set_gamma_check)
+        color_menu.addAction(self.actionGammaCheck)
+        self.actionExposureCheck = QtGui.QAction(
+            "Exposure Check", self, checkable=True
+        )
+        self.actionExposureCheck.setIcon(NamePixmapIcon("exposure"))
+        self.actionExposureCheck.setShortcut(QtGui.QKeySequence("E"))
+        self.actionExposureCheck.setToolTip(
+            "E: drag vertically in the viewer to adjust exposure"
+        )
+        self.actionExposureCheck.toggled.connect(self.set_exposure_check)
+        color_menu.addAction(self.actionExposureCheck)
 
         self.actionCacheCurrent = QtGui.QAction("Cache Current Shot", self)
         self.actionCacheCurrent.setIcon(NamePixmapIcon("attach"))
@@ -515,6 +532,33 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reviewToolbar.addAction(self.actionSwapCompare)
         self.reviewToolbar.addAction(self.actionFit)
         self.reviewToolbar.addSeparator()
+        self.reviewToolbar.addAction(self.actionGammaCheck)
+        self.reviewToolbar.addAction(self.actionExposureCheck)
+        self.channelCombo = QtWidgets.QComboBox(self)
+        self.channelCombo.setObjectName("ViewerOptionCombo")
+        self.channelCombo.setToolTip("Display channel (review only)")
+        for label, value in (
+            ("RGB", "RGB"),
+            ("Red", "R"),
+            ("Green", "G"),
+            ("Blue", "B"),
+            ("Alpha", "A"),
+            ("Luma", "LUMA"),
+        ):
+            self.channelCombo.addItem(label, value)
+        self.channelCombo.setFixedWidth(78)
+        self.channelCombo.currentIndexChanged.connect(self.set_channel_view)
+        self.reviewToolbar.addWidget(self.channelCombo)
+        self.aspectMaskCombo = QtWidgets.QComboBox(self)
+        self.aspectMaskCombo.setObjectName("ViewerOptionCombo")
+        self.aspectMaskCombo.setToolTip("Cinema aspect mask (review only)")
+        self.aspectMaskCombo.addItem("Mask Off", 0.0)
+        self.aspectMaskCombo.addItem("1.85:1", 1.85)
+        self.aspectMaskCombo.addItem("2.39:1", 2.39)
+        self.aspectMaskCombo.setFixedWidth(86)
+        self.aspectMaskCombo.currentIndexChanged.connect(self.set_aspect_mask)
+        self.reviewToolbar.addWidget(self.aspectMaskCombo)
+        self.reviewToolbar.addSeparator()
 
         self.sourceStatusLabel = QtWidgets.QLabel(" SOURCE  |  No Media ")
         self.sourceStatusLabel.setObjectName("SourceStatusLabel")
@@ -535,7 +579,8 @@ class MainWindow(QtWidgets.QMainWindow):
         status = QtWidgets.QStatusBar(self)
         status.setSizeGripEnabled(False)
         status.showMessage(
-            "Wheel: Zoom  |  Double-click viewer: Full screen  |  Ctrl+click 2 shots: Compare  |  Space: Play"
+            "Space: Play  |  Wheel: Zoom  |  Y: Gamma  |  E: Exposure  |  "
+            "Double-click: Full screen  |  Ctrl+click 2 Sources: Compare"
         )
         self.setStatusBar(status)
 
@@ -543,29 +588,123 @@ class MainWindow(QtWidgets.QMainWindow):
         """Apply the custom graphite/navy review-player palette."""
         self.setStyleSheet(
             """
-            QMainWindow, QWidget { background-color: #101820; color: #d9e2e8; }
-            QMenuBar { background: #17232d; border-bottom: 1px solid #30404c; padding: 2px; }
-            QMenuBar::item:selected, QMenu::item:selected { background: #187f78; color: white; }
-            QMenu { background: #17232d; border: 1px solid #3a4b58; }
-            QToolBar#ReviewToolbar { background: #15232c; border: none; border-bottom: 1px solid #38505e; spacing: 3px; padding: 3px; }
-            QToolBar QToolButton { background: #21333f; border: 1px solid #3d5361; border-radius: 2px; padding: 4px 8px; }
-            QToolBar QToolButton:hover { background: #187f78; }
-            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel { background: #0c1319; border: 1px solid #344a58; color: #9ddbd3; padding: 4px 9px; }
-            QFrame#ViewerPanel { background: #070b0e; border: 1px solid #344653; }
-            QWidget#SourcesPanel { background: #17232d; border: 1px solid #344653; }
-            QFrame#ShotTimelinePanel { background: #14212a; border: 1px solid #344653; }
-            QTreeWidget, QListWidget, QScrollArea { background: #0e171e; alternate-background-color: #14222b; border: 1px solid #304653; color: #d8e2e8; }
-            QTreeWidget::item:selected, QListWidget::item:selected { background: #80651c; color: white; }
-            QPushButton { background: #213440; border: 1px solid #405765; border-radius: 2px; padding: 4px 8px; color: #e2edf2; }
-            QPushButton:hover { background: #187f78; border-color: #31b9aa; }
-            QPushButton:pressed, QPushButton:checked { background: #11665f; }
-            QPushButton:disabled { background: #17242c; color: #60717b; border-color: #273944; }
-            QComboBox, QSpinBox, QLineEdit { background: #0d161c; border: 1px solid #3c5360; padding: 3px; }
-            QSlider::groove:horizontal { height: 4px; background: #314551; }
-            QSlider::handle:horizontal { width: 12px; margin: -5px 0; background: #31b9aa; border-radius: 6px; }
-            QStatusBar { background: #111c23; border-top: 1px solid #304653; color: #8fa5b1; }
-            QSplitter::handle { background: #304653; }
-            QToolTip { background: #0b1116; color: white; border: 1px solid #31b9aa; }
+            QMainWindow, QWidget {
+                background-color: #191b1e;
+                color: #d5d7d9;
+                font-size: 12px;
+            }
+            QMenuBar {
+                background: #222428;
+                border-bottom: 1px solid #34373c;
+                padding: 2px 4px;
+            }
+            QMenuBar::item { padding: 5px 10px; background: transparent; }
+            QMenuBar::item:selected, QMenu::item:selected {
+                background: #3a3e43;
+                color: #ffffff;
+            }
+            QMenu { background: #24262a; border: 1px solid #41454b; padding: 4px; }
+            QMenu::item { padding: 6px 26px 6px 24px; }
+            QMenu::separator { height: 1px; background: #3b3e43; margin: 4px 8px; }
+            QToolBar#ReviewToolbar {
+                background: #202226;
+                border: none;
+                border-bottom: 1px solid #34373c;
+                spacing: 2px;
+                padding: 3px 5px;
+            }
+            QToolBar#ReviewToolbar QToolButton {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 3px;
+                padding: 4px 7px;
+            }
+            QToolBar#ReviewToolbar QToolButton:hover {
+                background: #30343a;
+                border-color: #484d54;
+            }
+            QToolBar#ReviewToolbar QToolButton:checked {
+                background: #3b4046;
+                border-color: #d3a347;
+            }
+            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel {
+                background: #15171a;
+                border: 1px solid #30343a;
+                color: #c8cbce;
+                padding: 4px 9px;
+            }
+            QLabel#PanelTitle {
+                color: #eceeef;
+                font-weight: 700;
+                padding: 2px 0;
+            }
+            QLabel#PanelHint { color: #858b91; padding: 2px 6px 4px 6px; }
+            QFrame#ViewerPanel { background: #090a0c; border: 1px solid #34373c; }
+            QWidget#SourcesPanel { background: #202226; border: 1px solid #34373c; }
+            QFrame#ShotTimelinePanel { background: #202226; border: 1px solid #34373c; }
+            QTreeWidget, QListWidget, QScrollArea {
+                background: #15171a;
+                alternate-background-color: #1b1e21;
+                border: 1px solid #30343a;
+                color: #d5d7d9;
+                outline: none;
+            }
+            QTreeWidget::item:selected, QListWidget::item:selected {
+                background: #3a3f45;
+                color: #ffffff;
+            }
+            QPushButton {
+                min-height: 24px;
+                background: #2a2d31;
+                border: 1px solid #41454b;
+                border-radius: 3px;
+                padding: 2px 8px;
+                color: #dde0e2;
+            }
+            QPushButton:hover { background: #353a40; border-color: #555b63; }
+            QPushButton:pressed, QPushButton:checked { background: #41464d; }
+            QPushButton#PrimaryButton {
+                background: #655128;
+                border-color: #9f7b34;
+                color: #ffffff;
+            }
+            QPushButton#PrimaryButton:hover { background: #79612e; border-color: #d3a347; }
+            QPushButton:disabled {
+                background: #222428;
+                color: #62676d;
+                border-color: #303338;
+            }
+            QToolButton#PanelToolButton {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 3px;
+                padding: 3px;
+            }
+            QToolButton#PanelToolButton:hover { background: #34383e; border-color: #4b5057; }
+            QToolButton#PanelToolButton:disabled { color: #55595e; }
+            QComboBox, QSpinBox, QLineEdit {
+                min-height: 23px;
+                background: #15171a;
+                border: 1px solid #3b3f45;
+                border-radius: 3px;
+                padding: 1px 7px;
+            }
+            QComboBox#ViewerOptionCombo { margin: 1px 2px; color: #d5d7d9; }
+            QComboBox::drop-down { border: none; width: 18px; }
+            QSlider::groove:horizontal { height: 3px; background: #3b3f45; }
+            QSlider::handle:horizontal {
+                width: 10px;
+                margin: -4px 0;
+                background: #c0c4c8;
+                border-radius: 5px;
+            }
+            QStatusBar {
+                background: #202226;
+                border-top: 1px solid #34373c;
+                color: #858b91;
+            }
+            QSplitter::handle { background: #34373c; }
+            QToolTip { background: #101214; color: #f1f1f1; border: 1px solid #52575e; }
             """
         )
 
@@ -877,7 +1016,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.playlistWidget.update_local_media(
             source_filepath,
             self.player.reader,
-            self.viewframe.viewer.qimage,
+            self.viewframe.viewer._frame_to_qimage(self.viewframe.viewer.frame),
         )
 
         if playback_filepath != source_filepath:
@@ -1205,7 +1344,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.playlistWidget.update_local_media(
                     self.current_source_filepath,
                     self.player.reader,
-                    self.viewframe.viewer.qimage,
+                    self.viewframe.viewer._frame_to_qimage(frame),
                 )
             self.statusBar().showMessage(
                 f"EXR/image frame ready  |  memory cache: "
@@ -1295,6 +1434,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.compare_swapped = not self.compare_swapped
         viewer = self.viewframe.viewer
+        viewer.base_qimage, viewer.base_compare_qimage = (
+            viewer.base_compare_qimage,
+            viewer.base_qimage,
+        )
         viewer.qimage, viewer.compare_qimage = viewer.compare_qimage, viewer.qimage
         viewer.swap_compare_labels()
         viewer.update()
@@ -1585,6 +1728,51 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.compare_active:
             self.compare_player.set_loop(self.loop_enabled)
 
+    def set_gamma_check(self, enabled):
+        """Toggle temporary Y-drag gamma inspection in the viewer."""
+        enabled = bool(enabled)
+        if enabled:
+            self.exit_annotation_mode()
+            if self.actionExposureCheck.isChecked():
+                blocker = QtCore.QSignalBlocker(self.actionExposureCheck)
+                self.actionExposureCheck.setChecked(False)
+                del blocker
+        self.viewframe.viewer.set_gamma_check(enabled)
+        self.statusBar().showMessage(
+            "Gamma Check: drag left mouse up/down; Y or Esc resets"
+            if enabled
+            else "Gamma Check reset",
+            4000,
+        )
+
+    def set_exposure_check(self, enabled):
+        """Toggle temporary E-drag exposure inspection in the viewer."""
+        enabled = bool(enabled)
+        if enabled:
+            self.exit_annotation_mode()
+            if self.actionGammaCheck.isChecked():
+                blocker = QtCore.QSignalBlocker(self.actionGammaCheck)
+                self.actionGammaCheck.setChecked(False)
+                del blocker
+        self.viewframe.viewer.set_exposure_check(enabled)
+        self.statusBar().showMessage(
+            "Exposure Check: drag left mouse up/down; E or Esc resets"
+            if enabled
+            else "Exposure Check reset",
+            4000,
+        )
+
+    def set_channel_view(self, _index=None):
+        channel = self.channelCombo.currentData() or "RGB"
+        self.viewframe.viewer.set_channel_view(channel)
+        self.statusBar().showMessage(f"Viewer channel: {channel}", 2500)
+
+    def set_aspect_mask(self, _index=None):
+        ratio = float(self.aspectMaskCombo.currentData() or 0.0)
+        self.viewframe.viewer.set_aspect_mask(ratio)
+        label = "Off" if ratio <= 0.0 else f"{ratio:.2f}:1"
+        self.statusBar().showMessage(f"Aspect mask: {label}", 2500)
+
     def set_draw_enabled(self, tool, enabled, font):
         self.viewframe.viewer.set_sketch_enabled(tool, enabled, font)
 
@@ -1626,6 +1814,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def handle_escape(self):
         if self.isFullScreen():
             self.actionFullscreen.setChecked(False)
+            return
+        if self.actionGammaCheck.isChecked():
+            self.actionGammaCheck.setChecked(False)
+            return
+        if self.actionExposureCheck.isChecked():
+            self.actionExposureCheck.setChecked(False)
             return
         self.exit_annotation_mode()
 
@@ -1856,6 +2050,8 @@ class MainWindow(QtWidgets.QMainWindow):
             "FrameDeck Shortcuts",
             "Space: Play / Pause\n"
             "Wheel: Zoom\nMiddle drag: Pan\nRight drag: Continuous zoom\n"
+            "Y + left drag up/down: Gamma Check\n"
+            "E + left drag up/down: Exposure Check\n"
             "Double-click viewer or F11: Toggle Full Screen\n"
             "F: Fit image to viewer\n"
             "Esc: Exit Full Screen or leave Pencil/Text\n"

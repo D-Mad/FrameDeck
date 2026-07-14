@@ -65,9 +65,9 @@ def _draw_named_icon(name, size=64):
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
     painter.scale(size / 64.0, size / 64.0)
 
-    foreground = QtGui.QColor("#dce9ef")
-    accent = QtGui.QColor("#35c7b5")
-    warm = QtGui.QColor("#f0b94d")
+    foreground = QtGui.QColor("#d6d8da")
+    accent = QtGui.QColor("#a3abb2")
+    warm = QtGui.QColor("#d3a347")
     pen = QtGui.QPen(foreground, 4.0, QtCore.Qt.PenStyle.SolidLine)
     pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
@@ -87,7 +87,7 @@ def _draw_named_icon(name, size=64):
 
     if name in {"framedeck", "motion-craft"}:
         painter.setPen(QtGui.QPen(accent, 4.5))
-        painter.setBrush(QtGui.QColor("#173742"))
+        painter.setBrush(QtGui.QColor("#2c3035"))
         painter.drawRoundedRect(QtCore.QRectF(8, 10, 48, 42), 8, 8)
         painter.setBrush(accent)
         path([(23, 20), (45, 31), (23, 42)], True)
@@ -121,7 +121,7 @@ def _draw_named_icon(name, size=64):
     elif name == "rectangle":
         painter.setPen(QtGui.QPen(accent, 4)); painter.drawRoundedRect(QtCore.QRectF(11, 15, 42, 34), 4, 4)
     elif name == "eraser":
-        painter.setBrush(QtGui.QColor("#253c48")); path([(14, 42), (35, 15), (53, 30), (34, 51)], True)
+        painter.setBrush(QtGui.QColor("#3a3f45")); path([(14, 42), (35, 15), (53, 30), (34, 51)], True)
         painter.setPen(QtGui.QPen(accent, 4)); line(26, 31, 42, 44)
     elif name == "txt":
         painter.setPen(QtGui.QPen(accent, 5)); line(13, 15, 51, 15); line(32, 15, 32, 51); line(22, 51, 42, 51)
@@ -162,10 +162,20 @@ def _draw_named_icon(name, size=64):
     elif name == "theme":
         painter.setBrush(accent); painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.drawEllipse(QtCore.QRectF(11, 11, 42, 42))
-        painter.setBrush(QtGui.QColor("#101820")); painter.drawEllipse(QtCore.QRectF(26, 5, 38, 38))
+        painter.setBrush(QtGui.QColor("#191b1e")); painter.drawEllipse(QtCore.QRectF(26, 5, 38, 38))
     elif name == "ocio":
         painter.setPen(QtGui.QPen(accent, 4));
         painter.drawEllipse(QtCore.QRectF(8, 19, 26, 26)); painter.drawEllipse(QtCore.QRectF(30, 19, 26, 26)); painter.drawEllipse(QtCore.QRectF(19, 7, 26, 26))
+    elif name == "gamma":
+        painter.setPen(QtGui.QPen(accent, 4, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap))
+        path([(10, 20), (20, 20), (30, 45), (43, 18), (54, 18)])
+        painter.setPen(QtGui.QPen(warm, 3)); line(42, 18, 42, 49)
+    elif name == "exposure":
+        painter.setPen(QtGui.QPen(accent, 4))
+        painter.drawEllipse(QtCore.QRectF(21, 21, 22, 22))
+        for x1, y1, x2, y2 in ((32, 7, 32, 15), (32, 49, 32, 57), (7, 32, 15, 32), (49, 32, 57, 32)):
+            line(x1, y1, x2, y2)
+        painter.setPen(QtGui.QPen(warm, 3)); line(27, 32, 37, 32); line(32, 27, 32, 37)
     elif name == "help":
         painter.setPen(QtGui.QPen(accent, 4)); painter.drawEllipse(QtCore.QRectF(10, 10, 44, 44))
         painter.drawText(QtCore.QRectF(10, 8, 44, 47), QtCore.Qt.AlignmentFlag.AlignCenter, "?")
