@@ -1,0 +1,5 @@
+# Development / test dependencies (not shipped in release builds).
+# Install alongside the platform requirements, e.g.:
+#   pip install -r requirements-windows.txt -r requirements-dev.txt
+pytest>=8,<10
+pypdf>=4
