@@ -135,6 +135,13 @@ COMMENT_PIN_RADIUS = 10
 COMMENT_PIN_COLOR = (255, 68, 68)
 COMMENT_PIN_DONE_COLOR = (76, 175, 80)
 
+# Annotation markers drawn on the timeline. A frame holding a comment reads as
+# a comment even if it also carries drawings: the words are the reviewable part,
+# and a drawing-only frame is a different kind of note.
+TIMELINE_COMMENT_MARKER_COLOR = (79, 195, 247)
+TIMELINE_DRAWING_MARKER_COLOR = (171, 71, 188)
+TIMELINE_MARKER_WIDTH = 3
+
 # Container support is provided by the FFmpeg libraries bundled with PyAV.
 # Keep these lists centralized so import, drag/drop and reader selection never
 # disagree about a valid movie. Codec support is detected from the stream, not
