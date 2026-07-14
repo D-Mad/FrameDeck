@@ -1,401 +1,139 @@
+# FrameDeck
 
+![FrameDeck review interface](doc/docs/resources/framedeck-overview.png)
 
-## Viewline
+FrameDeck is a portable VFX shot-review player for Windows and Ubuntu. It is
+based on [subing85/viewline](https://github.com/subing85/viewline) and extends
+that project with an RV-inspired review workflow, editorial playlists, modern
+color management, image-sequence playback, annotations, caching, and portable
+release builds.
 
-Viewline is a professional Python-based review player framework for VFX, animation, and post-production workflows.
-It provides accurate frame-based and time-based playback for image sequences and movie files while integrating seamlessly with production management and publishing workflows.
+## Highlights
 
-This project is to provide a lightweight, extensible, and production-friendly framework for media playback, image sequence review, OpenEXR workflows, and OCIO-based color management.
+- Import multiple MP4, MOV, AVI, EXR, PNG, JPG, and JPEG sources at once.
+- Build and reorder a horizontal Shot Playlist Timeline; play it on one
+  continuous global frame range.
+- Compare two sources using vertical/horizontal wipe, opacity overlay,
+  difference, side-by-side, checkerboard, A-only, B-only, or flicker modes.
+- Review EXR AOVs and numbered EXR/JPG/PNG sequences.
+- OCIO project settings with bundled ACES 1.2 Legacy and built-in ACES 1.3/
+  ACES 2.0 CG and Studio configs, user configs, display/view selection, and
+  common camera/log presets.
+- Pencil and Text notes stored per frame, with annotated-frame export.
+- RV-style wheel zoom, middle-button pan, continuous right-drag zoom, and
+  double-click immersive full screen while playback remains active.
+- Audio playback, volume/mute controls, and synchronized playlist playback.
+- Local media/proxy cache for server sources and color-aware 2K EXR previews.
+- Full-resolution JPG/PNG extraction and high-quality MP4 export.
+- Portable Windows build and Ubuntu AppImage release automation.
 
-<img width="1848" height="958" alt="image" src="https://github.com/user-attachments/assets/c113466d-2739-4dce-abb7-c966797285ee" />
+## What FrameDeck adds to Viewline
 
+The upstream Viewline project supplied the original Python/PySide review-player
+foundation. FrameDeck keeps that history and license, then adds a substantially
+expanded production workflow:
 
-## Core Responsibilities
-* Review image sequences and movie files.
-* Frame-accurate playback.
-* Audio and video synchronization.
-* Timeline navigation and scrubbing.
-* Playback controls (Play, Pause, Stop, Loop, Frame Step).
-* OpenColorIO (OCIO) color management. (in progress)
-* Cache visualization.
-* AOV (Arbitrary Output Variable) switching.
-* Overlay information (frame number, resolution, FPS, metadata).
-* Snapshot and annotation support.
-* Pipeline integration with published versions and review notes.
+### Review interface and navigation
 
+- A redesigned graphite/navy interface inspired by professional review tools,
+  with completely new application branding and icon treatment.
+- A compact Sources bin, main viewer, persistent playback controls, and an
+  editorial Shot Playlist Timeline that remains available in the new layout.
+- Smooth wheel zoom during playback, cursor-centered zoom, middle/Alt-left pan,
+  right-drag continuous zoom, Fit, and immersive full screen.
+- Blank startup with no bundled test project or automatically loaded media.
 
-The project is built primarily using Python 3.10, PySide6, OpenGL, OpenImageIO, PyAV, and OCIO.
+### Sources, playlists, and editorial playback
 
-This is still an early beta release focused mainly on core architecture, playback workflow, and UI foundations. There is still a lot to improve, but the project has reached a stage where I’m comfortable sharing progress publicly.
+- Multi-file drag/drop and import for local disks and server paths.
+- Select Sources and append them to the playlist; one source may appear more
+  than once.
+- Horizontal drag reorder, Earlier/Later controls, deletion of individual
+  playlist occurrences, and source deletion without touching original files.
+- Continuous playlist playback whose frame range is the sum of every shot,
+  including cross-clip scrubbing, frame stepping, and automatic advance.
+- Portable `.fdplaylist` save/restore with relative paths, order, active media,
+  frame position, and timeline visibility.
+- Invalid or unreadable media is skipped so the remaining playlist can continue.
 
-## Playback
+### Playback, media, and performance
 
-Supported formats:
+- Long-video timeline optimization and bounded frame caches.
+- 2K/4K-aware decode buffering, background sequence decode, frame prefetch, and
+  persistent 2K display proxies for heavy EXR review.
+- Server-media background caching with progress, configurable limits, cache
+  inspection, multi-shot caching, and safe cache clearing.
+- MOV thumbnail support, audio decode/output, mute and volume controls.
+- MP4/MOV/AVI playback plus numbered EXR/JPG/PNG sequences and EXR AOVs.
 
-## Video
+### Color management
 
-* MP4
-* MOV
-* AVI
+- User/studio OCIO config loading and project-level working space, input,
+  display, view, and per-file-type defaults.
+- Bundled offline ACES 1.2 Legacy plus OCIO built-in ACES 1.3 and ACES 2.0 CG/
+  Studio configurations.
+- Film/VFX presets for ACES2065-1, ACEScg, ACEScct, Rec.709, ARRI LogC3/4,
+  Sony S-Log3, RED Log3G10, Blackmagic Film Gen 5, and Raw/data viewing.
+- Correct float-before-display processing, independent RGB/RGBA handling,
+  alpha preservation, data-AOV bypass, explicit Raw mode, and color-aware proxy
+  invalidation.
+- Independent OCIO processors for the A and B sources in comparison mode.
 
-## Image Sequences
+### Comparison and annotations
 
-* PNG
-* JPEG
-* EXR
+- Synchronized A/B review with vertical/horizontal wipe, opacity overlay,
+  difference, side-by-side, checkerboard, A-only, B-only, and flicker modes.
+- Per-frame Pencil and Text annotations, Navigate/Esc tool exit, undo/erase,
+  and export of all annotated frames.
 
+### Export and delivery
 
-## Color Management
+- Full-resolution JPG/PNG extraction from the current display view.
+- High-quality MP4 conversion from movies or image sequences, preserving movie
+  FPS/audio and allowing user-defined image-sequence FPS.
+- PyInstaller-based Windows portable packaging and Ubuntu AppImage packaging.
+- GitHub Actions builds and publishes both portable formats from one release.
 
-* OpenColorIO integration
-* ACES workflow architecture *(in progress)*
-* Input color space selection *(in progress)*
-* Display transform selection *(in progress)*
-* View transform selection *(in progress)*
+## Download
 
+Download portable builds from the
+[GitHub Releases](https://github.com/D-Mad/FrameDeck/releases) page.
 
----
-## Studio Integration (How to customized based on studio workflows?)
+Windows users extract the complete ZIP and double-click `FrameDeck.exe`.
+Ubuntu users mark the AppImage executable and run it directly.
 
+## Keyboard and mouse
 
-Viewline ships with a lightweight JSON-based implementation that allows the application to run immediately without requiring a production tracking system.
+| Input | Action |
+| --- | --- |
+| Space | Play / pause |
+| Left / Right | Previous / next frame |
+| Mouse wheel | Zoom at pointer |
+| Middle drag | Pan |
+| Right drag | Continuous zoom |
+| Double-click viewer / F11 | Toggle immersive full screen |
+| F | Fit image |
+| Esc | Exit full screen or annotation mode |
+| Alt+Left / Alt+Right | Reorder selected playlist shot |
+| Ctrl+Shift+S / Ctrl+Shift+O | Save / open `.fdplaylist` |
 
-In a production environment, studios should replace these JSON examples with queries to their own production management system (for example ShotGrid, FTrack, or an in-house database).
+## Build from source
 
-The default implementation demonstrates how Viewline expects data to be structured. Only the data retrieval and submission logic needs to be customized.
-The Viewline itself does not require modification.
+Detailed instructions are available in [README_WINDOWS.md](README_WINDOWS.md)
+and [README_UBUNTU.md](README_UBUNTU.md).
 
-* **Projects**
-* **Versions**
-* **Review notes**
-
-
-
-## Projects
-
-* Projects provide the top-level playlist displayed in the Review Player.
-* The default implementation reads project information from a JSON file.
-* Replace this implementation with your studio's production tracking query.
-
-**Modify the following method:**
-
-```
-./scripts/__init__.py
-
-class Projects
-
-    @classmethod
-    def get(cls):
-```
-
-**Default Example**
-
-The sample project data is located in:
-
-```
-./resources/presets/projects.json
-```
-
-<span style="color:green;">Use this file as a reference for the expected data structure.</span>
-
-The returned data should contain the information required to populate the Project Browser, such as:
-
-* Project Name
-* Description
-* Thumbnail
-
-*Studios are free to include additional metadata if required.*
-
-
-
-## Versions
-* Versions represent published media available for review.
-* The default implementation reads version information from a JSON file.
-* Studios should replace this implementation with queries to their production tracking system.
-
-**Modify the following method:**
-
-```
-./scripts/__init__.py
-
-class Versions
-
-    @classmethod
-    def get(cls):
-```
-
-**Default Example**
-
-Example version data is located in:
-
-```
-./resources/presets/versions.json
+```powershell
+# Windows
+.\build-windows.ps1
 ```
 
-<span style="color:green;">Use this file as a reference for the expected data structure.</span>
-
-**The returned data typically includes:**
-
-* Version Name
-* Media Path
-* Thumbnail Path
-* project
-* entity (Shot)
-* task
-* Status
-* Description
-* Created At
-* Created By
-
-*Additional metadata may be included depending on the studio workflow.*
-
-
-
-## Review Notes
-* Review Notes are used to display existing comments and submit new feedback during playback.
-* The default implementation stores review notes in a JSON file.
-* Production environments should replace this implementation with database queries and write operations.
-
-**Modify the following method for query existing review notes:**
-
-```
-./scripts/__init__.py
-
-class Review
-
-    @classmethod
-    def get(cls):
+```bash
+# Ubuntu 22.04+
+bash build-ubuntu-appimage.sh
 ```
 
-This method should return all review notes associated with the selected version.
-
-
-**Modify the following method for create new review notes:**
-
-```
-./scripts/__init__.py
-
-class Review
-
-    @classmethod
-    def set(cls):
-```
-
-This method should submit newly created review notes to your production tracking system.
-
-The default implementation demonstrates the expected data structure only.
-
-
-**Default Example**
-
-Example review data is located in:
-
-```
-./resources/presets/reviews.json
-```
-
-*Use this file as a reference when integrating with your production database.*
-
-
-**Data Flow**, The default application follows the workflow below.
-
-```text
-
-    Projects
-        │
-        ▼
-    Project Browser
-        │
-        ▼
-    Versions
-        │
-        ▼
-    Media Player
-        │
-        ▼
-    Review Notes
-        │
-        ├── Query Existing Notes
-        │
-        └── Submit New Notes
-
-```
-
-Only the highlighted data providers need to be replaced for studio integration.
-
-## Why JSON?
-
-The JSON files included with Viewline are intended solely as reference implementations.
-
-They allow developers to:
-
-* Understand the expected data structure.
-* Run Viewline without a production tracking system.
-* Prototype integrations quickly.
-* Test the Review Player independently.
-
-Once integration is complete, the JSON files are no longer required and can be replaced entirely by your production tracking system.
-
----
-
-## Architecture Overview
-
-The project separates playback into multiple independent systems.
-
-```text
-Media Reader
-    ↓
-Frame Cache
-    ↓
-OCIO Processing
-    ↓
-Viewer Rendering
-    ↓
-Timeline / UI
-```
-
-
-## Python Version
-
-python-3.10.10 or +
-
-## Dependencies
-
-| Library     | Purpose                 |
-| ----------- | ----------------------- |
-| PySide6     | UI framework            |
-| PyOpenGL    | OpenGL rendering        |
-| NumPy       | Image buffer processing |
-| PyAV        | Video decoding          |
-| OpenImageIO | Image sequence reading  |
-| OpenColorIO | Color management        |
-
-
-## Required Libraries
-
-```yml
-    requests: 2.32.2
-        certifi: 2024.2.2
-        idna: 3.7
-        urllib3: 2.2.1
-        charset-normalizer: 3.3.2
-
-    PySide6: 6.9.0
-        shiboken6: 6.9.0
-        PySide6-Essentials: 6.9.0
-        PySide6-Addons: 6.9.0
-
-    pyqtdarktheme: 2.1.0
-        darkdetect: 0.7.1
-
-    OpenImageIO: 3.0.4.0
-
-    PyOpenGL: 3.1.9
-    opencolorio: 2.5.0
-    av: 17.0.0
-    numpy: 1.26.4
-```
-
-## Recommended OCIO Config ACES 1.3
-
-Official repository:
-
-```text
-    https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES
-```
-
-
-# EXR Support
-
-The player currently supports:
-
-* Single-layer EXR
-* Multi-layer EXR
-* RGB layer extraction
-* Basic AOV switching
-
-The EXR reader automatically searches for valid RGB layers.
-
-Example supported channel patterns:
-
-```text
-R G B
-beauty.R beauty.G beauty.B
-rgba.R rgba.G rgba.B
-Ci.R Ci.G Ci.B
-```
-
-
-# Current Limitations
-
-This project is currently an early playback framework.
-
-Known limitations:
-
-* OpenGL currently uses `glDrawPixels()`
-* No GPU texture rendering yet
-* No threaded decoding
-* Video decoding may load many frames into memory
-* EXR playback currently converts float images into uint8 previews
-* No HDR display pipeline yet
-* No audio synchronization
-* No annotation system
----
-
-# Future Roadmap
-
-## Playback
-
-* Threaded decoding
-* Async frame prefetch
-* Smart frame cache
-* GPU upload pipeline
-
-
-## Viewer
-
-* OpenGL texture rendering
-* GPU OCIO transforms
-* Zoom
-* Pan
-* Fit modes
-* Pixel inspection
-
-
-
-## Timeline
-
-* Timeline zoom
-* Cached frame visualization
-* Frame markers
-* Notes/comments
-* In/out ranges
-
-
-## EXR Features
-
-* Layer browser
-* AOV switching
-* Deep EXR support
-* Metadata viewer
-* Multi-part EXR support
-
-
-## Integrations
-
-* USD pipelines
-* FFmpeg render export
-* Editorial workflow
-
-
----
-# Author
-
-Subin Gopi *subing85@gmail.com*
-
----
-# License
-
-This project is intended as a free educational and production workflow framework for the animation and VFX industry.
-
----
+## Attribution and license
+
+FrameDeck retains the original Viewline Git history and Apache-2.0 license.
+See [LICENSE](LICENSE). The bundled ACES 1.2 archive source and checksum are
+documented in `resources/ocio/ACES_1.2_SOURCE.txt`.

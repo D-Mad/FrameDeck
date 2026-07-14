@@ -59,6 +59,9 @@ class PlaylistTreewidget(QtWidgets.QTreeWidget):
         >>> treewidget.setValues(versions)
     """
 
+    files_dropped = QtCore.Signal(list)
+    items_changed = QtCore.Signal(list)
+
     def __init__(self, parent, **kwargs):
         """
         Initialize playlist tree widget.
@@ -74,7 +77,9 @@ class PlaylistTreewidget(QtWidgets.QTreeWidget):
         super(PlaylistTreewidget, self).__init__(parent)
 
         # Thumbnail display size
-        self.size = (200, 112)
+        # Keep the source browser compact.  The larger editorial cards live in
+        # Shot Playlist Timeline, so the left list only needs a quick visual ID.
+        self.size = (112, 63)
 
         # Hide tree header
         self.setHeaderHidden(True)
@@ -82,14 +87,58 @@ class PlaylistTreewidget(QtWidgets.QTreeWidget):
         # Enable alternating row colors
         self.setAlternatingRowColors(True)
 
-        # Allow single item selection only
-        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        # Ctrl+click selects two clips for RV-style A/B comparison.
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
 
         # Stretch final column
         self.header().setStretchLastSection(True)
 
         # Set icon display size
         self.setIconSize(QtCore.QSize(*self.size))
+
+        # External file drops add clips; internal drags reorder the playlist.
+        self.setAcceptDrops(True)
+        self.setDragEnabled(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(QtCore.Qt.DropAction.MoveAction)
+        self.setRootIsDecorated(False)
+
+    def contexts(self):
+        return [self.topLevelItem(index).context for index in range(self.topLevelItemCount())]
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+            if paths:
+                self.files_dropped.emit(paths)
+                event.acceptProposedAction()
+                return
+
+        super().dropEvent(event)
+        QtCore.QTimer.singleShot(0, lambda: self.items_changed.emit(self.contexts()))
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key.Key_Delete:
+            for item in self.selectedItems():
+                index = self.indexOfTopLevelItem(item)
+                if index >= 0:
+                    self.takeTopLevelItem(index)
+            self.items_changed.emit(self.contexts())
+            return
+        super().keyPressEvent(event)
 
     def setValues(self, versions):
         """

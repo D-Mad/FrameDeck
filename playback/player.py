@@ -56,6 +56,7 @@ Notes:
 from __future__ import absolute_import
 
 import numpy
+import threading
 
 import utils
 import logger
@@ -71,6 +72,89 @@ from playback.reader import MovieReader
 from playback.reader import SequenceReader
 
 LOGGER = logger.getLogger(__name__)
+
+
+class SequenceDecodeThread(QtCore.QThread):
+    """Bounded EXR/image decoder queue modeled after a media decoder FIFO."""
+
+    decoded = QtCore.Signal(int, object, int, str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._condition = threading.Condition()
+        self._pending = deque()
+        self._pending_keys = set()
+        self._inflight_key = None
+        self._shutdown_requested = False
+
+    def request(
+        self,
+        reader,
+        frame_number,
+        aov,
+        ocio_processor,
+        generation,
+        priority=False,
+    ):
+        key = (generation, int(frame_number), str(aov), id(ocio_processor))
+        with self._condition:
+            if key == self._inflight_key or key in self._pending_keys:
+                return
+            if priority:
+                # Seeking/playback must not sit behind stale prefetch work.
+                self._pending.clear()
+                self._pending_keys.clear()
+            task = (
+                reader,
+                int(frame_number),
+                str(aov),
+                ocio_processor,
+                int(generation),
+                key,
+            )
+            self._pending.appendleft(task) if priority else self._pending.append(task)
+            self._pending_keys.add(key)
+            self._condition.notify()
+
+    def clear_pending(self):
+        with self._condition:
+            self._pending.clear()
+            self._pending_keys.clear()
+
+    def shutdown(self):
+        with self._condition:
+            self._shutdown_requested = True
+            self._pending.clear()
+            self._pending_keys.clear()
+            self._condition.notify_all()
+        self.wait()
+
+    def run(self):
+        while True:
+            with self._condition:
+                while not self._pending and not self._shutdown_requested:
+                    self._condition.wait()
+                if self._shutdown_requested:
+                    return
+                task = self._pending.popleft()
+                self._pending_keys.discard(task[-1])
+                self._inflight_key = task[-1]
+
+            reader, frame_number, aov, processor, generation, _key = task
+            error = ""
+            image = None
+            try:
+                image = reader.get_frame(
+                    frame_number,
+                    aov=aov,
+                    ocio_processor=processor,
+                )
+            except Exception as exception:
+                error = str(exception)
+            finally:
+                with self._condition:
+                    self._inflight_key = None
+            self.decoded.emit(frame_number, image, generation, error)
 
 
 class BasePlayer(QtCore.QObject):
@@ -104,6 +188,9 @@ class BasePlayer(QtCore.QObject):
 
     # Playback state changed.
     timeline_actived = QtCore.Signal(int)
+
+    # Current clip reached its end without clip looping.
+    playback_finished = QtCore.Signal()
 
 
 class MediaPlayer(BasePlayer):
@@ -152,6 +239,10 @@ class MediaPlayer(BasePlayer):
 
         # Destroy previously loaded player.
         if self.player:
+            if hasattr(self.player, "reset"):
+                self.player.reset()
+            elif hasattr(self.player, "pause"):
+                self.player.pause()
             self.player.deleteLater()
             self.player = None
 
@@ -172,6 +263,7 @@ class MediaPlayer(BasePlayer):
         self.player.frame_changed.connect(self.frame_changed)
         self.player.cache_changed.connect(self.cache_changed)
         self.player.timeline_actived.connect(self.timeline_actived)
+        self.player.playback_finished.connect(self.playback_finished)
 
         # Load media.
         self.player.load(path)
@@ -179,20 +271,19 @@ class MediaPlayer(BasePlayer):
     @property
     def reader(self):
         """Return active media reader."""
-
-        return self.player.reader
+        return self.player.reader if self.player else None
 
     @property
     def frame_count(self):
         """Return total timeline frames."""
 
-        return self.player.frame_count
+        return self.player.frame_count if self.player else 0
 
     @property
     def is_playing(self):
         """Return playback state."""
 
-        return self.player.is_playing
+        return self.player.is_playing if self.player else False
 
     def volume_changed(self, value):
         """Set playback volume.
@@ -202,22 +293,26 @@ class MediaPlayer(BasePlayer):
                 Volume percentage (0-100).
         """
 
-        self.player.volume_changed(value)
+        if self.player:
+            self.player.volume_changed(value)
 
     def toggle_play_pause(self):
         """Toggle playback state."""
 
-        self.player.toggle_play_pause()
+        if self.player:
+            self.player.toggle_play_pause()
 
     def backward_frame(self):
         """Step backward one frame."""
 
-        self.player.backward_frame()
+        if self.player:
+            self.player.backward_frame()
 
     def forward_frame(self):
         """Step forward one frame."""
 
-        self.player.forward_frame()
+        if self.player:
+            self.player.forward_frame()
 
     def set_loop(self, enabled):
         """Enable or disable looping.
@@ -227,7 +322,8 @@ class MediaPlayer(BasePlayer):
                 Loop playback state.
         """
 
-        self.player.set_loop()
+        if self.player:
+            self.player.set_loop(enabled)
 
     def seek(self, frame):
         """Seek to timeline frame.
@@ -237,7 +333,13 @@ class MediaPlayer(BasePlayer):
                 Target timeline frame.
         """
 
-        self.player.seek(frame)
+        if self.player:
+            self.player.seek(frame)
+
+    def set_fps(self, fps):
+        """Set sequence playback FPS through the active implementation."""
+        if self.player and hasattr(self.player, "set_fps"):
+            self.player.set_fps(fps)
 
     def set_aov(self, aov):
         """Set active AOV.
@@ -247,7 +349,8 @@ class MediaPlayer(BasePlayer):
                 AOV name.
         """
 
-        self.player.set_aov(aov)
+        if self.player:
+            self.player.set_aov(aov)
 
     def set_ocio(self, processor, input_space, display, view):
         """Configure OCIO display transform.
@@ -266,13 +369,16 @@ class MediaPlayer(BasePlayer):
                 OCIO view.
         """
 
+        # Keep project color state on the high-level player as well as the
+        # active implementation.  Otherwise the transform disappears as soon
+        # as a playlist item creates a new MoviePlayer/SequencePlayer.
+        self.ocio_processor = processor
+        self.input_space = input_space
+        self.display = display
+        self.view = view
+
         if self.player:
             self.player.set_ocio(processor, input_space, display, view)
-        else:
-            self.ocio_processor = processor
-            self.input_space = input_space
-            self.display = display
-            self.view = view
 
 
 class SequencePlayer(BasePlayer):
@@ -341,6 +447,15 @@ class SequencePlayer(BasePlayer):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.next_frame)
 
+        # EXR decompression and OCIO never run on the GUI thread. The worker
+        # keeps a bounded latest-first queue so fast scrubbing skips stale
+        # requests instead of building seconds of latency.
+        self.decode_generation = 0
+        self.display_request_frame = None
+        self.decoder = SequenceDecodeThread(self)
+        self.decoder.decoded.connect(self._frame_decoded)
+        self.decoder.start()
+
     def load(self, path):
         """Load media into the player.
 
@@ -368,6 +483,8 @@ class SequencePlayer(BasePlayer):
             >>> player.load("/shots/shot010/render.####.exr")
         """
 
+        self.decode_generation += 1
+        self.decoder.clear_pending()
         self.reader = SequenceReader(path)
         self.reader.set_fps(self.fps)
 
@@ -380,11 +497,36 @@ class SequencePlayer(BasePlayer):
         self.current_aov = "rgb"
 
         # Reset Cache
+        proxy_pixels = min(
+            self.reader.width,
+            constants.VL_SEQUENCE_PROXY_MAX_WIDTH,
+        ) * min(
+            self.reader.height,
+            constants.VL_SEQUENCE_PROXY_MAX_HEIGHT,
+        )
+        self.cache.max_size = (
+            constants.VL_SEQUENCE_2K_CACHE_FRAMES
+            if proxy_pixels >= 1920 * 1080
+            else constants.VL_FRAME_CACHE_MAX_SIZE
+        )
         self.cache.clear()
         self.cache_changed.emit([])
 
-        # Load First Frame
-        self.update_frame()
+        # Queue on the next event-loop turn. MainWindow can apply the detected
+        # OCIO input first, avoiding a wasted auto-color decode followed by a
+        # second decode of the same heavy EXR frame.
+        QtCore.QTimer.singleShot(0, self.update_frame)
+
+    def reset(self):
+        """Stop background sequence work and release the reader safely."""
+        self.pause()
+        self.decode_generation += 1
+        if self.decoder is not None:
+            self.decoder.shutdown()
+        if self.reader is not None:
+            self.reader.close()
+            self.reader = None
+        self.cache.clear()
 
     def next_frame(self):
         """Advance playback to next frame.
@@ -409,8 +551,9 @@ class SequencePlayer(BasePlayer):
             if self.loop_enabled:  # Loop Playback
                 self.current_frame = self.start_frame
             else:  # Stop Playback
-                self.current_frame = self.end_frame
+                self.current_frame = self.end_frame - 1
                 self.pause()
+                self.playback_finished.emit()
 
     def toggle_play_pause(self):
         """Toggle playback state.
@@ -463,6 +606,7 @@ class SequencePlayer(BasePlayer):
 
         # Update Playback State
         self.is_playing = True
+        self._queue_prefetch(self.current_frame)
 
     def pause(self):
         """Stop playback.
@@ -556,6 +700,9 @@ class SequencePlayer(BasePlayer):
         # Store Current AOV
         self.current_aov = aov
 
+        self.decode_generation += 1
+        self.decoder.clear_pending()
+
         # Reset Frame Cache
         self.cache.clear()
         self.cache_changed.emit([])
@@ -575,7 +722,10 @@ class SequencePlayer(BasePlayer):
         """
 
         # Update Timeline Frame
-        self.current_frame = frame
+        self.current_frame = max(
+            self.start_frame,
+            min(int(frame), self.end_frame - 1),
+        )
 
         # Refresh Viewer Frame
         self.update_frame()
@@ -659,11 +809,17 @@ class SequencePlayer(BasePlayer):
         """
 
         # Reset Frame Cache
+        self.decode_generation += 1
+        self.decoder.clear_pending()
         self.cache.clear()
         self.cache_changed.emit([])
 
         # Store OCIO Processor
         self.ocio_processor = processor
+        if self.reader is not None:
+            # None is an explicit UI Disable request.  Do not silently fall
+            # back to the reader's built-in ACES preview in that state.
+            self.reader.auto_color_enabled = processor is not None
 
         # Store OCIO Input Space
         self.input_space = input_space
@@ -707,26 +863,60 @@ class SequencePlayer(BasePlayer):
         if not self.reader:
             return
 
-        # Read From Cache
-        if self.cache.cache and self.current_frame in self.cache.cache:
-            frame = self.cache.cache[self.current_frame]
-        else:  # Read From Media Reader
-            frame = self.reader.get_frame(
-                self.current_frame,
-                aov=self.current_aov,
-                ocio_processor=self.ocio_processor,
-            )
+        frame_number = self.current_frame
+        self.display_request_frame = frame_number
+        frame = self.cache.get(frame_number)
+        if frame is not None:
+            self.frame_ready.emit(frame)
+            self.frame_changed.emit(frame_number)
+            self._queue_prefetch(frame_number)
+            return
 
-        # Store Frame Into Cache
-        self.cache.add(self.current_frame, frame)
+        # Move the playhead instantly and decode the newest request first.
+        self.frame_changed.emit(frame_number)
+        self.decoder.request(
+            self.reader,
+            frame_number,
+            self.current_aov,
+            self.ocio_processor,
+            self.decode_generation,
+            priority=True,
+        )
+
+    def _frame_decoded(self, frame_number, frame, generation, error):
+        if generation != self.decode_generation or self.reader is None:
+            return
+        if error:
+            LOGGER.error(f"Sequence frame {frame_number} failed: {error}")
+            return
+        if frame is None:
+            return
+        self.cache.add(frame_number, frame)
         self.cache_changed.emit(self.cache.cached_frames())
+        if frame_number == self.display_request_frame:
+            self.frame_ready.emit(frame)
+            self.frame_changed.emit(frame_number)
+        self._queue_prefetch(frame_number)
 
-        # Emit Viewer Signals
-        self.frame_ready.emit(frame)
-        self.frame_changed.emit(self.current_frame)
-
-        # Store Displayed Frame
-        # self.displayed_frame = self.current_frame
+    def _queue_prefetch(self, anchor):
+        if not self.reader or not self.decoder:
+            return
+        for offset in range(1, constants.VL_SEQUENCE_PREFETCH_FRAMES + 1):
+            frame_number = int(anchor) + offset
+            if frame_number >= self.end_frame:
+                if not self.loop_enabled:
+                    break
+                frame_number = self.start_frame + (frame_number - self.end_frame)
+            if self.cache.has_frame(frame_number):
+                continue
+            self.decoder.request(
+                self.reader,
+                frame_number,
+                self.current_aov,
+                self.ocio_processor,
+                self.decode_generation,
+                priority=False,
+            )
 
     def volume_changed(self, value):
         return
@@ -811,6 +1001,12 @@ class MoviePlayer(BasePlayer):
         # Active view.
         self.view = None
 
+        # Bounded prefetch prevents a silent clip from being decoded in full
+        # on the GUI thread during import.
+        self.video_buffer_target = 8
+        self.audio_buffer_target = 16
+        self.max_decoded_frames_per_fill = 32
+
     def reset(self):
         """Reset playback session.
 
@@ -871,6 +1067,24 @@ class MoviePlayer(BasePlayer):
         # Open the movie file and create a playback reader.
         self.reader = MovieReader(path)
 
+        # Large decoded frames consume substantial RAM (a single 4K RGB frame
+        # is roughly 24 MB). Keep a smaller time buffer for high resolutions.
+        pixel_count = self.reader.video_stream.width * self.reader.video_stream.height
+        if pixel_count >= 3840 * 2160:
+            self.video_buffer_target = 4
+            self.audio_buffer_target = 8
+        elif pixel_count >= 2560 * 1440:
+            self.video_buffer_target = 6
+            self.audio_buffer_target = 12
+        else:
+            self.video_buffer_target = 8
+            self.audio_buffer_target = 16
+
+        if self.reader.is_network_source:
+            # Network reads should be short and incremental; a large blocking
+            # decode batch makes the UI appear frozen on high-latency shares.
+            self.max_decoded_frames_per_fill = 4
+
         # Initialize the audio output device when an audio stream exists.
         if self.reader.has_audio():
             self.audio_player.initialize(
@@ -881,11 +1095,38 @@ class MoviePlayer(BasePlayer):
         # Store total timeline frame count.
         self.frame_count = self.reader.frame_count()
 
-        # Seek to the first timeline frame and display it immediately.
-        self.seek(self.start_frame)
+        # The demuxer is already positioned at the start. Decode forward to
+        # the first video frame instead of issuing another expensive seek.
+        first_frame = None
+        while first_frame is None:
+            result = self.reader.next_packet()
+            if result is None:
+                break
+            media_type, decoded_frame = result
+            if media_type == "video":
+                first_frame = decoded_frame
+            else:
+                self.audio_queue.append(decoded_frame)
 
-        # Decode a small number of packets ahead of playback.
-        self.fill_movie_queue()
+        if first_frame is not None:
+            frame_time = first_frame.time
+            if frame_time is None and first_frame.pts is not None:
+                frame_time = float(first_frame.pts * self.reader.video_stream.time_base)
+            self.playback_offset = frame_time or 0.0
+            self.display_video_frame(first_frame)
+
+        # Network sources start with only two video frames, then grow their
+        # normal buffer incrementally during playback.
+        if self.reader.is_network_source:
+            video_target = self.video_buffer_target
+            audio_target = self.audio_buffer_target
+            self.video_buffer_target = 2
+            self.audio_buffer_target = 4
+            self.fill_movie_queue()
+            self.video_buffer_target = video_target
+            self.audio_buffer_target = audio_target
+        else:
+            self.fill_movie_queue()
 
         # Notify listeners that the playback cache starts empty.
         self.cache_changed.emit([])
@@ -937,6 +1178,11 @@ class MoviePlayer(BasePlayer):
             This provides accurate seeking regardless of frame rate or movie time base.
         """
 
+        frame = max(
+            self.start_frame,
+            min(int(frame), self.start_frame + self.frame_count - 1),
+        )
+
         # Pause playback before repositioning the decoder.
         if self.is_playing:
             self.pause()
@@ -952,7 +1198,10 @@ class MoviePlayer(BasePlayer):
             return
 
         # Synchronize the playback clock with the decoded frame.
-        self.playback_offset = video_frame.time
+        frame_time = video_frame.time
+        if frame_time is None and video_frame.pts is not None:
+            frame_time = float(video_frame.pts * self.reader.video_stream.time_base)
+        self.playback_offset = frame_time or seconds
 
         # Discard buffered frames from the previous playback position.
         self.video_queue.clear()
@@ -1005,6 +1254,7 @@ class MoviePlayer(BasePlayer):
             # Otherwise pause playback at the end of the movie.
             else:
                 self.pause()
+                self.playback_finished.emit()
 
             return
 
@@ -1029,8 +1279,16 @@ class MoviePlayer(BasePlayer):
             These queues are continuously refilled during playback by :meth:`update_playback`.
         """
 
-        # Continue decoding until both playback buffers reach their target sizes.
-        while len(self.video_queue) < 5 or len(self.audio_queue) < 20:
+        decoded = 0
+
+        def needs_data():
+            needs_video = len(self.video_queue) < self.video_buffer_target
+            needs_audio = self.reader.has_audio() and len(self.audio_queue) < self.audio_buffer_target
+            return needs_video or needs_audio
+
+        # Audio is optional. The previous unconditional audio target caused
+        # silent videos to decode all the way to EOF during load.
+        while needs_data() and decoded < self.max_decoded_frames_per_fill:
 
             # Decode the next available media frame.
             result = self.reader.next_packet()
@@ -1040,6 +1298,7 @@ class MoviePlayer(BasePlayer):
                 break
 
             media_type, frame = result
+            decoded += 1
 
             # Store decoded video frames.
             if media_type == "video":
@@ -1065,21 +1324,29 @@ class MoviePlayer(BasePlayer):
             This keeps playback synchronized with the movie's presentation timestamps (PTS).
         """
 
-        # Display every frame whose presentation time has been reached.
+        # Consume all ready frames, but render only the newest. If decoding or
+        # painting falls behind, displaying stale frames makes the lag worse.
+        ready_frame = None
         while self.video_queue:
 
             # Peek at the next decoded frame.
             frame = self.video_queue[0]
 
             # Stop when the next frame belongs to the future.
-            if frame.time > current_time:
+            frame_time = frame.time
+            if frame_time is None and frame.pts is not None:
+                frame_time = float(frame.pts * self.reader.video_stream.time_base)
+
+            if frame_time is None or frame_time > current_time:
                 break
 
             # Remove the frame from the playback buffer.
             self.video_queue.popleft()
 
-            # Display the decoded frame.
-            self.display_video_frame(frame)
+            ready_frame = frame
+
+        if ready_frame is not None:
+            self.display_video_frame(ready_frame)
 
     def display_video_frame(self, frame):
         """Display a decoded video frame.
@@ -1110,6 +1377,30 @@ class MoviePlayer(BasePlayer):
             ensuring accurate synchronization with playback time.
         """
 
+        frame_time = frame.time
+        if frame_time is None and frame.pts is not None:
+            frame_time = float(frame.pts * self.reader.video_stream.time_base)
+        frame_time = frame_time or 0.0
+
+        # Generate a display proxy for 2K/4K sources before converting to a
+        # NumPy RGB array. FFmpeg's scaler is much faster and uses far less
+        # memory than converting the full 4K frame and resizing in the widget.
+        source_width = frame.width
+        source_height = frame.height
+        scale = min(
+            1.0,
+            constants.VL_VIDEO_PROXY_MAX_WIDTH / source_width,
+            constants.VL_VIDEO_PROXY_MAX_HEIGHT / source_height,
+        )
+        if scale < 1.0:
+            proxy_width = max(2, int(source_width * scale) // 2 * 2)
+            proxy_height = max(2, int(source_height * scale) // 2 * 2)
+            frame = frame.reformat(
+                width=proxy_width,
+                height=proxy_height,
+                format="rgb24",
+            )
+
         # Convert the decoded video frame into an RGB NumPy image.
         image = frame.to_ndarray(format="rgb24")
 
@@ -1125,7 +1416,11 @@ class MoviePlayer(BasePlayer):
             image = (numpy.clip(image, 0.0, 1.0) * 255.0).astype(numpy.uint8)
 
         # Convert playback time into the corresponding timeline frame.
-        frame_number = self.start_frame + round(frame.time * self.reader.get_fps())
+        frame_number = self.start_frame + round(frame_time * self.reader.get_fps())
+        frame_number = max(
+            self.start_frame,
+            min(frame_number, self.start_frame + self.frame_count - 1),
+        )
 
         # Send the image to the viewer.
         self.frame_ready.emit(image)
@@ -1268,7 +1563,8 @@ class MoviePlayer(BasePlayer):
         self.audio_player.play()
 
         # Start the playback update loop.
-        self.timer.start(5)
+        fps = self.reader.get_fps() if self.reader else 24.0
+        self.timer.start(max(5, min(15, int(500 / max(fps, 1.0)))))
 
         # Update playback state.
         self.is_playing = True
@@ -1497,6 +1793,15 @@ class MoviePlayer(BasePlayer):
         # Configure the processor using the selected display transform.
         if self.ocio_processor:
             self.ocio_processor.set_display_transform(input_space, display, view)
+
+        # Re-decode the current movie frame immediately. Queued PyAV frames
+        # are source frames; seeking makes Apply/Disable visibly update a
+        # paused viewer instead of waiting for playback to advance.
+        if self.reader is not None:
+            current_frame = self.start_frame + round(
+                self.current_playback_time() * self.reader.get_fps()
+            )
+            self.seek(current_frame)
 
 
 class AudioPlayer(QtCore.QObject):

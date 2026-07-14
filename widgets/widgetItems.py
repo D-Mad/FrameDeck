@@ -111,8 +111,7 @@ class PlaylistWidgetItem(QtWidgets.QTreeWidgetItem):
         # Configure Item Flags
         self.setFlags(
             QtCore.Qt.ItemIsSelectable
-            | QtCore.Qt.ItemIsDropEnabled
-            | QtCore.Qt.ItemIsUserCheckable
+            | QtCore.Qt.ItemIsDragEnabled
             | QtCore.Qt.ItemIsEnabled
         )
 
@@ -149,15 +148,33 @@ class PlaylistWidgetItem(QtWidgets.QTreeWidgetItem):
         # Store Context
         self.context = context or self.context
 
-        # Build Display Text
-        values = [
-            f"\nVersion: {self.context['code']} | {self.context['id']}",
-            f"Task: {self.context['sg_task']['name']}",
-            f"Entity: {self.context['entity']['name']}",
-            f"Status: {self.context['sg_status_list']}",
-            f"created: {self.context['created_at']}",
-            f"created By: {self.context['created_by']['name']}\n",
-        ]
+        if self.context.get("type") == "LocalMedia":
+            duration = float(self.context.get("duration") or 0.0)
+            minutes, seconds = divmod(int(round(duration)), 60)
+            values = [
+                f"#{self.context.get('playlist_index', 1):02d}  {self.context['code']}",
+                f"{self.context.get('fps', 0):g} FPS  •  {self.context.get('frame_count', 0)} frames",
+                f"{minutes:02d}:{seconds:02d}  •  {self.context.get('resolution', 'Unknown size')}",
+            ]
+            if self.context.get("media_kind") == "sequence":
+                values.append(f"Color: {self.context.get('colorspace', 'Auto')}")
+            elif self.context.get("network_source"):
+                status = self.context.get("cache_status", "Waiting")
+                progress = int(self.context.get("cache_progress") or 0)
+                if status == "Caching":
+                    status = f"{status} {progress}%"
+                values.append(f"Server cache: {status}")
+            self.setToolTip(0, self.context.get("media", ""))
+        else:
+            # Build production/version display text.
+            values = [
+                f"\nVersion: {self.context['code']} | {self.context['id']}",
+                f"Task: {self.context['sg_task']['name']}",
+                f"Entity: {self.context['entity']['name']}",
+                f"Status: {self.context['sg_status_list']}",
+                f"created: {self.context['created_at']}",
+                f"created By: {self.context['created_by']['name']}\n",
+            ]
 
         # Set Item Text
         self.setText(0, "\n".join(values))

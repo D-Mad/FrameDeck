@@ -192,10 +192,22 @@ class ForwardButton(IconButton):
     name = "forward"
 
 
+class VolumeButton(IconButton):
+    """Mute/unmute button for the flat volume control."""
+
+    name = "volume"
+
+
 class PencilButton(IconButton):
     """Pencil button."""
 
     name = "pencil"
+
+
+class NavigateButton(IconButton):
+    """Return mouse input to viewer navigation."""
+
+    name = "navigate"
 
 
 class ArrowButton(IconButton):

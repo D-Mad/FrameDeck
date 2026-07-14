@@ -8,7 +8,7 @@ Module:
     ./widgets/sliders.py
 
 Description:
-    Custom Qt volume slider used by the Viewline Review Player.
+    Custom Qt volume slider used by FrameDeck.
 
     This module provides a lightweight horizontal slider designed for movie playback controls. The default appearance is inspired by
     professional media players, featuring a colored volume gradient and a minimal marker-style handle suitable for compact toolbars.
@@ -38,7 +38,7 @@ from PySide6 import QtWidgets
 class VolumeSlider(QtWidgets.QSlider):
     """Volume control slider.
 
-    Custom horizontal volume slider used by the Viewline playback controls.
+    Custom horizontal volume slider used by FrameDeck playback controls.
 
     Features:
         * Horizontal layout.
@@ -53,35 +53,25 @@ class VolumeSlider(QtWidgets.QSlider):
     """
 
     STYLE_SHEET = """
-        /* The background groove */
         QSlider::groove:horizontal {
-            height: 14px;
-            border: 1px solid #222222;
-            border-radius: 0px;
+            height: 5px;
+            background: #273b47;
+            border: 1px solid #405864;
+            border-radius: 2px;
         }
-
-        /* The filled volume level (VLC Gradient look) */
         QSlider::sub-page:horizontal {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                stop:0 #50C878,    /* Green */
-                stop:0.6 #FFD700,  /* Yellow/Orange */
-                stop:1.0 #FF4500); /* Red for volume boost */
-            border: 1px solid #222222;
-            border-radius: 0px;
+            background: #35c7b5;
+            border-radius: 2px;
         }
-
-        /* The handle acts as a thin marker line instead of a knob */
         QSlider::handle:horizontal {
-            background: #FFFFFF;
-            width: 12px;
-            margin-top: -1px;
-            margin-bottom: -1px;
+            background: #dce9ef;
+            border: 1px solid #101820;
+            width: 11px;
+            margin: -4px 0;
+            border-radius: 5px;
         }
-
-        /* Optional: change marker color when hovering */
         QSlider::handle:horizontal:hover {
-            background: #00AAFF;
-            width: 12px;
+            background: #f0b94d;
         }
     """
 
@@ -121,8 +111,8 @@ class VolumeSlider(QtWidgets.QSlider):
             QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed
         )
         self.setSizePolicy(sizePolicy)
-        self.setMinimumSize(QtCore.QSize(150, 0))
-        self.setMaximumSize(QtCore.QSize(150, 16777215))
+        self.setMinimumSize(QtCore.QSize(105, 0))
+        self.setMaximumSize(QtCore.QSize(105, 16777215))
 
 
 if __name__ == "__main__":

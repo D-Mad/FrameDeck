@@ -31,6 +31,12 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!framedeck.spec
+!framedeck-linux.spec
+
+# Downloaded and checksum-verified during builds; too large for GitHub's
+# per-file limit. Portable release artifacts still bundle it for offline use.
+resources/ocio/OpenColorIO-Config-ACES-1.2.zip
 
 # Installer logs
 pip-log.txt
