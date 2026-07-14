@@ -1,12 +1,21 @@
 # FrameDeck
 
-![FrameDeck review interface](doc/docs/resources/framedeck-overview.png)
+![FrameDeck OCIO and Shot Playlist interface](doc/docs/resources/framedeck-color-playlist-overview.png)
 
 FrameDeck is a portable VFX shot-review player for Windows and Ubuntu. It is
 based on [subing85/viewline](https://github.com/subing85/viewline) and extends
 that project with an RV-inspired review workflow, editorial playlists, modern
 color management, image-sequence playback, annotations, caching, and portable
 release builds.
+
+## Download FrameDeck
+
+| Platform | Direct download | How to run |
+| --- | --- | --- |
+| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.9/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
+| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.9/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
+
+[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.9).
 
 ## Highlights
 
@@ -93,14 +102,6 @@ expanded production workflow:
   FPS/audio and allowing user-defined image-sequence FPS.
 - PyInstaller-based Windows portable packaging and Ubuntu AppImage packaging.
 - GitHub Actions builds and publishes both portable formats from one release.
-
-## Download
-
-Download portable builds from the
-[GitHub Releases](https://github.com/D-Mad/FrameDeck/releases) page.
-
-Windows users extract the complete ZIP and double-click `FrameDeck.exe`.
-Ubuntu users mark the AppImage executable and run it directly.
 
 ## Keyboard and mouse
 
