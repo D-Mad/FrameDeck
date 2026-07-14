@@ -33,6 +33,9 @@ import resources
 import constants
 
 from utils import timecode
+
+from playback.stats import PlaybackStats
+from playback import stats as statsmath
 from utils import notescsv
 
 from PySide6 import QtGui
@@ -128,6 +131,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # During playlist playback this loops the whole edit, never one clip.
         self.loop_enabled = False
         self.loop_mode = "off"
+
+        # Performance HUD. Stats are always collected (they cost a deque append
+        # per frame); only the drawing is gated on the toggle.
+        self.playback_stats = PlaybackStats()
+        self.stats_hud_enabled = False
         self._playlist_loading = False
         self.playlist_entries = list()
         self.playlist_entry_index = -1
@@ -321,6 +329,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe.timelineToolbarLayout.trigger_timeline.connect(self.trigger_timeline)
         self.viewframe.timelineToolbarLayout.fps_chanaged.connect(self.update_fps)
         self.viewframe.timelineToolbarLayout.volume_changed.connect(self.player.volume_changed)
+
+        # --------------------------------------------------------------------
+        # Performance HUD
+        # --------------------------------------------------------------------
+        self.player.set_stats(self.playback_stats)
+        # A frame reaching the viewer is the only honest definition of a
+        # displayed frame, so the rate is measured there and not at the timer.
+        self.player.frame_ready.connect(
+            lambda _image: self.playback_stats.record_frame()
+        )
+        self.statsHudTimer = QtCore.QTimer(self)
+        self.statsHudTimer.setInterval(250)
+        self.statsHudTimer.timeout.connect(self.refresh_stats_hud)
         # Keyboard Shortcuts
         # Play / Pause
         self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
@@ -482,6 +503,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionShotTimeline.setChecked(True)
         self.actionShotTimeline.toggled.connect(self.shotSequenceWidget.setVisible)
         view_menu.addAction(self.actionShotTimeline)
+        self.actionStatsHud = QtGui.QAction("Performance HUD", self, checkable=True)
+        self.actionStatsHud.setIcon(NamePixmapIcon("display"))
+        self.actionStatsHud.setShortcut(QtGui.QKeySequence("Ctrl+Alt+H"))
+        self.actionStatsHud.toggled.connect(self.set_stats_hud)
+        view_menu.addAction(self.actionStatsHud)
         self.actionRecaps = QtGui.QAction("Review Notes Panel", self, checkable=True)
         self.actionRecaps.setIcon(NamePixmapIcon("txt"))
         self.actionRecaps.toggled.connect(self.recapsWidget.set_current_recaps)
@@ -1127,6 +1153,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Persist the outgoing source's annotations before the viewer is wiped.
         self._save_current_notes()
+
+        # Clear measurements BEFORE the new source loads. Loading displays its
+        # first frame synchronously, so resetting afterwards would throw away
+        # the very frame (and decode timing) that was just recorded.
+        self.playback_stats.reset()
         # The old source is no longer active. Clearing this before opening the
         # replacement prevents a failed import followed by app exit from
         # overwriting the outgoing shot's sidecar with an empty sketch.
@@ -2194,6 +2225,43 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             message = f"Playback mode: {label}"
         self.statusBar().showMessage(message, 4500)
+
+    def set_stats_hud(self, enabled):
+        """Show or hide the viewer performance HUD."""
+        self.stats_hud_enabled = bool(enabled)
+        self.viewframe.viewer.set_stats_hud(self.stats_hud_enabled)
+
+        if self.stats_hud_enabled:
+            self.refresh_stats_hud()
+            self.statsHudTimer.start()
+        else:
+            self.statsHudTimer.stop()
+
+    def refresh_stats_hud(self):
+        """Rebuild the HUD rows from the current measurements."""
+        if not self.stats_hud_enabled:
+            return
+
+        image = self.viewframe.viewer.qimage
+        resolution = (image.width(), image.height()) if image is not None else None
+
+        cached = None
+        implementation = self.player.player
+        if implementation is not None and hasattr(implementation, "cache"):
+            cached = len(implementation.cache.cached_frames())
+
+        rows = statsmath.hud_lines(
+            self.playback_stats,
+            target_fps=self._current_fps(),
+            # A pause stops frames arriving just like a stall does; only the
+            # player knows which of the two this is.
+            playing=bool(self.player.is_playing),
+            frame=self.viewframe.timeline.current_frame,
+            frame_count=self.player.frame_count,
+            resolution=resolution,
+            cached=cached,
+        )
+        self.viewframe.viewer.set_stats_rows(rows)
 
     def set_gamma_check(self, enabled):
         """Toggle temporary Y-drag gamma inspection in the viewer."""
