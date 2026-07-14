@@ -117,8 +117,11 @@ class TimelineWidget(QtWidgets.QWidget):
                 End frame.
         """
 
-        self.start_frame = start
-        self.end_frame = end
+        self.start_frame = int(start)
+        self.end_frame = max(self.start_frame, int(end))
+        self.current_frame = max(
+            self.start_frame, min(self.current_frame, self.end_frame)
+        )
 
         # Refresh widget
         self.update()
@@ -174,29 +177,43 @@ class TimelineWidget(QtWidgets.QWidget):
             return
 
         # Compute timeline scaling
-        usable_width = width - (self.timeline_margin * 2)
+        usable_width = max(1, width - (self.timeline_margin * 2))
         pixels_per_frame = usable_width / (total_frames - 1)
 
-        target_labels = 8
-        major_step = math.ceil(total_frames / target_labels)
+        target_labels = max(4, min(10, usable_width // 100))
+        rough_step = max(1.0, total_frames / target_labels)
+        magnitude = 10 ** math.floor(math.log10(rough_step))
+        normalized = rough_step / magnitude
+        if normalized <= 1:
+            nice = 1
+        elif normalized <= 2:
+            nice = 2
+        elif normalized <= 5:
+            nice = 5
+        else:
+            nice = 10
+        major_step = max(1, int(nice * magnitude))
 
-        # Draw frame ticks
-        for frame in range(self.start_frame, self.end_frame + 1):
+        # Draw a bounded number of minor ticks. The old implementation drew
+        # one line per frame, so repaint cost grew linearly with clip length.
+        minor_slots = max(1, target_labels * 5)
+        major_frames = {self.start_frame, self.end_frame}
+        first_major = math.ceil(self.start_frame / major_step) * major_step
+        major_frames.update(range(first_major, self.end_frame + 1, major_step))
 
-            # Convert frame to timeline position
+        painter.setPen(QtGui.QColor(100, 100, 100))
+        for slot in range(minor_slots + 1):
+            frame = self.start_frame + round((total_frames - 1) * slot / minor_slots)
+            if frame in major_frames:
+                continue
             x = int(self.timeline_margin + ((frame - self.start_frame) * pixels_per_frame))
+            painter.drawLine(x, 10, x, 20)
 
-            # Major tick every 10 frames
-            if frame % major_step == 0 or frame in [self.start_frame, self.end_frame]:
-                painter.setPen(QtGui.QColor(180, 180, 180))
-                painter.drawLine(x, 0, x, 25)
-
-                # Draw frame number
-                painter.drawText(x + 2, 40, str(frame))
-
-            else:  # Minor ticks
-                painter.setPen(QtGui.QColor(100, 100, 100))
-                painter.drawLine(x, 10, x, 20)
+        painter.setPen(QtGui.QColor(180, 180, 180))
+        for frame in sorted(major_frames):
+            x = int(self.timeline_margin + ((frame - self.start_frame) * pixels_per_frame))
+            painter.drawLine(x, 0, x, 25)
+            painter.drawText(x + 2, 40, str(frame))
 
         # Calculate playhead position
         current_x = int(
@@ -337,7 +354,9 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # Compute timeline scale
         total_frames = self.end_frame - self.start_frame
-        usable_width = self.width() - (self.timeline_margin * 2)
+        if total_frames <= 0:
+            return float(self.timeline_margin)
+        usable_width = max(1, self.width() - (self.timeline_margin * 2))
         ratio = (frame - self.start_frame) / total_frames
 
         return self.timeline_margin + (ratio * usable_width)
@@ -384,7 +403,7 @@ class TimelineWidget(QtWidgets.QWidget):
             return
 
         # Compute usable width
-        usable_width = width - (self.timeline_margin * 2)
+        usable_width = max(1, width - (self.timeline_margin * 2))
 
         # Convert mouse position to local timeline position
         local_x = x - self.timeline_margin

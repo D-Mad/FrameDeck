@@ -99,7 +99,7 @@ class Projects(object):
         """
 
         # Load Example Project Preset Data
-        reviews_path = utils.viewlinePath(subfolder="schemas")
+        reviews_path = utils.frameDeckPath(subfolder="schemas")
         projects_file = utils.pathResolver(reviews_path, filename="projects.json")
 
         projects_data_list = utils.readJsonFile(projects_file)
@@ -165,7 +165,7 @@ class Versions(object):
         """
 
         # Load Example Version Preset Data
-        reviews_path = utils.viewlinePath(subfolder="schemas")
+        reviews_path = utils.frameDeckPath(subfolder="schemas")
         versions_file = utils.pathResolver(reviews_path, filename="versions.json")
         versions_data_list = utils.readJsonFile(versions_file)
 
@@ -232,7 +232,7 @@ class Review(object):
         project = context["version"]["project"]
         version = context["version"]
 
-        reviews_path = utils.viewlinePath(subfolder="schemas")
+        reviews_path = utils.frameDeckPath(subfolder="schemas")
 
         # Attachments
         attachment_file = utils.pathResolver(reviews_path, filename="attachment.json")
@@ -350,7 +350,7 @@ class Review(object):
     @classmethod
     def get(cls, version, reverse=False):
 
-        reviews_path = utils.viewlinePath(subfolder="schemas")
+        reviews_path = utils.frameDeckPath(subfolder="schemas")
         note_file = utils.pathResolver(reviews_path, filename="note.json")
 
         note_data_list = utils.readJsonFile(note_file) or list()

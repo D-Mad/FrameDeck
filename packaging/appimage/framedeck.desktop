@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=FrameDeck
+Comment=Fast shot review and playlist player
+Exec=FrameDeck %F
+Icon=framedeck
+Terminal=false
+Categories=AudioVideo;Video;
+MimeType=video/mp4;video/quicktime;video/x-msvideo;
+StartupWMClass=FrameDeck

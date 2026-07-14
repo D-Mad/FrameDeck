@@ -16,7 +16,7 @@ set "PYTHONPATH=%LIB_DIR%/charset-normalizer/3.3.2;%LIB_DIR%/certifi/2024.2.2;%L
 
 :: Set OpenColorIO Config Path
 set "OCIO=D:/works/developments/devkit/ocio/studio-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio"
-set "VIEW_LINE_PROFILE_ROOT=%USERPROFILE%/Documents"
+set "FRAMEDECK_PROFILE_ROOT=%USERPROFILE%/Documents"
 
 :: Run the script passing all arguments
 "C:/Program Files/Python310/Lib/idlelib/idle.bat" %*

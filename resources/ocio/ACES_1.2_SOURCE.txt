@@ -1,0 +1,7 @@
+Official ACES 1.2 OpenColorIO configuration
+Source: https://github.com/colour-science/OpenColorIO-Configs/releases/tag/v1.2
+Archive: OpenColorIO-Config-ACES-1.2.zip
+SHA-256: 299b55ab69d045e49199c750b1045ebe250bf2ec4ffa93a304bd40608b5d7ec4
+
+This archived release implements ACES 1.2. FrameDeck also exposes the newer
+ACES 1.3 and ACES 2.0 CG/Studio configs bundled with OpenColorIO 2.5.

@@ -433,8 +433,38 @@ Display vs view?
 
 from __future__ import absolute_import
 
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy
 import PyOpenColorIO
+
+
+_OCIO_WORKERS = max(1, min(8, os.cpu_count() or 4))
+_OCIO_EXECUTOR = ThreadPoolExecutor(
+    max_workers=_OCIO_WORKERS,
+    thread_name_prefix="FrameDeck-OCIO",
+)
+
+
+def apply_cpu_processor(cpu_processor, image):
+    """Apply an immutable OCIO CPU processor to RGB/RGBA scanline chunks."""
+    if cpu_processor is None:
+        return image
+    image = numpy.ascontiguousarray(image)
+    if image.ndim < 2 or image.shape[-1] not in (3, 4):
+        raise ValueError(
+            "OCIO display transforms require an RGB or RGBA image buffer"
+        )
+    apply = cpu_processor.applyRGBA if image.shape[-1] == 4 else cpu_processor.applyRGB
+    if _OCIO_WORKERS == 1 or image.shape[0] < 256 or image.shape[0] * image.shape[1] < 500000:
+        apply(image)
+        return image
+    chunks = numpy.array_split(image, _OCIO_WORKERS, axis=0)
+    futures = [_OCIO_EXECUTOR.submit(apply, chunk) for chunk in chunks]
+    for future in futures:
+        future.result()
+    return image
 
 
 class OCIOProcessor(object):
@@ -480,11 +510,31 @@ class OCIOProcessor(object):
         """
 
         self.enabled = False
+        self.cpu_processor = None
+        self.working_space = None
+        self.config_path = config_path or "environment"
+        self.cache_key = "ocio-unconfigured"
 
         if config_path:
             self.config = PyOpenColorIO.Config.CreateFromFile(config_path)
         else:
             self.config = PyOpenColorIO.GetCurrentConfig()
+        self.config_fingerprint = self._config_fingerprint()
+
+    def _config_fingerprint(self):
+        """Identify config content/reload state for persistent display proxies."""
+        tokens = [str(self.config_path)]
+        try:
+            tokens.append(str(self.config.getCacheID()))
+        except Exception:
+            tokens.append("no-cache-id")
+        if self.config_path and os.path.isfile(self.config_path):
+            try:
+                stat = os.stat(self.config_path)
+                tokens.extend((str(stat.st_size), str(stat.st_mtime_ns)))
+            except OSError:
+                pass
+        return "|".join(tokens)
 
     def set_enabled(self, enabled):
         self.enabled = enabled
@@ -605,11 +655,11 @@ class OCIOProcessor(object):
         image = image.astype(numpy.float32)
 
         # Apply Transform
-        cpu_processor.applyRGB(image)
+        apply_cpu_processor(cpu_processor, image)
 
         return image
 
-    def set_display_transform(self, input_space, display, view):
+    def set_display_transform(self, input_space, display, view, working_space=None):
         """
         Build and cache the OCIO display transform processor.
 
@@ -661,17 +711,39 @@ class OCIOProcessor(object):
                     ↓
             Cached CPU Processor
         """
-        # Create an OCIO Display/View transform object.
-        transform = PyOpenColorIO.DisplayViewTransform()
+        working_space = working_space or self.working_space
+        self.cache_key = "|".join(
+            map(
+                str,
+                (
+                    self.config_fingerprint,
+                    input_space,
+                    working_space or "",
+                    display,
+                    view,
+                ),
+            )
+        )
+        display_transform = PyOpenColorIO.DisplayViewTransform()
 
         # Specify the source (input) color space.
-        transform.setSrc(input_space)
+        display_transform.setSrc(working_space or input_space)
 
         # Specify the destination display device.
-        transform.setDisplay(display)
+        display_transform.setDisplay(display)
 
         # Specify the display view (tone mapping / look).
-        transform.setView(view)
+        display_transform.setView(view)
+
+        if working_space and working_space != input_space:
+            input_transform = PyOpenColorIO.ColorSpaceTransform()
+            input_transform.setSrc(input_space)
+            input_transform.setDst(working_space)
+            transform = PyOpenColorIO.GroupTransform()
+            transform.appendTransform(input_transform)
+            transform.appendTransform(display_transform)
+        else:
+            transform = display_transform
 
         # Build an optimized OCIO processor from the transform.
         processor = self.config.getProcessor(transform)
@@ -728,7 +800,7 @@ class OCIOProcessor(object):
         image = image.copy()
 
         # Apply the cached OCIO display transform.
-        self.cpu_processor.applyRGB(image)
+        apply_cpu_processor(self.cpu_processor, image)
 
         # Return the transformed image.
         return image

@@ -1,667 +1,500 @@
-"""
-Copyright (c) 2026, Motion-Craft Technology All rights reserved.
-
-Author:
-    Subin. Gopi (subing85@gmail.com).
-
-Module:
-    ./widgets/ocio.py
-
-Description:
-    OCIO (OpenColorIO) configuration widget used by the Review Player application.
-
-    This module provides the graphical interface for configuring OpenColorIO display transforms used during image and video playback.
-
-The widget allows users to:
-
-    - Enable or disable OCIO color management
-    - Browse and load custom OCIO configuration files
-    - Select the input color space
-    - Select the target display device
-    - Select the display view (display transform)
-    - Apply the selected OCIO configuration to the media viewer
-
-Main Components:
-    OcioWidget:
-        Main dialog used to configure OpenColorIO display settings.
-
-Features:
-    - Enable/disable OCIO processing
-    - Browse OCIO configuration files
-    - Automatic OCIO configuration loading
-    - Input color space selection
-    - Display selection
-    - View selection
-    - Dynamic view refresh when display changes
-    - Emit OCIO configuration changes to the media player
-
-Notes:
-    The widget is responsible only for user interaction and configuration.
-
-    Actual image color transformation is performed by
-    :class:`OCIOProcessor`, while rendering is handled by the media
-    viewer.
-
-Example:
-    >>> widget = OcioWidget(parent)
-    >>> widget.ocio_changed.connect(player.set_ocio)
-"""
+"""Project-level ACES/OpenColorIO settings for FrameDeck."""
 
 from __future__ import absolute_import
 
-import utils
+import os
+import zipfile
 
-from PySide6 import QtCore
-from PySide6 import QtWidgets
+import PyOpenColorIO
+from PySide6 import QtCore, QtWidgets
 
-from widgets.labels import RightLabel
-from widgets.buttons import TextButton
-from widgets.dialogs import FileDialog
-from widgets.lineedits import InputLineEdit
-
-from widgets.layouts import GridLayout
-from widgets.layouts import VerticalLayout
-from widgets.layouts import HorizontalSpacer
-from widgets.layouts import HorizontalLayout
-
-from widgets.comboboxs import NormalCombobox
-
+import resources
 from ocio import OCIOProcessor
 
 
+AUTO_INPUT = "Auto / File Metadata"
+DEFAULT_BUILTIN = "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5"
+
+
 class OcioWidget(QtWidgets.QWidget):
-    """
-    OpenColorIO configuration dialog.
+    """Configure OCIO, monitor output, working space, and file defaults."""
 
-    This widget provides a graphical interface for configuring the OpenColorIO display pipeline used by the Review Player.
-
-    Components:
-        Configuration:
-            - Enable Color Management checkbox
-            - OCIO configuration path
-            - Browse button
-
-        Color Management:
-            - Color Space combobox
-            - Display combobox
-            - View combobox
-
-        Actions:
-            - Apply button
-            - Close button
-
-    Features:
-        - Dynamic OCIO configuration loading
-        - Automatic display/view population
-        - Display-dependent view updates
-        - Runtime configuration switching
-        - Signal-based integration with ViewerWidget
-
-    Signals:
-        ocio_changed(object, str, str, str):
-            Emitted when the user applies a new OCIO configuration.
-
-            Arguments:
-                object:
-                    Initialized :class:`OCIOProcessor`.
-
-                str:
-                    Selected input color space.
-
-                str:
-                    Selected display.
-
-                str:
-                    Selected view.
-
-    Architecture:
-        Enable Checkbox
-                ↓
-        OCIO Config
-                ↓
-        OCIOProcessor
-                ↓
-        Color Space
-                ↓
-        Display
-                ↓
-        View
-                ↓
-        ocio_changed
-                ↓
-        ViewerWidget
-
-    Example:
-        >>> widget = OcioWidget(parent)
-        >>> widget.ocio_changed.connect(player.set_ocio)
-    """
-
-    # ocio parameter chanage signals
     ocio_changed = QtCore.Signal(object, str, str, str)
 
-    def __init__(self, parent, *args, **kwargs):
-        """
-        Initialize the OpenColorIO configuration widget.
+    def __init__(self, parent=None, *args, **kwargs):
+        super().__init__(parent)
+        self.settings = QtCore.QSettings("FrameDeck", "FrameDeck")
+        requested = kwargs.get("config") or os.getenv("OCIO")
+        self.config_path = requested or self.settings.value(
+            "color/config", DEFAULT_BUILTIN, type=str
+        )
+        self.last_detected_input = ""
+        self.last_media_path = ""
+        self.active_input = ""
+        self.ocio_processor = None
+        self._build_ui()
+        self._load_builtin_configs()
+        self.reload_config(show_error=False)
 
-        Creates the OCIO configuration dialog, initializes the processor, loads the default OCIO configuration, and builds the user interface.
+    def _build_ui(self):
+        self.resize(760, 575)
+        self.setWindowTitle("FrameDeck Project Color Settings")
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(14, 14, 14, 14)
+        root.setSpacing(9)
 
-        Responsibilities:
-            - Store the current OCIO configuration path
-            - Create the OCIO processor
-            - Initialize widget state
-            - Build the user interface
+        self.enabledCheck = QtWidgets.QCheckBox("Enable OCIO color management")
+        self.enabledCheck.setChecked(
+            self.settings.value("color/enabled", True, type=bool)
+        )
+        root.addWidget(self.enabledCheck)
 
-        Args:
-            parent (QtWidgets.QWidget):
-                Parent widget.
+        preset_row = QtWidgets.QHBoxLayout()
+        preset_row.addWidget(QtWidgets.QLabel("Film / VFX preset"))
+        self.presetCombo = QtWidgets.QComboBox(self)
+        for label, key in (
+            ("Auto VFX / metadata", "auto"),
+            ("ACES2065-1 interchange", "aces2065"),
+            ("ACEScg CG / compositing", "acescg"),
+            ("ACEScct grading", "acescct"),
+            ("sRGB texture / graphics", "srgb"),
+            ("Rec.709 video monitor", "rec709"),
+            ("ARRI LogC3 plate", "arri_logc3"),
+            ("ARRI LogC4 plate", "arri_logc4"),
+            ("Sony S-Log3 plate", "sony_slog3"),
+            ("RED Log3G10 plate", "red_log3g10"),
+            ("Blackmagic Film Gen 5", "bmd_gen5"),
+            ("Raw / data", "raw"),
+        ):
+            self.presetCombo.addItem(label, key)
+        preset_row.addWidget(self.presetCombo, 1)
+        self.usePresetButton = QtWidgets.QPushButton("Use Preset", self)
+        preset_row.addWidget(self.usePresetButton)
+        root.addLayout(preset_row)
 
-            *args:
-                Additional positional arguments.
+        self.tabs = QtWidgets.QTabWidget(self)
+        root.addWidget(self.tabs, 1)
 
-            **kwargs:
-                Optional keyword arguments.
+        project = QtWidgets.QWidget(self)
+        project_layout = QtWidgets.QGridLayout(project)
+        project_layout.setColumnStretch(1, 1)
+        row = 0
 
-                config (str):
-                    Path to an OCIO configuration file.
+        self.configCombo = QtWidgets.QComboBox(project)
+        self.reloadButton = QtWidgets.QPushButton("Reload Config", project)
+        project_layout.addWidget(QtWidgets.QLabel("OCIO config"), row, 0)
+        project_layout.addWidget(self.configCombo, row, 1)
+        project_layout.addWidget(self.reloadButton, row, 2)
+        row += 1
 
-                    If omitted, the path is read from the OCIO environment variable.
+        self.customPathEdit = QtWidgets.QLineEdit(project)
+        self.customPathEdit.setReadOnly(True)
+        self.browseButton = QtWidgets.QPushButton("Browse...", project)
+        project_layout.addWidget(QtWidgets.QLabel("Custom OCIO config"), row, 0)
+        project_layout.addWidget(self.customPathEdit, row, 1)
+        project_layout.addWidget(self.browseButton, row, 2)
+        row += 1
 
-        Returns:
-            None
+        divider = QtWidgets.QFrame(project)
+        divider.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        project_layout.addWidget(divider, row, 0, 1, 3)
+        row += 1
 
-        Architecture:
-            Configuration Path
-                    ↓
-            OCIOProcessor
-                    ↓
-            Build User Interface
+        self.workingCombo = QtWidgets.QComboBox(project)
+        self.inputCombo = QtWidgets.QComboBox(project)
+        self.displayCombo = QtWidgets.QComboBox(project)
+        self.viewCombo = QtWidgets.QComboBox(project)
+        for label, widget in (
+            ("Working space", self.workingCombo),
+            ("Current input override", self.inputCombo),
+            ("Monitor / display", self.displayCombo),
+            ("Display view", self.viewCombo),
+        ):
+            project_layout.addWidget(QtWidgets.QLabel(label), row, 0)
+            project_layout.addWidget(widget, row, 1, 1, 2)
+            row += 1
 
-        Example:
-            >>> widget = OcioWidget(parent)
-            >>> widget = OcioWidget(parent, config="config.ocio")
-        """
+        self.statusLabel = QtWidgets.QLabel("", project)
+        self.statusLabel.setWordWrap(True)
+        self.statusLabel.setStyleSheet("color: #8fcfc7; padding-top: 8px;")
+        project_layout.addWidget(self.statusLabel, row, 0, 1, 3)
+        project_layout.setRowStretch(row + 1, 1)
+        self.tabs.addTab(project, "Project Color")
 
-        # Initialize QWidget
-        super(OcioWidget, self).__init__(parent)
+        defaults = QtWidgets.QWidget(self)
+        defaults_layout = QtWidgets.QGridLayout(defaults)
+        defaults_layout.setColumnStretch(1, 1)
+        intro = QtWidgets.QLabel(
+            "Default input interpretation by file type. Auto keeps embedded OCIO metadata when available."
+        )
+        intro.setWordWrap(True)
+        defaults_layout.addWidget(intro, 0, 0, 1, 2)
+        self.defaultCombos = {}
+        rows = (
+            ("8bit", "8-bit files (JPG / PNG)"),
+            ("16bit", "16-bit image files"),
+            ("log", "Log files / camera plates"),
+            ("float", "Float files (EXR / HDR)"),
+        )
+        for index, (key, label) in enumerate(rows, start=1):
+            combo = QtWidgets.QComboBox(defaults)
+            self.defaultCombos[key] = combo
+            defaults_layout.addWidget(QtWidgets.QLabel(label), index, 0)
+            defaults_layout.addWidget(combo, index, 1)
+        defaults_layout.setRowStretch(len(rows) + 1, 1)
+        self.tabs.addTab(defaults, "File Defaults")
 
-        # Store the last directory used when browsing for an OCIO configuration file.
-        self.browsepath = None
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.addStretch(1)
+        self.resetButton = QtWidgets.QPushButton("Reset ACES Defaults")
+        self.closeButton = QtWidgets.QPushButton("Close")
+        self.applyButton = QtWidgets.QPushButton("Apply")
+        buttons.addWidget(self.resetButton)
+        buttons.addWidget(self.closeButton)
+        buttons.addWidget(self.applyButton)
+        root.addLayout(buttons)
 
-        # Determine the active OCIO configuration.
-        # Priority:
-        #     1. "config" keyword argument
-        #     2. OCIO environment variable
-        self.config_path = kwargs.get("config") or utils.environmentValue("OCIO")
-
-        # Create the OpenColorIO processor used to query color spaces, displays and views.
-        self.ocio_processor = OCIOProcessor(self.config_path)
-
-        # Build the complete graphical interface.
-        self.setupUi()
-
-    def setupUi(self):
-        """
-        Build and initialize the main user interface.
-        """
-
-        # Configure main window size and title
-        self.resize(630, 255)
-
-        # Set the window title.
-        self.setWindowTitle("Color Mmanagment")
-
-        # Create main layout
-        self.mainlayout = VerticalLayout(self, space=0, margins=(20, 20, 20, 20))
-
-        # Create a frame used to visually group all controls.
-        self.frame = QtWidgets.QFrame(self)
-
-        # Apply a styled panel appearance and frame shadow.
-        self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
-
-        self.mainlayout.addWidget(self.frame)
-
-        # Create frame layout
-        self.verticalLayout = VerticalLayout(self.frame, space=20, margins=(20, 20, 20, 20))
-
-        # Create the enable checkbox.
-        self.configCheckBox = QtWidgets.QCheckBox(self)
-        self.configCheckBox.setText("Enable Color Management")
-        self.verticalLayout.addWidget(self.configCheckBox)
-
-        # Create the horizontal layout for the configuration path.
-        self.horizontalayout1 = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
-        self.verticalLayout.addLayout(self.horizontalayout1)
-
-        # Create the configuration label.
-        self.configLabel = RightLabel(self, "OCIO Config Path")
-        self.horizontalayout1.addWidget(self.configLabel)
-
-        # Create the read-only configuration path line edit.
-        self.configLineEdit = InputLineEdit(self, readonly=True)
-        self.configLineEdit.setText(self.config_path)
-        self.horizontalayout1.addWidget(self.configLineEdit)
-
-        # Create the browse button.
-        self.configButton = TextButton(self, label="...")
-        self.horizontalayout1.addWidget(self.configButton)
-
-        # Create the grid layout containing all OCIO controls.
-        self.gridlayout = GridLayout(None, space=(10, 10), margins=(0, 0, 0, 0))
-        self.verticalLayout.addLayout(self.gridlayout)
-
-        # ----- Color Space ----------
-
-        # Create the color space label.
-        self.colorSpaceLabel = RightLabel(self, "Color Space")
-        self.gridlayout.addWidget(self.colorSpaceLabel, 0, 0, 1, 1)
-
-        # Create the color space combobox.
-        self.colorSpaceCombobox = NormalCombobox(self)
-        self.gridlayout.addWidget(self.colorSpaceCombobox, 0, 1, 1, 1)
-
-        # ----- Display ----------
-
-        # Create the display label.
-        self.displayLabel = RightLabel(self, "Display")
-        self.gridlayout.addWidget(self.displayLabel, 1, 0, 1, 1)
-
-        # Create the display combobox.
-        self.displayCombobox = NormalCombobox(self)
-        self.gridlayout.addWidget(self.displayCombobox, 1, 1, 1, 1)
-
-        # ----- View ----------
-
-        # Create the view label.
-        self.viewLabel = RightLabel(self, "View")
-        self.gridlayout.addWidget(self.viewLabel, 2, 0, 1, 1)
-
-        # Create the view combobox.
-        self.viewCombobox = NormalCombobox(self)
-        self.gridlayout.addWidget(self.viewCombobox, 2, 1, 1, 1)
-
-        # ----- Action Buttons ----------
-
-        # Create the bottom action layout.
-        self.horizontalayout2 = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
-        self.verticalLayout.addLayout(self.horizontalayout2)
-
-        # Push action buttons to the right.
-        self.horizontalspacer = HorizontalSpacer()
-        self.horizontalayout2.addItem(self.horizontalspacer)
-
-        # Create the Close button.
-        self.closeButton = TextButton(self, label="Close")
-        self.horizontalayout2.addWidget(self.closeButton)
-
-        # Add the button.
-        self.applyButton = TextButton(self, label="Apply")
-        self.horizontalayout2.addWidget(self.applyButton)
-
-        # Disable all OCIO controls until the feature is explicitly enabled by the user.
-        self.set_enabled(False)
-
-        # Signal Connections
-        self.configCheckBox.stateChanged.connect(self.set_enabled)
-
-        # Refresh available views whenever the selected display changes.
-        self.displayCombobox.currentIndexChanged.connect(self.display_index_changed)
-
-        # Browse for a new OCIO configuration.
-        self.configButton.clicked.connect(self.set_config_path)
-
-        # Apply the selected OCIO configuration.
+        self.configCombo.currentIndexChanged.connect(self._config_changed)
+        self.displayCombo.currentIndexChanged.connect(self.set_views)
+        self.reloadButton.clicked.connect(self.reload_config)
+        self.browseButton.clicked.connect(self.set_config_path)
+        self.resetButton.clicked.connect(self.reset_defaults)
+        self.usePresetButton.clicked.connect(self.apply_quick_preset)
+        self.closeButton.clicked.connect(self.close)
         self.applyButton.clicked.connect(self.set_config)
 
-        # Close the dialog.
-        self.closeButton.clicked.connect(self.close)
+    def _load_builtin_configs(self):
+        self.configCombo.blockSignals(True)
+        self.configCombo.clear()
+        registry = PyOpenColorIO.BuiltinConfigRegistry()
+        selected = 0
+        for index, (name, description, _recommended, _default) in enumerate(
+            registry.getBuiltinConfigs()
+        ):
+            uri = f"ocio://{name}"
+            label = description.replace("Academy Color Encoding System - ", "")
+            self.configCombo.addItem(label, uri)
+            if uri == self.config_path:
+                selected = index
+        self.configCombo.addItem("ACES 1.2 Legacy (bundled offline)", "bundled://aces-1.2")
+        bundled_config = os.path.join(
+            os.getenv("FRAMEDECK_PROFILE_ROOT") or os.path.expanduser("~"),
+            "framedeck",
+            "ocio",
+            "aces_1.2",
+            "config.ocio",
+        )
+        if os.path.normcase(self.config_path or "") == os.path.normcase(bundled_config):
+            selected = self.configCombo.count() - 1
+        self.configCombo.addItem("Custom OCIO file...", "custom")
+        if (
+            self.config_path
+            and not self.config_path.startswith("ocio://")
+            and os.path.normcase(self.config_path) != os.path.normcase(bundled_config)
+        ):
+            selected = self.configCombo.count() - 1
+            self.customPathEdit.setText(self.config_path)
+        self.configCombo.setCurrentIndex(selected)
+        self.configCombo.blockSignals(False)
 
-        # Load the current OCIO configuration and populate all comboboxes.
+    @staticmethod
+    def _set_combo(combo, values, preferred=""):
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems(values)
+        if preferred:
+            index = combo.findText(preferred)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        combo.blockSignals(False)
+
+    @staticmethod
+    def _best_space(spaces, candidates, fallback=""):
+        lowered = [(space, space.lower()) for space in spaces]
+        for candidate in candidates:
+            for space, value in lowered:
+                if candidate.lower() in value:
+                    return space
+        return fallback or (spaces[0] if spaces else "")
+
+    def _config_changed(self):
+        value = self.configCombo.currentData()
+        if value == "bundled://aces-1.2":
+            try:
+                self.config_path = self._ensure_bundled_aces12()
+            except Exception as error:
+                QtWidgets.QMessageBox.critical(self, "ACES 1.2 Extract Error", str(error))
+                return
+        elif value == "custom":
+            if self.customPathEdit.text():
+                self.config_path = self.customPathEdit.text()
+            else:
+                self.set_config_path()
+                return
+        elif value:
+            self.config_path = value
         self.reload_config()
 
-    def set_enabled(self, state):
-        """
-        Enable or disable the OpenColorIO configuration controls.
-
-        This method updates the enabled state of all user-editable OCIO controls based on the state of the **Enable Color Management** checkbox.
-
-        Responsibilities:
-            - Enable configuration controls
-            - Disable configuration controls
-            - Prevent editing while OCIO is disabled
-
-        Args:
-            state (QtCore.Qt.CheckState):
-                Current checkbox state.
-
-                Values:
-                    - QtCore.Qt.Unchecked
-                    - QtCore.Qt.Checked
-
-        Returns:
-            None
-
-        Notes:
-            This slot is connected to:
-
-                configCheckBox.stateChanged
-
-            Qt automatically converts the check state to a boolean when passed to QWidget.setEnabled().
-
-        Architecture:
-            Enable Checkbox
-                    ↓
-            set_enabled()
-                    ↓
-            Enable / Disable
-                    ↓
-            Configuration Controls
-
-        Example:
-            >>> self.set_enabled(QtCore.Qt.Checked)
-        """
-        # List of widgets controlled by the, Enable Color Management checkbox.
-        widgets = [
-            self.configLineEdit,
-            self.configButton,
-            self.colorSpaceCombobox,
-            self.displayCombobox,
-            self.viewCombobox,
-        ]
-
-        # Enable or disable every OCIO-related widget.
-        for widget in widgets:
-            widget.setEnabled(state)
+    def _ensure_bundled_aces12(self):
+        """Extract the official compressed ACES 1.2 config on first use."""
+        profile_root = os.getenv("FRAMEDECK_PROFILE_ROOT") or os.path.expanduser("~")
+        destination = os.path.join(profile_root, "framedeck", "ocio", "aces_1.2")
+        config_path = os.path.join(destination, "config.ocio")
+        if os.path.isfile(config_path):
+            return config_path
+        archive = os.path.join(
+            resources.CURRENT_PATH, "ocio", "OpenColorIO-Config-ACES-1.2.zip"
+        )
+        if not os.path.isfile(archive):
+            raise FileNotFoundError("Bundled ACES 1.2 archive is missing")
+        parent = os.path.dirname(destination)
+        os.makedirs(parent, exist_ok=True)
+        with zipfile.ZipFile(archive, "r") as package:
+            prefix = "OpenColorIO-Config-ACES-1.2/aces_1.2/"
+            for member in package.infolist():
+                if not member.filename.startswith(prefix) or member.is_dir():
+                    continue
+                relative = member.filename[len(prefix):]
+                if not relative or relative.startswith("."):
+                    continue
+                target = os.path.abspath(os.path.join(destination, relative))
+                if not target.startswith(os.path.abspath(destination) + os.sep):
+                    raise RuntimeError("Unsafe path in ACES 1.2 archive")
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with package.open(member) as source, open(target, "wb") as output:
+                    output.write(source.read())
+        if not os.path.isfile(config_path):
+            raise RuntimeError("ACES 1.2 config could not be extracted")
+        return config_path
 
     def set_config_path(self):
-        """
-        Browse and load an OpenColorIO configuration file.
-
-        Opens a file browser allowing the user to select an OpenColorIO (*.ocio) configuration file. Once selected,
-        the configuration path is stored and the OCIO processor is reloaded using the new configuration.
-
-        Responsibilities:
-            - Open the file browser
-            - Filter OCIO configuration files
-            - Store the selected configuration path
-            - Update the configuration path display
-            - Reload the OCIO configuration
-
-        Returns:
-            None
-
-        Notes:
-            If the user cancels the file dialog, the current configuration remains unchanged.
-
-        Architecture:
-            Browse Button
-                    ↓
-            FileDialog
-                    ↓
-            Select OCIO File
-                    ↓
-            Update Config Path
-                    ↓
-            reload_config()
-                    ↓
-            Refresh Color Spaces
-                    ↓
-            Refresh Displays
-                    ↓
-            Refresh Views
-
-        Example:
-            >>> self.set_config_path()
-        """
-
-        # Create a file dialog for selecting an OpenColorIO configuration file.
-        fileDialog = FileDialog(
-            self,
-            "Browse your Ocio Config file",
-            label="ocio",
-            extensions=["ocio"],
-            browsepath=self.browsepath,
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Choose custom OCIO config", "", "OpenColorIO Config (*.ocio)"
         )
-
-        # Open the file browser and return the selected configuration file.
-        filepath = fileDialog.pickFile()
-
-        # Stop if the user cancelled the dialog.
-        if not filepath:
+        if not path:
             return
-
-        # Store the selected configuration path.
-        self.config_path = filepath
-
-        # Remember the selected directory so the next browse operation starts here.
-        self.browsepath = utils.dirname(self.config_path)
-
-        # Update the configuration path shown inside the read-only line edit.
-        self.configLineEdit.setValue(self.config_path)
-
-        # Reload the OCIO processor and refresh all available color spaces, displays and views from the new configuration.
+        self.config_path = path
+        self.customPathEdit.setText(path)
+        self.configCombo.blockSignals(True)
+        self.configCombo.setCurrentIndex(self.configCombo.count() - 1)
+        self.configCombo.blockSignals(False)
         self.reload_config()
 
-    def reload_config(self):
-        """
-        Reload the current OpenColorIO configuration.
+    def reload_config(self, *_args, show_error=True):
+        previous = {
+            "working": self.workingCombo.currentText(),
+            "input": self.inputCombo.currentText(),
+            "display": self.displayCombo.currentText(),
+            "view": self.viewCombo.currentText(),
+            **{key: combo.currentText() for key, combo in self.defaultCombos.items()},
+        }
+        try:
+            self.ocio_processor = OCIOProcessor(self.config_path)
+        except Exception as error:
+            self.statusLabel.setText(f"Config error: {error}")
+            if show_error:
+                QtWidgets.QMessageBox.critical(self, "OCIO Config Error", str(error))
+            return False
 
-        Creates a new OCIO processor using the currently selected configuration file and refreshes all available color
-        management options displayed in the user interface.
+        config = self.ocio_processor.config
+        spaces = sorted(self.ocio_processor.get_color_spaces(), key=str.lower)
+        displays = list(self.ocio_processor.get_displays())
+        scene_linear = config.getRoleColorSpace("scene_linear") or self._best_space(
+            spaces, ["acescg", "linear rec.709", "linear srgb"]
+        )
+        srgb = self._best_space(
+            spaces, ["srgb encoded rec.709", "utility - srgb - texture", "srgb texture"]
+        )
 
-        Responsibilities:
-            - Create a new OCIO processor
-            - Load available color spaces
-            - Load available displays
-            - Refresh dependent UI controls
+        saved_working = self.settings.value("color/working", previous["working"], type=str)
+        self._set_combo(self.workingCombo, spaces, saved_working or scene_linear)
+        self._set_combo(
+            self.inputCombo,
+            [AUTO_INPUT] + spaces,
+            self.settings.value("color/input", previous["input"] or AUTO_INPUT, type=str),
+        )
+        saved_display = self.settings.value("color/display", previous["display"], type=str)
+        display = saved_display or next(
+            (value for value in displays if "srgb" in value.lower()),
+            displays[0] if displays else "",
+        )
+        self._set_combo(self.displayCombo, displays, display)
+        self.set_views(preferred=self.settings.value("color/view", previous["view"], type=str))
 
-        Returns:
-            None
+        defaults = {
+            "8bit": srgb,
+            "16bit": AUTO_INPUT,
+            "log": AUTO_INPUT,
+            "float": AUTO_INPUT,
+        }
+        for key, combo in self.defaultCombos.items():
+            saved = self.settings.value(f"color/default_{key}", previous.get(key), type=str)
+            self._set_combo(combo, [AUTO_INPUT] + spaces, saved or defaults[key])
 
-        Notes:
-            The View combobox is refreshed automatically when the Display combobox emits the ``currentIndexChanged`` signal.
+        self.statusLabel.setText(
+            f"Loaded {len(spaces)} color spaces  |  {len(displays)} displays"
+        )
+        return True
 
-        Architecture:
-            OCIO Config Path
-                    ↓
-            OCIOProcessor
-                    ↓
-            Color Spaces
-                    ↓
-            Displays
-                    ↓
-            Display Changed Signal
-                    ↓
-            set_views()
+    def set_views(self, *_args, preferred=""):
+        if self.ocio_processor is None or not self.displayCombo.currentText():
+            self._set_combo(self.viewCombo, [])
+            return
+        views = list(self.ocio_processor.get_views(self.displayCombo.currentText()))
+        selected = preferred or self.viewCombo.currentText()
+        if not selected:
+            selected = next((view for view in views if view.lower() != "raw"), "")
+        self._set_combo(self.viewCombo, views, selected)
 
-        Example:
-            >>> self.reload_config()
-        """
+    def reset_defaults(self):
+        for key in (
+            "color/working", "color/input", "color/display", "color/view",
+            "color/default_8bit", "color/default_16bit", "color/default_log",
+            "color/default_float",
+        ):
+            self.settings.remove(key)
+        self.config_path = DEFAULT_BUILTIN
+        self._load_builtin_configs()
+        self.reload_config()
 
-        # Create a new OCIO processor using the currently selected configuration file.    #
-        self.ocio_processor = OCIOProcessor(self.config_path)
+    def apply_quick_preset(self):
+        """Apply common film/VFX source interpretations with one click."""
+        key = self.presetCombo.currentData()
+        presets = {
+            "auto": ([], ["acescg", "linear rec.709"], False),
+            "aces2065": (["aces2065-1"], ["acescg"], False),
+            "acescg": (["acescg"], ["acescg"], False),
+            "acescct": (["acescct"], ["acescct", "acescg"], False),
+            "srgb": (["srgb encoded rec.709", "srgb - texture", "utility - srgb"], ["acescg"], False),
+            "rec709": (["srgb encoded rec.709", "camera rec.709", "rec.709"], ["acescg"], False),
+            "arri_logc3": (["arri logc3", "logc3", "arri logc ei"], ["acescg"], True),
+            "arri_logc4": (["arri logc4", "logc4"], ["acescg"], True),
+            "sony_slog3": (["s-log3 s-gamut3.cine", "s-log3"], ["acescg"], True),
+            "red_log3g10": (["log3g10 redwidegamutrgb", "log3g10"], ["acescg"], True),
+            "bmd_gen5": (["blackmagic film generation 5", "blackmagic wide gamut gen 5"], ["acescg"], True),
+            "raw": (["raw"], ["acescg", "linear rec.709"], False),
+        }
+        input_candidates, working_candidates, studio = presets[key]
 
-        # Query all available input color spaces from the loaded OCIO configuration.
-        color_spaces = self.ocio_processor.get_color_spaces()
+        spaces = self.ocio_processor.get_color_spaces()
+        selected_input = self._best_space(spaces, input_candidates) if input_candidates else AUTO_INPUT
+        if studio and not any(
+            candidate.lower() in " ".join(spaces).lower()
+            for candidate in input_candidates
+        ):
+            self.config_path = "ocio://studio-config-v4.0.0_aces-v2.0_ocio-v2.5"
+            index = self.configCombo.findData(self.config_path)
+            blocker = QtCore.QSignalBlocker(self.configCombo)
+            self.configCombo.setCurrentIndex(max(0, index))
+            del blocker
+            self.reload_config()
+            spaces = self.ocio_processor.get_color_spaces()
+            selected_input = self._best_space(spaces, input_candidates)
 
-        # Populate the Color Space combobox.
-        self.colorSpaceCombobox.setItems(color_spaces)
+        working = self._best_space(spaces, working_candidates)
+        if working:
+            self.workingCombo.setCurrentText(working)
+        self.inputCombo.setCurrentText(selected_input or AUTO_INPUT)
+        if key in {"aces2065", "acescg", "acescct", "raw"}:
+            self.defaultCombos["float"].setCurrentText(selected_input or AUTO_INPUT)
+        if key == "srgb":
+            self.defaultCombos["8bit"].setCurrentText(selected_input)
+        if key == "rec709":
+            displays = [self.displayCombo.itemText(i) for i in range(self.displayCombo.count())]
+            display = self._best_space(displays, ["rec.1886", "rec.709"])
+            if display:
+                self.displayCombo.setCurrentText(display)
+                self.set_views()
+        # Preview immediately.  Apply below still persists the project
+        # settings and closes the window, but Use Preset now behaves like its
+        # name and gives visible feedback in the current viewer.
+        input_space = self.resolve_input(
+            self.last_detected_input, self.last_media_path
+        )
+        applied = self._emit_transform(input_space)
+        if applied:
+            self.statusLabel.setText(
+                f"LIVE PREVIEW: {self.presetCombo.currentText()}  |  "
+                f"{input_space} -> {self.displayCombo.currentText()} / "
+                f"{self.viewCombo.currentText()}  |  Apply saves"
+            )
+        else:
+            self.statusLabel.setText(
+                "Preset selected, but OCIO is disabled. Enable OCIO to preview it."
+            )
 
-        # Query all available displays from the loaded OCIO configuration.
-        displays = self.ocio_processor.get_displays()
+    def _category_for(self, media_path):
+        extension = os.path.splitext(media_path or "")[1].lower()
+        if extension in {".jpg", ".jpeg", ".png"}:
+            return "8bit"
+        if extension in {".dpx", ".cin"}:
+            return "log"
+        if extension in {".exr", ".hdr"}:
+            return "float"
+        return "16bit"
 
-        # Populate the Display combobox.
-        # Changing the current display automatically emits currentIndexChanged(), which updates the View combobox via display_index_changed().
-        self.displayCombobox.setItems(displays)
+    @property
+    def config_label(self):
+        value = self.config_path or ""
+        if value.endswith(os.path.join("aces_1.2", "config.ocio")):
+            return "ACES 1.2 Offline"
+        if "aces-v2.0" in value:
+            return "ACES 2.0 Studio" if "studio-config" in value else "ACES 2.0 CG"
+        if "aces-v1.3" in value:
+            return "ACES 1.3 Studio" if "studio-config" in value else "ACES 1.3 CG"
+        return "Custom OCIO" if value else "OCIO Off"
 
-    def set_views(self):
-        """
-        Populate the View combobox for the selected display.
+    def resolve_input(self, detected_input="", media_path=""):
+        override = self.inputCombo.currentText()
+        if override and override != AUTO_INPUT:
+            return override
+        category = self._category_for(media_path)
+        file_default = self.defaultCombos[category].currentText()
+        if file_default and file_default != AUTO_INPUT:
+            return file_default
+        config = self.ocio_processor.config
+        if detected_input and config.getColorSpace(detected_input):
+            return detected_input
+        role = config.getRoleColorSpace("scene_linear")
+        return role or self.workingCombo.currentText()
 
-        Queries all available display views associated with the currently selected display and updates the View combobox.
-
-        Responsibilities:
-            - Read the current display selection
-            - Query available display views
-            - Populate the View combobox
-
-        Returns:
-            None
-
-        Notes:
-            Available views are display-dependent.
-
-            Every display may expose a different set of views defined by the active OpenColorIO configuration.
-
-        Architecture:
-            Display Combobox
-                    ↓
-            Current Display
-                    ↓
-            OCIOProcessor.get_views()
-                    ↓
-            View List
-                    ↓
-            View Combobox
-
-        Example:
-            >>> self.set_views()
-        """
-
-        # Retrieve the currently selected display.
-        display = self.displayCombobox.getValue()
-
-        # Query all available views for the selected display from the OCIO configuration.
-        views = self.ocio_processor.get_views(display)
-
-        # Populate the View combobox with the available display views.
-        self.viewCombobox.setItems(views)
-
-    def display_index_changed(self, *args):
-        """
-        Handle display selection changes.
-
-        This slot is invoked whenever the selected display changes.
-        It refreshes the View combobox to show only the views that belong to the newly selected display.
-
-        Responsibilities:
-            - Respond to display selection changes
-            - Refresh available display views
-            - Keep the View combobox synchronized with the selected display
-
-        Args:
-            *args:
-                Unused signal arguments received from
-                ``QComboBox.currentIndexChanged``.
-
-                The signal may emit either:
-                    - int (current index)
-                    - str (current text)
-
-                The arguments are ignored because the currently selected display is queried directly from the combobox.
-
-        Returns:
-            None
-
-        Notes:
-            Connected to:
-
-                displayCombobox.currentIndexChanged
-
-            This method acts as a lightweight slot whose sole purpose is to refresh the available views.
-
-        Architecture:
-            Display Combobox
-                    ↓
-            currentIndexChanged
-                    ↓
-            display_index_changed()
-                    ↓
-            set_views()
-                    ↓
-            View Combobox Updated
-
-        Example:
-            >>> self.display_index_changed(2)
-        """
-
-        # Refresh the available views for the newly selected display.
-        self.set_views()
+    def _emit_transform(self, input_space):
+        if not self.enabledCheck.isChecked():
+            self.ocio_changed.emit(None, "", "", "")
+            return False
+        display = self.displayCombo.currentText()
+        view = self.viewCombo.currentText()
+        if not input_space or not display or not view:
+            return False
+        self.active_input = input_space
+        self.ocio_processor.working_space = self.workingCombo.currentText()
+        self.ocio_processor.set_enabled(True)
+        self.ocio_processor.set_display_transform(input_space, display, view)
+        self.ocio_changed.emit(self.ocio_processor, input_space, display, view)
+        return True
 
     def set_config(self):
-        """
-        Apply the selected OpenColorIO configuration.
-
-        Collects the current OCIO settings from the user interface, enables or disables the processor, emits the updated OCIO
-        configuration to the media player, and closes the dialog.
-
-        Responsibilities:
-            - Read current OCIO settings
-            - Enable or disable OCIO processing
-            - Emit the selected OCIO configuration
-            - Close the configuration dialog
-
-        Returns:
-            None
-
-        Signals:
-            ocio_changed(object, str, str, str):
-                Emitted after the configuration has been applied.
-
-                Arguments:
-                    object:
-                        Configured :class:`OCIOProcessor`.
-
-                    str:
-                        Selected input color space.
-
-                    str:
-                        Selected display.
-
-                    str:
-                        Selected display view.
-
-        Architecture:
-            User Settings
-                    ↓
-            Read UI Values
-                    ↓
-            Configure OCIOProcessor
-                    ↓
-            ocio_changed Signal
-                    ↓
-            ViewerWidget
-                    ↓
-            Apply Display Transform
-                    ↓
-            Close Dialog
-
-        Example:
-            >>> self.set_config()
-        """
-
-        # Determine whether OCIO processing is enabled.
-        enable = self.configCheckBox.isChecked()
-
-        # Retrieve the selected input color space.
-        color_space = self.colorSpaceCombobox.getValue()
-
-        # Retrieve the selected display device.
-        display = self.displayCombobox.getValue()
-
-        # Retrieve the selected display view.
-        view = self.viewCombobox.getValue()
-
-        # Enable or disable the OCIO processor.
-        self.ocio_processor.set_enabled(enable)
-
-        # Notify the media player that the OCIO configuration has changed.
-        self.ocio_changed.emit(self.ocio_processor, color_space, display, view)
-
-        # Close the configuration dialog.
+        input_space = self.resolve_input(
+            self.last_detected_input, self.last_media_path
+        )
+        self.settings.setValue("color/enabled", self.enabledCheck.isChecked())
+        self.settings.setValue("color/config", self.config_path)
+        self.settings.setValue("color/working", self.workingCombo.currentText())
+        self.settings.setValue("color/input", self.inputCombo.currentText())
+        self.settings.setValue("color/display", self.displayCombo.currentText())
+        self.settings.setValue("color/view", self.viewCombo.currentText())
+        for key, combo in self.defaultCombos.items():
+            self.settings.setValue(f"color/default_{key}", combo.currentText())
+        self._emit_transform(input_space)
         self.close()
 
+    def apply_auto_input(self, detected_input, media_path=""):
+        """Apply project defaults to newly loaded media."""
+        self.last_detected_input = detected_input or ""
+        self.last_media_path = media_path or ""
+        return self._emit_transform(self.resolve_input(detected_input, media_path))
 
-if __name__ == "__main__":
-    pass
+    def set_current_media(self, detected_input="", media_path=""):
+        """Update preset context without changing the active transform."""
+        self.last_detected_input = detected_input or ""
+        self.last_media_path = media_path or ""

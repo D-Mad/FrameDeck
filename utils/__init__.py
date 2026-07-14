@@ -339,8 +339,22 @@ def getSequence(path):
         >>> getSequence("/show/render/image.####.exr")
     """
 
-    # Convert Hash Pattern To Glob Pattern
+    # Convert an explicit frame filename to a sequence pattern as well as
+    # supporting the usual #### notation.  This makes drag/drop of
+    # ``shot.1001.exr`` discover its siblings without requiring the user to
+    # manually type a hash pattern.
     pattern = re.sub(r"#+", "*", path)
+    if pattern == path:
+        directory, filename = os.path.split(path)
+        stem, extension = os.path.splitext(filename)
+        match = re.search(r"(\d+)$", stem)
+        if match:
+            prefix = stem[: match.start()]
+            padding = len(match.group(1))
+            candidate = os.path.join(directory, prefix + ("[0-9]" * padding) + extension)
+            matches = sorted(glob.glob(candidate))
+            if matches:
+                return matches
 
     # Search Sequence Files
     files = sorted(glob.glob(pattern))
@@ -530,9 +544,9 @@ def environmentValue(key):
     return os.getenv(key)
 
 
-def viewlinePath(subfolder=None):
+def frameDeckPath(subfolder=None):
     result = pathResolver(
-        environmentValue("VIEW_LINE_PROFILE_ROOT"), folders=["viewline", subfolder]
+        environmentValue("FRAMEDECK_PROFILE_ROOT"), folders=["framedeck", subfolder]
     )
 
     return result

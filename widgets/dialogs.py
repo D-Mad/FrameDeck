@@ -227,7 +227,7 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
         self.setDirectory(self.browsepath)
 
         # Define supported file filters
-        self.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)
+        self.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFiles)
 
         # Define the filters
         filefilters = (f"Image and Video Files (*.{' *.'.join(constants.OPEN_EXTENSIONS)})",)
@@ -284,23 +284,31 @@ class OpenMediaDialog(QtWidgets.QFileDialog):
                 render.####.exr
         """
 
+        files = self.getfiles()
+        return files[0] if files else None
+
+    def getfiles(self):
+        """Return every selected path, preserving collapsed image sequences."""
         selectedfiles = self.selectedFiles()
         if not selectedfiles:
-            return None
+            return list()
 
-        path = selectedfiles[0]
+        result = list()
+        for path in selectedfiles:
+            if self.proxy.__collapse_sequences__:
+                dirname = utils.dirname(path)
+                basename = utils.fileName(path, extension=True)
+                pattern_name = re.sub(
+                    r"\.(\d+)\.",
+                    lambda x: "." + ("#" * len(x.group(1))) + ".",
+                    basename,
+                )
+                path = utils.pathResolver(dirname, filename=pattern_name)
 
-        if self.proxy.__collapse_sequences__:
-            dirname = utils.dirname(path)
-            basename = utils.fileName(path, extension=True)
+            if path not in result:
+                result.append(path)
 
-            # Convert: image.1001.exr -> image.####.exr
-            pattern_name = re.sub(
-                r"\.(\d+)\.", lambda x: "." + ("#" * len(x.group(1))) + ".", basename
-            )
-            path = utils.pathResolver(dirname, filename=pattern_name)
-
-        return path
+        return result
 
 
 class ColorDialog(QtWidgets.QColorDialog):

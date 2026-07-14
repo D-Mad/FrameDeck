@@ -1,0 +1,26 @@
+FRAMEDECK PORTABLE CHO UBUNTU x86_64
+
+Build tren Ubuntu 22.04 tro len:
+sudo apt update
+sudo apt install -y python3 python3-venv curl libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 libpulse0
+bash build-ubuntu-appimage.sh
+
+File ket qua:
+dist/FrameDeck-Ubuntu-x86_64.AppImage
+
+Chay:
+chmod +x FrameDeck-Ubuntu-x86_64.AppImage
+./FrameDeck-Ubuntu-x86_64.AppImage
+
+Ban Ubuntu giu day du tinh nang cua ban Windows.
+
+Playlist:
+- Chon video trong SOURCES ben trai > Add to Playlist; bam Play Playlist de
+  timeline hien tong frame cua tat ca shot va phat lien tuc qua tung clip.
+- Ctrl+Shift+S luu .fdplaylist; Ctrl+Shift+O mo lai dung thu tu shot,
+  active shot, current frame va trang thai Shot Playlist Timeline.
+- Keo shot nam ngang bang chuot de sap xep lai.
+
+Export:
+- Ctrl+Alt+E extract view dang load thanh JPG hoac PNG sequence full resolution.
+- EXR/image export dung AOV va OCIO view transform dang xem.

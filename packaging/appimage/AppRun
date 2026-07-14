@@ -1,0 +1,4 @@
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+export FRAMEDECK_PROFILE_ROOT="${FRAMEDECK_PROFILE_ROOT:-$HOME/Documents}"
+exec "$HERE/usr/lib/framedeck/FrameDeck" "$@"

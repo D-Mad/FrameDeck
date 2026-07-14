@@ -1,0 +1,103 @@
+name: Build portable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to create or update
+        required: true
+        default: v0.0.1-beta.9
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows portable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: requirements-windows.txt
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-windows.txt
+
+      - name: Build FrameDeck
+        run: |
+          python scripts/fetch_aces12.py
+          python -m PyInstaller --noconfirm --clean framedeck.spec
+
+      - name: Assemble portable archive
+        shell: pwsh
+        run: |
+          $root = Join-Path $PWD "release/FrameDeck-Windows-x64"
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          Copy-Item -LiteralPath "dist/FrameDeck" -Destination (Join-Path $root "FrameDeck") -Recurse
+          Copy-Item -LiteralPath "HUONG_DAN.txt", "README_WINDOWS.md", "LICENSE" -Destination $root
+          Compress-Archive -LiteralPath $root -DestinationPath "release/FrameDeck-Windows-x64.zip" -CompressionLevel Optimal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FrameDeck-Windows-x64
+          path: release/FrameDeck-Windows-x64.zip
+          if-no-files-found: error
+
+  ubuntu:
+    name: Ubuntu AppImage
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AppImage runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-venv curl libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 libpulse0
+
+      - name: Build FrameDeck AppImage
+        run: bash build-ubuntu-appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FrameDeck-Ubuntu-x86_64
+          path: |
+            dist/FrameDeck-Ubuntu-x86_64.AppImage
+            dist/FrameDeck-Ubuntu-x86_64.AppImage.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: [windows, ubuntu]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: FrameDeck-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release and upload portable builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "FrameDeck $RELEASE_TAG" \
+              --generate-notes \
+              --prerelease
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber

@@ -1,0 +1,69 @@
+FRAMEDECK PORTABLE CHO WINDOWS 64-BIT
+
+Cach chay:
+1. Giai nen toan bo file ZIP.
+2. Mo thu muc FrameDeck.
+3. Double-click FrameDeck.exe.
+
+Luu/mo lai playlist:
+- File > Save Playlist (Ctrl+Shift+S) tao file .fdplaylist gom dung thu tu shot,
+  shot dang chon, frame dang dung va trang thai Shot Playlist Timeline.
+- File > Open Playlist (Ctrl+Shift+O), keo-tha file, hoac Open with FrameDeck de mo lai.
+- File luu ca duong dan tuyet doi va tuong doi de co the di chuyen ca folder project.
+
+Sap xep playlist:
+- Video import nam trong SOURCES ben trai. Chon mot/nhieu source roi bam Add to Playlist.
+- Bam Play Playlist de phat lien tuc; timeline frame la tong frame cua tat ca shot.
+- Mot source co the Add nhieu lan. Remove Shot/Delete tren thanh ngang chi xoa lan dung do.
+- Keo shot sang trai/phai tren Shot Playlist Timeline de doi video truoc/sau.
+- Hoac chon shot roi bam Earlier/Later; phim tat Alt+Left va Alt+Right.
+- Remove Source chi xoa khoi app, khong xoa file tren o dia/server.
+
+Pencil va Text:
+- Bam Esc hoac nut Navigate de thoat tool va dung chuot dieu khien viewer lai.
+- Pencil co the bam lai icon Pencil de thoat.
+- Text tu ve Navigate sau khi dat note len frame.
+- Notes duoc luu rieng tung frame; Export All Notes de xuat PNG.
+
+Dieu khien chuot:
+- Lan con lan giua: zoom tai con tro, van play khi zoom.
+- Giu chuot giua hoac Alt+chuot trai: pan.
+- Giu chuot phai va keo doc: zoom lien tuc.
+- Double-click chuot trai tren viewer: bat/tat Full Screen.
+- F: Fit hinh vao viewer; F11: bat/tat Full Screen; Esc: thoat Full Screen.
+
+App ho tro Compare Wipe/Overlay/Difference/Side-by-Side/Checker/Flicker,
+EXR/PNG/JPG sequence, AOV, OCIO user/studio,
+cache video server va preview 2K cho video 4K.
+
+Xuat MP4 chat luong cao:
+- File > Export High Quality MP4 hoac Ctrl+Shift+E.
+- MOV/video luon giu dung FPS nguon va co the giu audio AAC 320 kb/s.
+- EXR/JPG/PNG sequence cho phep user nhap FPS truoc khi xuat.
+- Sequence dung AOV va OCIO display transform dang xem trong app.
+- Chon High Quality, Master Quality hoac Balanced; export chay nen va co the Cancel.
+
+Extract JPG/PNG sequence:
+- File > Export Image Sequence hoac Ctrl+Alt+E.
+- Chon JPG/PNG, output folder, file prefix, start frame va JPG quality.
+- MOV/video va EXR/image sequence deu xuat full resolution; EXR dung AOV + OCIO
+  dang view. Export chay nen, Cancel se xoa cac frame dang xuat do.
+
+Color Settings:
+- Co san ACES 1.2 offline, ACES 1.3/2.0 CG va Studio.
+- Co preset ACES2065-1, ACEScg, ACEScct, ARRI, Sony, RED, Blackmagic, Rec.709 va Raw.
+- User co the chon Working Space, Input, Monitor, View va default theo loai file.
+- Bam Use Preset de xem LIVE PREVIEW ngay tren frame hien tai; bam Apply de luu.
+- Thanh COLOR va status bar hien ro Input -> Display / View dang duoc dung.
+
+Cache Manager:
+- Tools > Cache Selected Shots de cache nhieu video/EXR sequence cung luc.
+- Tools > Cache Manager de xem dung luong, doi gioi han, mo folder hoac xoa cache.
+- Thanh volume mau teal dung de chinh audio/mute; khong con gradient cu.
+- EXR 4K duoc decode nen, tao review proxy 2K va prefetch frame ke tiep.
+- Proxy da OCIO duoc luu trong Cache Manager; lan xem lai se load nhanh hon rat nhieu.
+
+Khong can cai Python. Khong xoa thu muc _internal.
+Du lieu: %USERPROFILE%\Documents\framedeck
+Cache: %LOCALAPPDATA%\FrameDeck\media-cache
+Phien ban: 0.0.1-beta.9

@@ -8,7 +8,7 @@ Module:
     ./constants/__init__.py
 
 Description:
-    This module contains all application-wide configuration values used throughout the Viewline framework.
+    This module contains all application-wide configuration values used throughout FrameDeck.
 
 The constants defined here are shared across:
     - Playback systems
@@ -89,7 +89,7 @@ Attributes:
 Example:
     >>> import constants
     >>> print(constants.VL_TOOL_NAME)
-    MC - Viewline
+    FrameDeck
 
     >>> fps = constants.DEFULT_FPS["value"]
     >>> print(fps)
@@ -107,13 +107,13 @@ Notes:
 
 from __future__ import absolute_import
 
-STUDIO_NAME = "motion-craft"
+STUDIO_NAME = "framedeck"
 
-VL_TOOL_NAME = "MC - Viewline"
+VL_TOOL_NAME = "FrameDeck"
 
-VL_TOOL_ICON = "mc-viewline"
+VL_TOOL_ICON = "framedeck"
 
-VL_VERSION = "0.0.1-beta.1"
+VL_VERSION = "0.0.1-beta.9"
 
 WINDOW_SIZE = [1400, 800]
 
@@ -130,7 +130,21 @@ SMALL_FONT_SIZE = 8
 
 DEFAULT_SKETCH_COLOR = (255, 170, 0)
 
-OPEN_EXTENSIONS = ["exr", "png", "jpg", "jpeg", "mp4", "mov", "avi"]
+OPEN_EXTENSIONS = [
+    "exr", "png", "jpg", "jpeg", "mp4", "mov", "avi", "fdplaylist"
+]
+
+COMPARE_MODES = (
+    ("wipe_vertical", "Vertical Wipe"),
+    ("wipe_horizontal", "Horizontal Wipe"),
+    ("overlay", "Overlay / Opacity"),
+    ("difference", "Difference"),
+    ("side_by_side", "Side by Side"),
+    ("checker", "Checkerboard"),
+    ("a_only", "A Only"),
+    ("b_only", "B Only"),
+    ("flicker", "Flicker A/B"),
+)
 
 FPS_VALUES = [
     {"code": "23.976- FPS", "value": 23.976},
@@ -149,6 +163,15 @@ VL_START_FRAME = 1
 VL_DEFAULT_FRAMES = VL_START_FRAME + 100
 VL_FRAME_PADDING = 4
 VL_FRAME_CACHE_MAX_SIZE = 200
+
+# Decode 4K sources at a display proxy size for interactive playback. The
+# source file and its timeline metadata remain untouched.
+VL_VIDEO_PROXY_MAX_WIDTH = 2048
+VL_VIDEO_PROXY_MAX_HEIGHT = 1152
+VL_SEQUENCE_PROXY_MAX_WIDTH = 2048
+VL_SEQUENCE_PROXY_MAX_HEIGHT = 1152
+VL_SEQUENCE_PREFETCH_FRAMES = 24
+VL_SEQUENCE_2K_CACHE_FRAMES = 48
 
 VL_THUMBNAIL_SIZE = [200, 112]
 
@@ -203,8 +226,8 @@ REVIEW_TYPES = [
 VIEWER_SAMPLES_RATE = 8
 
 
-COPYRIGHT_LABEL = "Support, Subin. Gopi (subing85@gmail.com)."
+COPYRIGHT_LABEL = ""
 
-WEBLINK = "https://github.com/subing85/review_player/"
+WEBLINK = ""
 
-WEB_DOC_LINK = "https://subing85.github.io/viewline/"
+WEB_DOC_LINK = ""

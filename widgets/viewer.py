@@ -151,10 +151,12 @@ from widgets.buttons import ColorButton
 from widgets.buttons import ClearButton
 from widgets.buttons import ArrowButton
 from widgets.buttons import PencilButton
+from widgets.buttons import NavigateButton
 from widgets.buttons import EraserButton
 from widgets.buttons import RenderButton
 from widgets.buttons import RecapsButton
 from widgets.buttons import ForwardButton
+from widgets.buttons import VolumeButton
 from widgets.buttons import EllipseButton
 from widgets.buttons import BackwardButton
 from widgets.buttons import RectangleButton
@@ -212,13 +214,13 @@ class ViewFrame(QtWidgets.QFrame):
         self.setFrameShadow(QtWidgets.QFrame.Raised)
 
         # Main Layout, Root viewer layout
-        self.verticallayout = VerticalLayout(self, space=10, margins=(10, 10, 10, 10))
+        self.verticallayout = VerticalLayout(self, space=3, margins=(3, 3, 3, 3))
 
         # --------------------------------------------------
         # Viewer Toolbar
         # --------------------------------------------------
         # Annotation and viewer controls
-        self.viewToolbarLayout = ViewToolbarLayout(None, space=20, margins=(5, 5, 5, 5))
+        self.viewToolbarLayout = ViewToolbarLayout(None, space=6, margins=(2, 2, 2, 2))
         self.verticallayout.addLayout(self.viewToolbarLayout)
 
         # --------------------------------------------------
@@ -238,7 +240,7 @@ class ViewFrame(QtWidgets.QFrame):
         # Playback Toolbar
         # --------------------------------------------------
         # Playback control toolbar
-        self.timelineToolbarLayout = TimelineToolbarLayout(None, space=10, margins=(5, 5, 5, 5))
+        self.timelineToolbarLayout = TimelineToolbarLayout(None, space=6, margins=(2, 2, 2, 2))
         self.verticallayout.addLayout(self.timelineToolbarLayout)
 
 
@@ -345,6 +347,9 @@ class ViewToolbarLayout(HorizontalLayout):
     # Signal emitted when frame render is requested
     trigger_render = QtCore.Signal()
 
+    # Signal emitted when all annotated frames should be exported.
+    trigger_export_notes = QtCore.Signal()
+
     # Signal emitted when recap panel visibility changes
     trigger_recaps = QtCore.Signal(bool)
 
@@ -402,6 +407,12 @@ class ViewToolbarLayout(HorizontalLayout):
         # --------------------------------------------------
 
         # Pencil drawing tool
+        self.navigateButton = NavigateButton(
+            None, tooltip="Navigate / Select (Esc)", checkable=True, width=22, height=22
+        )
+        self.navigateButton.setChecked(True)
+        self.addWidget(self.navigateButton)
+
         self.pencilButton = PencilButton(
             None, tooltip="Pencil Tool", checkable=True, width=22, height=22
         )
@@ -514,6 +525,11 @@ class ViewToolbarLayout(HorizontalLayout):
         self.renderButton = RenderButton(None, tooltip="Render Current Frame", width=22, height=22)
         self.addWidget(self.renderButton)
 
+        self.exportNotesButton = QtWidgets.QPushButton("Export Notes")
+        self.exportNotesButton.setToolTip("Export every frame containing Pencil/Text notes")
+        self.exportNotesButton.setMaximumHeight(28)
+        self.addWidget(self.exportNotesButton)
+
         # Spacer before recap controls
         self.horizontalspacer4 = HorizontalSpacer()
         self.addItem(self.horizontalspacer4)
@@ -552,6 +568,7 @@ class ViewToolbarLayout(HorizontalLayout):
 
         # Annotation tools
         self.pencilButton.toggled.connect(lambda enabled: self.set_draw_enabled("pencil", enabled))
+        self.navigateButton.clicked.connect(self.deactivate_tools)
         self.arrowButton.toggled.connect(lambda enabled: self.set_draw_enabled("arrow", enabled))
         self.ellipseButton.toggled.connect(
             lambda enabled: self.set_draw_enabled("ellipse", enabled)
@@ -574,6 +591,7 @@ class ViewToolbarLayout(HorizontalLayout):
 
         # Render current frame
         self.renderButton.clicked.connect(self.render)
+        self.exportNotesButton.clicked.connect(self.trigger_export_notes.emit)
 
         # Toggle recap panel
         self.recapsButton.toggled.connect(self.set_recaps)
@@ -713,11 +731,18 @@ class ViewToolbarLayout(HorizontalLayout):
             self.moveButton,
         ]
 
-        # Disable all other tools
+        if not enabled:
+            self.deactivate_tools()
+            return
+
+        # Disable all other tools without recursively re-entering this slot.
         for button in buttons:
-            if button.name == button:
+            if button.name == tool:
                 continue
+            blocker = QtCore.QSignalBlocker(button)
             button.setChecked(False)
+            del blocker
+        self.navigateButton.setChecked(False)
 
         # Update current tool label
         self.toolNameLabel.setValue(enabled, tool)
@@ -730,12 +755,10 @@ class ViewToolbarLayout(HorizontalLayout):
             # Receive text settings
             txtInputDialog.value_changed.connect(self.txt_value_changed)
 
-            # Open dialog
-            txtInputDialog.exec()
-
-            # Reset text tool button
-            self.txtButton.setChecked(False)
-
+            # Open dialog. Cancel returns directly to navigation; Apply keeps
+            # Text active for one placement in the viewer.
+            if txtInputDialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+                self.deactivate_tools()
             return
 
         # Switch to eraser controls
@@ -760,6 +783,27 @@ class ViewToolbarLayout(HorizontalLayout):
 
         # Notify viewer
         self.draw_enabled.emit(tool, enabled, None)
+
+    def deactivate_tools(self):
+        """Leave annotation mode and return the mouse to viewer navigation."""
+        for button in (
+            self.pencilButton,
+            self.arrowButton,
+            self.ellipseButton,
+            self.rectangleButton,
+            self.eraserButton,
+            self.txtButton,
+            self.moveButton,
+        ):
+            blocker = QtCore.QSignalBlocker(button)
+            button.setChecked(False)
+            del blocker
+        self.navigateButton.setChecked(True)
+        self.toolNameLabel.setValue(True, "Navigate")
+        self.radiusSpinBox.setVisible(False)
+        self.thicknesSpinBox.setVisible(True)
+        self.thicknesLabel.setValue("Thickness")
+        self.draw_enabled.emit("", False, None)
 
     def txt_value_changed(self, tool, enabled, font):
         """
@@ -1007,8 +1051,14 @@ class TimelineToolbarLayout(HorizontalLayout):
         self.horizontalspacer2 = HorizontalSpacer()
         self.addItem(self.horizontalspacer2)
 
-        self.volumeSlider = VolumeSlider(None)
+        self.volumeButton = VolumeButton(
+            None, tooltip="Mute / Unmute", width=22, height=22, checkable=True
+        )
+        self.addWidget(self.volumeButton)
+        self.volumeSlider = VolumeSlider(None, value=100)
+        self.volumeSlider.setToolTip("Audio volume")
         self.addWidget(self.volumeSlider)
+        self._volume_before_mute = 100
 
         # Previous frame action
         self.backwardButton.clicked.connect(self.backward)
@@ -1021,7 +1071,7 @@ class TimelineToolbarLayout(HorizontalLayout):
 
         # Loop action
         self.loopButton.toggled.connect(self.loop)
-
+        self.volumeButton.toggled.connect(self.toggle_mute)
         self.volumeSlider.valueChanged.connect(self.volume_control)
 
     def backward(self):
@@ -1071,7 +1121,18 @@ class TimelineToolbarLayout(HorizontalLayout):
         self.trigger_timeline.emit("loop", enabled)
 
     def volume_control(self, value):
+        if value > 0 and self.volumeButton.isChecked():
+            blocker = QtCore.QSignalBlocker(self.volumeButton)
+            self.volumeButton.setChecked(False)
+            del blocker
         self.volume_changed.emit(value / 100)
+
+    def toggle_mute(self, muted):
+        if muted:
+            self._volume_before_mute = max(1, self.volumeSlider.value())
+            self.volumeSlider.setValue(0)
+        else:
+            self.volumeSlider.setValue(self._volume_before_mute)
 
     def reset_fps(self, typed, fps):
         """
@@ -1139,6 +1200,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     """
 
     render_finished = QtCore.Signal(str)
+    annotation_tool_finished = QtCore.Signal(str)
+    fullscreen_requested = QtCore.Signal()
 
     def __init__(self, parent=None):
         """
@@ -1157,9 +1220,24 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         )
 
         self.setSizePolicy(sizePolicy)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
 
         # Current media frame
         self.frame = None
+        self.qimage = None
+        self.compare_qimage = None
+        self.compare_enabled = False
+        self.compare_label_a = "A"
+        self.compare_label_b = "B"
+        self.compare_mode = "wipe_vertical"
+        self.compare_opacity = 0.5
+        self.wipe_position = 0.5
+        self._wipe_dragging = False
+        self._flicker_show_b = False
+        self._flicker_timer = QtCore.QTimer(self)
+        self._flicker_timer.setInterval(250)
+        self._flicker_timer.timeout.connect(self._toggle_compare_flicker)
 
         # Current playback frame number
         self.current_frame = None
@@ -1167,6 +1245,17 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # Source image dimensions
         self.image_width = None
         self.image_height = None
+        self.display_rect = QtCore.QRectF()
+
+        # RV-style navigation state. Zoom is relative to Fit (1.0), while
+        # pan is stored in viewport pixels so playback can replace frames
+        # without resetting the user's view.
+        self.zoom_factor = 1.0
+        self.pan_offset = QtCore.QPointF(0.0, 0.0)
+        self._pan_dragging = False
+        self._zoom_dragging = False
+        self._drag_position = QtCore.QPointF()
+        self._zoom_anchor = QtCore.QPointF()
 
         self.set_samples(value=constants.VIEWER_SAMPLES_RATE)
 
@@ -1195,10 +1284,80 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = frame
-
-        #  print("\nself.frame =", self.frame)
+        self.qimage = self._frame_to_qimage(frame)
+        if self.qimage is not None:
+            self.image_width = self.qimage.width()
+            self.image_height = self.qimage.height()
+            self.display_rect = self._display_rect()
 
         # Refresh OpenGL widget
+        self.update()
+
+    @staticmethod
+    def _frame_to_qimage(frame):
+        if frame is None:
+            return None
+        image = numpy.ascontiguousarray(frame)
+        height, width, channels = image.shape
+        image_format = (
+            QtGui.QImage.Format_RGBA8888 if channels == 4 else QtGui.QImage.Format_RGB888
+        )
+        return QtGui.QImage(
+            image.data,
+            width,
+            height,
+            image.strides[0],
+            image_format,
+        ).copy()
+
+    def set_compare_frame(self, frame):
+        self.compare_qimage = self._frame_to_qimage(frame)
+        self.update()
+
+    def enable_compare(self, label_a="A", label_b="B"):
+        self.compare_enabled = True
+        self.compare_label_a = label_a or "A"
+        self.compare_label_b = label_b or "B"
+        self.wipe_position = 0.5
+        if self.compare_mode == "flicker":
+            self._flicker_show_b = False
+            self._flicker_timer.start()
+        self.update()
+
+    def set_compare_mode(self, mode):
+        valid_modes = {key for key, _label in constants.COMPARE_MODES}
+        self.compare_mode = mode if mode in valid_modes else "wipe_vertical"
+        self._wipe_dragging = False
+        self.unsetCursor()
+        if self.compare_mode == "flicker" and self.compare_enabled:
+            self._flicker_show_b = False
+            self._flicker_timer.start()
+        else:
+            self._flicker_timer.stop()
+        self.update()
+
+    def set_compare_opacity(self, opacity):
+        self.compare_opacity = max(0.0, min(1.0, float(opacity)))
+        self.update()
+
+    def _toggle_compare_flicker(self):
+        self._flicker_show_b = not self._flicker_show_b
+        self.update()
+
+    def disable_compare(self):
+        self.compare_enabled = False
+        self.compare_qimage = None
+        self._wipe_dragging = False
+        self._flicker_timer.stop()
+        self._flicker_show_b = False
+        self.unsetCursor()
+        self.update()
+
+    def swap_compare_labels(self):
+        self.compare_label_a, self.compare_label_b = (
+            self.compare_label_b,
+            self.compare_label_a,
+        )
         self.update()
 
     def set_current_frame(self, frame):
@@ -1212,6 +1371,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
         self.current_frame = frame
         self.annotations.set_frame(frame)
+        self.update()
 
     def initializeGL(self):
         """
@@ -1245,12 +1405,241 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.frame = None
+        self.qimage = None
+        self.compare_qimage = None
 
         # Clear annotations
         self.annotations.clear_all()
 
         # Refresh widget
         self.update()
+
+    def reset_view(self):
+        """Return to a centered Fit view."""
+        self.zoom_factor = 1.0
+        self.pan_offset = QtCore.QPointF(0.0, 0.0)
+        self.update()
+
+    def _fit_size(self):
+        if not self.image_width or not self.image_height:
+            return 1.0, 1.0
+        viewport_width = max(1, self.width())
+        viewport_height = max(1, self.height())
+        scale = min(
+            viewport_width / float(self.image_width),
+            viewport_height / float(self.image_height),
+        )
+        return self.image_width * scale, self.image_height * scale
+
+    def _display_rect(self):
+        fit_width, fit_height = self._fit_size()
+        draw_width = max(1.0, fit_width * self.zoom_factor)
+        draw_height = max(1.0, fit_height * self.zoom_factor)
+        x = (self.width() - draw_width) * 0.5 + self.pan_offset.x()
+        y = (self.height() - draw_height) * 0.5 + self.pan_offset.y()
+        return QtCore.QRectF(x, y, draw_width, draw_height)
+
+    def _constrain_pan(self):
+        """Keep at least a small part of the image reachable on screen."""
+        fit_width, fit_height = self._fit_size()
+        draw_width = fit_width * self.zoom_factor
+        draw_height = fit_height * self.zoom_factor
+        margin = 48.0
+        limit_x = max(0.0, (draw_width + self.width()) * 0.5 - margin)
+        limit_y = max(0.0, (draw_height + self.height()) * 0.5 - margin)
+        self.pan_offset.setX(max(-limit_x, min(limit_x, self.pan_offset.x())))
+        self.pan_offset.setY(max(-limit_y, min(limit_y, self.pan_offset.y())))
+
+    def zoom_at(self, position, factor):
+        """Zoom around a widget-space anchor, keeping its image point fixed."""
+        if self.qimage is None:
+            return
+        old_rect = self._display_rect()
+        if old_rect.width() <= 0 or old_rect.height() <= 0:
+            return
+
+        anchor = QtCore.QPointF(position)
+        image_x = (anchor.x() - old_rect.left()) / old_rect.width()
+        image_y = (anchor.y() - old_rect.top()) / old_rect.height()
+        new_zoom = max(0.1, min(16.0, self.zoom_factor * factor))
+        if abs(new_zoom - self.zoom_factor) < 0.0001:
+            return
+
+        self.zoom_factor = new_zoom
+        fit_width, fit_height = self._fit_size()
+        new_width = fit_width * new_zoom
+        new_height = fit_height * new_zoom
+        centered_left = (self.width() - new_width) * 0.5
+        centered_top = (self.height() - new_height) * 0.5
+        self.pan_offset = QtCore.QPointF(
+            anchor.x() - image_x * new_width - centered_left,
+            anchor.y() - image_y * new_height - centered_top,
+        )
+        self._constrain_pan()
+        self.update()
+
+    @staticmethod
+    def _fit_image_in_rect(image, bounds):
+        """Fit a QImage inside a comparison tile while preserving aspect."""
+        if image is None or image.width() <= 0 or image.height() <= 0:
+            return QtCore.QRectF()
+        scale = min(
+            bounds.width() / image.width(),
+            bounds.height() / image.height(),
+        )
+        width = image.width() * scale
+        height = image.height() * scale
+        return QtCore.QRectF(
+            bounds.center().x() - width * 0.5,
+            bounds.center().y() - height * 0.5,
+            width,
+            height,
+        )
+
+    def _paint_compare_images(self, painter):
+        """Draw the active A/B comparison mode and its HUD labels."""
+        if not self.compare_enabled or self.compare_qimage is None:
+            painter.drawImage(self.display_rect, self.qimage)
+            return
+
+        mode = self.compare_mode
+        rect = QtCore.QRectF(self.display_rect)
+
+        if mode == "side_by_side":
+            gap = 4.0
+            half = max(1.0, (rect.width() - gap) * 0.5)
+            left_bounds = QtCore.QRectF(rect.left(), rect.top(), half, rect.height())
+            right_bounds = QtCore.QRectF(
+                rect.left() + half + gap, rect.top(), half, rect.height()
+            )
+            a_rect = self._fit_image_in_rect(self.qimage, left_bounds)
+            b_rect = self._fit_image_in_rect(self.compare_qimage, right_bounds)
+            painter.drawImage(a_rect, self.qimage)
+            painter.drawImage(b_rect, self.compare_qimage)
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 190, 40, 210), 1.0))
+            painter.drawLine(
+                QtCore.QPointF(rect.center().x(), rect.top()),
+                QtCore.QPointF(rect.center().x(), rect.bottom()),
+            )
+            self._draw_compare_label(
+                painter, a_rect.left() + 8, a_rect.top() + 8, f"A  {self.compare_label_a}"
+            )
+            self._draw_compare_label(
+                painter, b_rect.left() + 8, b_rect.top() + 8, f"B  {self.compare_label_b}"
+            )
+            # Pencil/Text notes belong to A and should stay aligned with A.
+            self.display_rect = a_rect
+            return
+
+        if mode == "b_only" or (mode == "flicker" and self._flicker_show_b):
+            painter.drawImage(rect, self.compare_qimage)
+        else:
+            painter.drawImage(rect, self.qimage)
+
+        if mode == "wipe_vertical":
+            wipe_x = rect.left() + rect.width() * self.wipe_position
+            painter.save()
+            painter.setClipRect(
+                QtCore.QRectF(rect.left(), rect.top(), max(0.0, wipe_x - rect.left()), rect.height())
+            )
+            painter.drawImage(rect, self.compare_qimage)
+            painter.restore()
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 190, 40, 230), 2.0))
+            painter.drawLine(
+                QtCore.QPointF(wipe_x, rect.top()),
+                QtCore.QPointF(wipe_x, rect.bottom()),
+            )
+            painter.setBrush(QtGui.QColor(255, 190, 40, 230))
+            painter.drawEllipse(QtCore.QPointF(wipe_x, rect.center().y()), 6, 6)
+            self._draw_compare_label(
+                painter, rect.left() + 10, rect.top() + 10, f"B  {self.compare_label_b}"
+            )
+            self._draw_compare_label(
+                painter,
+                max(rect.left() + 10, rect.right() - 210),
+                rect.top() + 10,
+                f"A  {self.compare_label_a}",
+            )
+        elif mode == "wipe_horizontal":
+            wipe_y = rect.top() + rect.height() * self.wipe_position
+            painter.save()
+            painter.setClipRect(
+                QtCore.QRectF(rect.left(), rect.top(), rect.width(), max(0.0, wipe_y - rect.top()))
+            )
+            painter.drawImage(rect, self.compare_qimage)
+            painter.restore()
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 190, 40, 230), 2.0))
+            painter.drawLine(
+                QtCore.QPointF(rect.left(), wipe_y),
+                QtCore.QPointF(rect.right(), wipe_y),
+            )
+            painter.setBrush(QtGui.QColor(255, 190, 40, 230))
+            painter.drawEllipse(QtCore.QPointF(rect.center().x(), wipe_y), 6, 6)
+            self._draw_compare_label(
+                painter, rect.left() + 10, rect.top() + 10, f"B  {self.compare_label_b}"
+            )
+            self._draw_compare_label(
+                painter,
+                rect.left() + 10,
+                max(rect.top() + 10, rect.bottom() - 36),
+                f"A  {self.compare_label_a}",
+            )
+        elif mode == "overlay":
+            painter.save()
+            painter.setOpacity(self.compare_opacity)
+            painter.drawImage(rect, self.compare_qimage)
+            painter.restore()
+            self._draw_compare_label(
+                painter,
+                rect.left() + 10,
+                rect.top() + 10,
+                f"A+B  Overlay {round(self.compare_opacity * 100)}%",
+            )
+        elif mode == "difference":
+            painter.save()
+            painter.setCompositionMode(
+                QtGui.QPainter.CompositionMode.CompositionMode_Difference
+            )
+            painter.drawImage(rect, self.compare_qimage)
+            painter.restore()
+            self._draw_compare_label(
+                painter, rect.left() + 10, rect.top() + 10, "DIFFERENCE  |A-B|"
+            )
+        elif mode == "checker":
+            aligned = rect.toAlignedRect()
+            tile_size = max(24, min(96, round(min(rect.width(), rect.height()) / 8)))
+            region = QtGui.QRegion()
+            row = 0
+            for y in range(aligned.top(), aligned.bottom() + 1, tile_size):
+                column = 0
+                for x in range(aligned.left(), aligned.right() + 1, tile_size):
+                    if (row + column) % 2 == 0:
+                        tile = QtCore.QRect(x, y, tile_size, tile_size).intersected(aligned)
+                        region = region.united(QtGui.QRegion(tile))
+                    column += 1
+                row += 1
+            painter.save()
+            painter.setClipRegion(region)
+            painter.drawImage(rect, self.compare_qimage)
+            painter.restore()
+            self._draw_compare_label(
+                painter, rect.left() + 10, rect.top() + 10, "CHECKER  A / B"
+            )
+        elif mode == "a_only":
+            self._draw_compare_label(
+                painter, rect.left() + 10, rect.top() + 10, f"A  {self.compare_label_a}"
+            )
+        elif mode == "b_only":
+            self._draw_compare_label(
+                painter, rect.left() + 10, rect.top() + 10, f"B  {self.compare_label_b}"
+            )
+        elif mode == "flicker":
+            label = (
+                f"B  {self.compare_label_b}"
+                if self._flicker_show_b
+                else f"A  {self.compare_label_a}"
+            )
+            self._draw_compare_label(painter, rect.left() + 10, rect.top() + 10, f"FLICKER  {label}")
 
     def paintGL(self):
         """
@@ -1264,81 +1653,64 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             - Overlay rendering
         """
 
-        # Clear OpenGL buffer
-        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), QtGui.QColor(26, 26, 26))
 
-        if self.frame is None:
+        if self.qimage is None:
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+            center = QtCore.QPointF(self.rect().center())
+            painter.setPen(QtGui.QPen(QtGui.QColor(55, 78, 90), 1))
+            painter.drawLine(
+                QtCore.QPointF(center.x(), center.y() - 85),
+                QtCore.QPointF(center.x(), center.y() + 85),
+            )
+            painter.drawLine(
+                QtCore.QPointF(center.x() - 150, center.y()),
+                QtCore.QPointF(center.x() + 150, center.y()),
+            )
+            label = QtCore.QRectF(center.x() - 155, center.y() - 18, 310, 36)
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            painter.setBrush(QtGui.QColor(31, 48, 58, 235))
+            painter.drawRoundedRect(label, 18, 18)
+            painter.setPen(QtGui.QColor(157, 219, 211))
+            painter.drawText(
+                label,
+                QtCore.Qt.AlignmentFlag.AlignCenter,
+                "NO MEDIA  -  Drop shots or Import",
+            )
+            painter.end()
             return
 
-        # Flip image vertically for OpenGL
-        image = numpy.flipud(self.frame)
+        self.image_width = self.qimage.width()
+        self.image_height = self.qimage.height()
 
-        # Ensure contiguous memory layout
-        image = numpy.ascontiguousarray(image)
+        self.display_rect = self._display_rect()
 
-        # Extract image information
-        self.image_height, self.image_width, channels = image.shape
-
-        # Device pixel ratio
-        dpr = self.devicePixelRatioF()
-
-        # Physical viewport size
-        viewport_width = int(self.width() * dpr)
-        viewport_height = int(self.height() * dpr)
-
-        # Aspect ratios
-        image_aspect = self.image_width / self.image_height
-        viewport_aspect = viewport_width / viewport_height
-
-        # Fit image into viewport
-        if image_aspect > viewport_aspect:
-            draw_width = viewport_width
-            draw_height = int(draw_width / image_aspect)
-        else:
-            draw_height = viewport_height
-            draw_width = int(draw_height * image_aspect)
-
-        # Center image inside viewport
-        x = int((viewport_width - draw_width) / 2)
-        y = int((viewport_height - draw_height) / 2)
-
-        # Configure projection matrix (2D projection)
-        GL.glMatrixMode(GL.GL_PROJECTION)
-        GL.glLoadIdentity()
-
-        GL.glOrtho(0, viewport_width, 0, viewport_height, -1, 1)
-
-        # Configure model matrix
-        GL.glMatrixMode(GL.GL_MODELVIEW)
-        GL.glLoadIdentity()
-
-        # Draw image pixels
-        GL.glRasterPos2i(x, y)
-        GL.glPixelZoom(draw_width / self.image_width, draw_height / self.image_height)
-
-        # OpenGL image format
-        gl_format = GL.GL_RGBA if channels == 4 else GL.GL_RGB
-
-        # Render pixels
-        GL.glDrawPixels(self.image_width, self.image_height, gl_format, GL.GL_UNSIGNED_BYTE, image)
-
-        # Reset zoom state
-        GL.glPixelZoom(1, 1)
-
-        # Convert display rect into logical coordinates
-        logical_draw_width = int(draw_width / dpr)
-        logical_draw_height = int(draw_height / dpr)
-
-        logical_x = int(x / dpr)
-        logical_y = int(y / dpr)
-
-        # Store display rectangle for overlays
-        self.display_rect = QtCore.QRect(
-            logical_x, logical_y, logical_draw_width, logical_draw_height
+        # QPainter on QOpenGLWidget uses Qt's accelerated paint engine and
+        # avoids the legacy glDrawPixels path.
+        painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, True)
+        self._paint_compare_images(painter)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setRenderHint(QtGui.QPainter.TextAntialiasing, True)
+        self.annotations.draw(
+            painter,
+            point_converter=self.image_to_widget_point,
+            rect=self.display_rect,
         )
+        painter.end()
 
-        # Draw overlays
-        self.draw_overlay()
+    @staticmethod
+    def _draw_compare_label(painter, x, y, text):
+        metrics = painter.fontMetrics()
+        width = min(200, metrics.horizontalAdvance(text) + 18)
+        rect = QtCore.QRectF(x, y, width, metrics.height() + 10)
+        painter.fillRect(rect, QtGui.QColor(10, 10, 10, 185))
+        painter.setPen(QtGui.QColor(245, 245, 245))
+        painter.drawText(
+            rect.adjusted(9, 0, -5, 0),
+            QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft,
+            metrics.elidedText(text, QtCore.Qt.TextElideMode.ElideMiddle, width - 18),
+        )
 
     def draw_overlay(self):
         """
@@ -1388,19 +1760,72 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             enabled (bool): Pencil tool state.
         """
 
-        if not self.current_frame:
+        if enabled and not self.current_frame:
+            return
+
+        if not enabled:
+            self.annotations.set_enabled(False)
+            self.annotations.drawing = False
+            self.unsetCursor()
             return
 
         self.annotations.set_tool(tool)
         self.annotations.set_enabled(enabled)
 
-        self.annotations.set_image_size(self.image_width, self.image_height)
+        width = self.image_width or (self.qimage.width() if self.qimage else 1)
+        height = self.image_height or (self.qimage.height() if self.qimage else 1)
+        self.annotations.set_image_size(width, height)
         self.annotations.set_eraser_radius(10)
 
         self.annotations.set_txt_font(font)
 
     def mousePressEvent(self, event):
+        position = event.position()
+        if (
+            self.compare_enabled
+            and self.compare_qimage is not None
+            and self.compare_mode in {"wipe_vertical", "wipe_horizontal"}
+            and event.button() == QtCore.Qt.MouseButton.LeftButton
+            and not self.annotations.enabled
+        ):
+            vertical = self.compare_mode == "wipe_vertical"
+            wipe_coordinate = (
+                self.display_rect.left() + self.display_rect.width() * self.wipe_position
+                if vertical
+                else self.display_rect.top() + self.display_rect.height() * self.wipe_position
+            )
+            pointer_coordinate = position.x() if vertical else position.y()
+            if abs(pointer_coordinate - wipe_coordinate) <= 16:
+                self._wipe_dragging = True
+                self.setCursor(
+                    QtCore.Qt.CursorShape.SplitHCursor
+                    if vertical
+                    else QtCore.Qt.CursorShape.SplitVCursor
+                )
+                event.accept()
+                return
+
+        pan_gesture = event.button() == QtCore.Qt.MouseButton.MiddleButton or (
+            event.button() == QtCore.Qt.MouseButton.LeftButton
+            and event.modifiers() & QtCore.Qt.KeyboardModifier.AltModifier
+        )
+        if pan_gesture:
+            self._pan_dragging = True
+            self._drag_position = position
+            self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+
+        if event.button() == QtCore.Qt.MouseButton.RightButton:
+            self._zoom_dragging = True
+            self._drag_position = position
+            self._zoom_anchor = position
+            self.setCursor(QtCore.Qt.CursorShape.SizeVerCursor)
+            event.accept()
+            return
+
         if not self.annotations.enabled:
+            super().mousePressEvent(event)
             return
 
         point = self.widget_to_image_point(event.position().toPoint())
@@ -1410,7 +1835,42 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         self.update()
 
     def mouseMoveEvent(self, event):
+        if self._wipe_dragging:
+            vertical = self.compare_mode == "wipe_vertical"
+            extent = self.display_rect.width() if vertical else self.display_rect.height()
+            if extent > 0:
+                pointer = event.position().x() if vertical else event.position().y()
+                origin = self.display_rect.left() if vertical else self.display_rect.top()
+                self.wipe_position = max(
+                    0.0,
+                    min(
+                        1.0,
+                        (pointer - origin) / extent,
+                    ),
+                )
+                self.update()
+            event.accept()
+            return
+
+        if self._pan_dragging:
+            delta = event.position() - self._drag_position
+            self._drag_position = event.position()
+            self.pan_offset += delta
+            self._constrain_pan()
+            self.update()
+            event.accept()
+            return
+
+        if self._zoom_dragging:
+            delta_y = event.position().y() - self._drag_position.y()
+            self._drag_position = event.position()
+            if delta_y:
+                self.zoom_at(self._zoom_anchor, 1.01 ** (-delta_y))
+            event.accept()
+            return
+
         if not self.annotations.enabled:
+            super().mouseMoveEvent(event)
             return
 
         if not (event.buttons() & QtCore.Qt.LeftButton):
@@ -1424,14 +1884,59 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
     def mouseReleaseEvent(self, event):
 
+        if self._wipe_dragging and event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._wipe_dragging = False
+            self.unsetCursor()
+            event.accept()
+            return
+
+        if self._pan_dragging and event.button() in (
+            QtCore.Qt.MouseButton.MiddleButton,
+            QtCore.Qt.MouseButton.LeftButton,
+        ):
+            self._pan_dragging = False
+            self.unsetCursor()
+            event.accept()
+            return
+
+        if self._zoom_dragging and event.button() == QtCore.Qt.MouseButton.RightButton:
+            self._zoom_dragging = False
+            self.unsetCursor()
+            event.accept()
+            return
+
         if not self.annotations.enabled:
+            super().mouseReleaseEvent(event)
             return
 
         point = self.widget_to_image_point(event.position().toPoint())
 
         self.annotations.mouseReleaseEvent(point)
 
+        if self.annotations.tool == "txt":
+            self.annotations.set_enabled(False)
+            self.annotation_tool_finished.emit("txt")
+
         self.update()
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        if not delta:
+            event.ignore()
+            return
+        # One wheel notch changes zoom by roughly 20%, centered under cursor.
+        self.zoom_at(event.position(), 1.2 ** (delta / 120.0))
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event):
+        if (
+            event.button() == QtCore.Qt.MouseButton.LeftButton
+            and not self.annotations.enabled
+        ):
+            self.fullscreen_requested.emit()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def widget_to_image_point(self, point):
         """
@@ -1471,10 +1976,10 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
     def clear_strokes(self):
         """
-        clear current frame annotation.
+        Clear annotations only on the current frame.
         """
 
-        self.annotations.clear_all()
+        self.annotations.clear()
 
         self.update()
 
@@ -1489,10 +1994,15 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         if self.frame is None:
             return None
 
-        frame = self.frame.copy()
+        return self.render_annotated_frame(self.frame, self.current_frame)
 
-        height, width, channels = frame.shape
+    def render_annotated_frame(self, frame, frame_number):
+        """Burn notes for one timeline frame into a decoded RGB array."""
+        if frame is None:
+            return None
+
         frame = numpy.ascontiguousarray(frame)
+        height, width, channels = frame.shape
 
         if channels == 4:
             image = QtGui.QImage(
@@ -1509,7 +2019,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
         painter = QtGui.QPainter(image)
 
-        self.annotations.set_frame(self.current_frame)
+        previous_frame = self.annotations.current_frame
+        self.annotations.set_frame(frame_number)
 
         image_rect = QtCore.QRect(
             0,
@@ -1528,6 +2039,7 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         )
 
         painter.end()
+        self.annotations.set_frame(previous_frame)
 
         return image
 

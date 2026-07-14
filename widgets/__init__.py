@@ -24,6 +24,9 @@ The MainWindow class acts as the central controller between the playback engine,
 
 from __future__ import absolute_import
 
+import os
+import json
+
 import utils
 import logger
 import resources
@@ -39,7 +42,7 @@ from widgets.ocio import OcioWidget
 
 from widgets.viewer import ViewFrame
 
-from widgets.pixmaps import PathPixmap
+from widgets.pixmaps import NamePixmap
 from widgets.pixmaps import NamePixmapIcon
 
 from widgets.buttons import HelpButton
@@ -49,11 +52,17 @@ from widgets.dialogs import FileDialog
 from widgets.dialogs import OpenMediaDialog
 
 from playback.player import MediaPlayer
+from playback.disk_cache import MediaCache
+from playback.reader import MovieReader
+from playback.reader import SequenceReader
 
 from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
-from widgets.labels import CopyrightLabel
 from widgets.playlist import PlaylistWidget
+from widgets.shotstrip import ShotSequenceWidget
+from widgets.cachemanager import CacheManagerDialog
+from widgets.videoexport import VideoExportDialog
+from widgets.imageexport import ImageSequenceExportDialog
 
 from widgets.layouts import VerticalLayout
 from widgets.layouts import HorizontalLayout
@@ -90,6 +99,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
 
         super(MainWindow, self).__init__(parent)
+        self.setAcceptDrops(True)
 
         # Current browse directory used by open dialog
         self.browsepath = None
@@ -99,6 +109,31 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Playback controller
         self.player = MediaPlayer()
+        self.compare_player = MediaPlayer()
+        self.compare_active = False
+        self.compare_swapped = False
+        self._starting_compare = False
+        self.compare_contexts = list()
+        self.primary_compare_frame = None
+        self.secondary_compare_frame = None
+        self._pre_fullscreen_maximized = False
+        self._fullscreen_visibility = {}
+        self.playlist_playback_active = False
+        self._playlist_loading = False
+        self.playlist_entries = list()
+        self.playlist_entry_index = -1
+        self.current_source_filepath = None
+        self.current_playlist_path = None
+        self.media_cache = MediaCache(self)
+
+        # Throttle expensive decoder seeks while the user drags the timeline.
+        # The playhead still follows the mouse immediately; video preview is
+        # refreshed at most 25 times per second using the newest request.
+        self.pending_seek_frame = None
+        self.seekTimer = QtCore.QTimer(self)
+        self.seekTimer.setSingleShot(True)
+        self.seekTimer.setInterval(40)
+        self.seekTimer.timeout.connect(self._perform_seek)
 
         # Load available projects
         # self.projects = Projects.get()
@@ -130,7 +165,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.centralwidget)
 
         # Main vertical layout
-        self.verticallayout = VerticalLayout(self.centralwidget, space=10, margins=(10, 10, 10, 10))
+        self.verticallayout = VerticalLayout(self.centralwidget, space=3, margins=(3, 3, 3, 3))
 
         # Main horizontal splitter
         self.splitter = HorizontalSplitter(self)
@@ -146,20 +181,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recapsWidget = RecapsWidget(self)
         self.splitter.addWidget(self.recapsWidget)
 
-        # Footer
-        self.horizontallayout_footer = HorizontalLayout(None, space=10, margins=(0, 0, 0, 0))
-        self.verticallayout.addLayout(self.horizontallayout_footer)
-
-        self.themeButton = ThemeButton(self)
-        self.horizontallayout_footer.addWidget(self.themeButton)
-
-        self.copyrightLabel = CopyrightLabel(self)
-        self.horizontallayout_footer.addWidget(self.copyrightLabel)
-
-        # Help button
-        self.helpButton = HelpButton(self, tooltip="Help and Support (F2)", width=22, height=22)
-        # self.horizontallayout_toolbar.addWidget(self.helpButton)
-        self.horizontallayout_footer.addWidget(self.helpButton)
+        # Editorial-style horizontal shot track for playlist ordering.
+        self.shotSequenceWidget = ShotSequenceWidget(self)
+        self.verticallayout.addWidget(self.shotSequenceWidget)
 
         # --------------------------------------------------------------------
         # Playlist Widget Signal Connections
@@ -167,15 +191,40 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.playlistWidget.project_changed.connect(self.set_current_project)
         self.playlistWidget.select_media.connect(self.play_from_playlist)
+        self.playlistWidget.import_requested.connect(self.open_media)
+        self.playlistWidget.compare_requested.connect(self.start_compare)
+        self.playlistWidget.compare_swap_requested.connect(self.swap_compare)
+        self.playlistWidget.compare_exit_requested.connect(self.exit_compare)
+        self.playlistWidget.compare_mode_requested.connect(self.set_compare_mode)
+        self.playlistWidget.compare_opacity_requested.connect(
+            self.set_compare_opacity
+        )
+        self.playlistWidget.local_playlist_changed.connect(self._playlist_changed)
+        self.playlistWidget.active_media_removed.connect(
+            self.handle_active_media_removed
+        )
+        self.shotSequenceWidget.order_changed.connect(
+            self.playlistWidget.update_local_order
+        )
+        self.shotSequenceWidget.shot_requested.connect(self.play_from_shot_timeline)
+        self.shotSequenceWidget.play_playlist_requested.connect(
+            self.start_playlist_playback
+        )
+        self.media_cache.progress.connect(self.playlistWidget.update_cache_progress)
+        self.media_cache.ready.connect(self.playlistWidget.update_cache_ready)
+        self.media_cache.ready.connect(self.handle_media_cache_ready)
+        self.media_cache.failed.connect(self.playlistWidget.update_cache_failed)
 
         # --------------------------------------------------------------------
         # Player Signal Connections
         # --------------------------------------------------------------------
 
-        self.player.frame_ready.connect(self.viewframe.viewer.set_frame)
-        self.player.frame_changed.connect(self.viewframe.timeline.set_current_frame)
+        self.player.frame_ready.connect(self._set_primary_frame)
+        self.compare_player.frame_ready.connect(self._set_secondary_frame)
+        self.player.frame_changed.connect(self._on_primary_frame_changed)
         self.player.frame_changed.connect(self.viewframe.viewer.set_current_frame)
-        self.player.cache_changed.connect(self.viewframe.timeline.set_cached_frames)
+        self.player.cache_changed.connect(self._on_primary_cache_changed)
+        self.player.playback_finished.connect(self.play_next_playlist_item)
 
         self.viewframe.timeline.frame_changed.connect(self.seek)
 
@@ -189,7 +238,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.viewframe.viewToolbarLayout.open_trigger.connect(self.open_media)
         self.viewframe.viewToolbarLayout.ocio_trigger.connect(self.call_ocio)
-        self.ocio_widget.ocio_changed.connect(self.player.set_ocio)
+        self.ocio_widget.ocio_changed.connect(self.apply_ocio)
 
         ########################################################################
 
@@ -215,6 +264,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         self.viewframe.viewToolbarLayout.trigger_render.connect(self.render)
+        self.viewframe.viewToolbarLayout.trigger_export_notes.connect(self.export_notes)
         self.viewframe.viewToolbarLayout.trigger_recaps.connect(
             self.recapsWidget.set_current_recaps
         )
@@ -223,6 +273,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe.viewer.render_finished.connect(
             self.recapsWidget.inputWidget.snapshot_attachment
         )
+        self.viewframe.viewer.annotation_tool_finished.connect(
+            lambda _tool: self.exit_annotation_mode()
+        )
+        self.viewframe.viewer.fullscreen_requested.connect(self.toggle_fullscreen)
 
         # self.recapsWidget.inputWidget.trigger_snapshot.connect(self.render_snapshot)
 
@@ -232,10 +286,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe.timelineToolbarLayout.trigger_timeline.connect(self.trigger_timeline)
         self.viewframe.timelineToolbarLayout.fps_chanaged.connect(self.update_fps)
         self.viewframe.timelineToolbarLayout.volume_changed.connect(self.player.volume_changed)
-
-        self.themeButton.clicked.connect(self.change_theme)
-        self.helpButton.clicked.connect(self.help)
-
         # Keyboard Shortcuts
         # Play / Pause
         self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
@@ -247,19 +297,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Next frame
         self.forwardShortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self)
-        self.forwardShortcut.activated.connect(self.backward_frame)
-
-        # Open media
-        self.openShortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+O"), self)
-        self.openShortcut.activated.connect(self.openMedia)
+        self.forwardShortcut.activated.connect(self.forward_frame)
 
         # Loop toggle
         self.loopShortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+L"), self)
-        self.loopShortcut.activated.connect(self.set_loop)
+        self.loopShortcut.activated.connect(self.viewframe.timelineToolbarLayout.loopButton.toggle)
 
-        # Help
-        self.helpShortcut = QtGui.QShortcut(QtGui.QKeySequence("F2"), self)
-        self.helpShortcut.activated.connect(self.help)
+        self.escapeAnnotationShortcut = QtGui.QShortcut(QtGui.QKeySequence("Esc"), self)
+        self.escapeAnnotationShortcut.activated.connect(self.handle_escape)
 
         # Maximize window if enabled
         if constants.MAXIMIZE:
@@ -267,9 +312,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Apply stylesheet theme
         SetStylesheet(self, theme=self.current_theme)
+        self.apply_review_styles()
+
+        self.setup_review_chrome()
+        self.apply_review_styles()
 
         # Initial splitter sizes
-        self.splitter.setSizes([446, 1040, 386])
+        self.splitter.setSizes([300, 1100, 0])
 
     def setupIcons(self):
         """
@@ -279,9 +328,406 @@ class MainWindow(QtWidgets.QMainWindow):
         pixmap = NamePixmapIcon(constants.VL_TOOL_ICON)
         self.setWindowIcon(pixmap)
 
+    def setup_review_chrome(self):
+        """Build an RV-inspired menu/toolbar shell around the review workspace."""
+        self.playlistWidget.setObjectName("SourcesPanel")
+        self.playlistWidget.setMinimumWidth(260)
+        self.playlistWidget.setMaximumWidth(420)
+        self.viewframe.setObjectName("ViewerPanel")
+        self.shotSequenceWidget.setObjectName("ShotTimelinePanel")
+        self.splitter.setHandleWidth(2)
+
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("File")
+        edit_menu = menu_bar.addMenu("Edit")
+        view_menu = menu_bar.addMenu("View")
+        playback_menu = menu_bar.addMenu("Playback")
+        compare_menu = menu_bar.addMenu("Compare")
+        color_menu = menu_bar.addMenu("Color")
+        tools_menu = menu_bar.addMenu("Tools")
+        help_menu = menu_bar.addMenu("Help")
+
+        self.actionImport = QtGui.QAction("Import Media...", self)
+        self.actionImport.setIcon(NamePixmapIcon("open"))
+        self.actionImport.setShortcut(QtGui.QKeySequence("Ctrl+O"))
+        self.actionImport.triggered.connect(self.open_media)
+        file_menu.addAction(self.actionImport)
+
+        self.actionOpenPlaylist = QtGui.QAction("Open Playlist...", self)
+        self.actionOpenPlaylist.setIcon(NamePixmapIcon("open"))
+        self.actionOpenPlaylist.setShortcut(QtGui.QKeySequence("Ctrl+Shift+O"))
+        self.actionOpenPlaylist.triggered.connect(self.load_playlist)
+        file_menu.addAction(self.actionOpenPlaylist)
+        self.actionSavePlaylist = QtGui.QAction("Save Playlist...", self)
+        self.actionSavePlaylist.setIcon(NamePixmapIcon("attach"))
+        self.actionSavePlaylist.setShortcut(QtGui.QKeySequence("Ctrl+Shift+S"))
+        self.actionSavePlaylist.triggered.connect(self.save_playlist)
+        file_menu.addAction(self.actionSavePlaylist)
+        file_menu.addSeparator()
+
+        self.actionExportFrame = QtGui.QAction("Export Current Frame...", self)
+        self.actionExportFrame.setIcon(NamePixmapIcon("render"))
+        self.actionExportFrame.triggered.connect(self.render)
+        file_menu.addAction(self.actionExportFrame)
+        self.actionExportImageSequence = QtGui.QAction(
+            "Export Image Sequence...", self
+        )
+        self.actionExportImageSequence.setIcon(NamePixmapIcon("export"))
+        self.actionExportImageSequence.setShortcut(QtGui.QKeySequence("Ctrl+Alt+E"))
+        self.actionExportImageSequence.triggered.connect(self.export_image_sequence)
+        file_menu.addAction(self.actionExportImageSequence)
+        self.actionExportMP4 = QtGui.QAction("Export High Quality MP4...", self)
+        self.actionExportMP4.setIcon(NamePixmapIcon("export"))
+        self.actionExportMP4.setShortcut(QtGui.QKeySequence("Ctrl+Shift+E"))
+        self.actionExportMP4.triggered.connect(self.export_mp4)
+        file_menu.addAction(self.actionExportMP4)
+        self.actionExportNotes = QtGui.QAction("Export All Notes...", self)
+        self.actionExportNotes.setIcon(NamePixmapIcon("recaps"))
+        self.actionExportNotes.triggered.connect(self.export_notes)
+        file_menu.addAction(self.actionExportNotes)
+        file_menu.addSeparator()
+        self.actionExit = QtGui.QAction("Exit", self)
+        self.actionExit.setIcon(NamePixmapIcon("remove"))
+        self.actionExit.triggered.connect(self.close)
+        file_menu.addAction(self.actionExit)
+
+        self.actionUndo = QtGui.QAction("Undo Note", self)
+        self.actionUndo.setIcon(NamePixmapIcon("undo"))
+        self.actionUndo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
+        self.actionUndo.triggered.connect(self.viewframe.viewer.undo_strokes)
+        edit_menu.addAction(self.actionUndo)
+        self.actionClearFrame = QtGui.QAction("Clear Notes on Frame", self)
+        self.actionClearFrame.setIcon(NamePixmapIcon("clear"))
+        self.actionClearFrame.triggered.connect(self.viewframe.viewer.clear_strokes)
+        edit_menu.addAction(self.actionClearFrame)
+
+        self.actionFit = QtGui.QAction("Fit Image", self)
+        self.actionFit.setIcon(NamePixmapIcon("display"))
+        self.actionFit.setShortcut(QtGui.QKeySequence("F"))
+        self.actionFit.triggered.connect(self.viewframe.viewer.reset_view)
+        view_menu.addAction(self.actionFit)
+        self.actionFullscreen = QtGui.QAction("Full Screen Playback", self, checkable=True)
+        self.actionFullscreen.setIcon(NamePixmapIcon("display"))
+        self.actionFullscreen.setShortcut(QtGui.QKeySequence("F11"))
+        self.actionFullscreen.toggled.connect(self.set_fullscreen)
+        view_menu.addAction(self.actionFullscreen)
+        self.actionSources = QtGui.QAction("Sources Panel", self, checkable=True)
+        self.actionSources.setIcon(NamePixmapIcon("open"))
+        self.actionSources.setChecked(True)
+        self.actionSources.toggled.connect(self.playlistWidget.setVisible)
+        view_menu.addAction(self.actionSources)
+        self.actionShotTimeline = QtGui.QAction(
+            "Shot Playlist Timeline", self, checkable=True
+        )
+        self.actionShotTimeline.setIcon(NamePixmapIcon("recaps"))
+        self.actionShotTimeline.setChecked(True)
+        self.actionShotTimeline.toggled.connect(self.shotSequenceWidget.setVisible)
+        view_menu.addAction(self.actionShotTimeline)
+        self.actionRecaps = QtGui.QAction("Review Notes Panel", self, checkable=True)
+        self.actionRecaps.setIcon(NamePixmapIcon("txt"))
+        self.actionRecaps.toggled.connect(self.recapsWidget.set_current_recaps)
+        view_menu.addAction(self.actionRecaps)
+
+        self.actionPlay = QtGui.QAction("Play / Pause", self)
+        self.actionPlay.setIcon(NamePixmapIcon("play"))
+        self.actionPlay.triggered.connect(self.toggle_play_pause)
+        playback_menu.addAction(self.actionPlay)
+        self.actionPrevious = QtGui.QAction("Previous Frame", self)
+        self.actionPrevious.setIcon(NamePixmapIcon("backward"))
+        self.actionPrevious.triggered.connect(self.backward_frame)
+        playback_menu.addAction(self.actionPrevious)
+        self.actionNext = QtGui.QAction("Next Frame", self)
+        self.actionNext.setIcon(NamePixmapIcon("forward"))
+        self.actionNext.triggered.connect(self.forward_frame)
+        playback_menu.addAction(self.actionNext)
+        self.actionLoop = QtGui.QAction("Loop", self, checkable=True)
+        self.actionLoop.setIcon(NamePixmapIcon("loop"))
+        self.actionLoop.toggled.connect(self.set_loop)
+        playback_menu.addAction(self.actionLoop)
+
+        self.actionCompare = QtGui.QAction("Compare Selected A/B", self)
+        self.actionCompare.setIcon(NamePixmapIcon("display"))
+        self.actionCompare.triggered.connect(self.playlistWidget.request_compare)
+        compare_menu.addAction(self.actionCompare)
+        mode_menu = compare_menu.addMenu("Comparison Mode")
+        self.compareModeActionGroup = QtGui.QActionGroup(self)
+        self.compareModeActionGroup.setExclusive(True)
+        self.compareModeActions = {}
+        for mode, label in constants.COMPARE_MODES:
+            action = QtGui.QAction(label, self, checkable=True)
+            action.setData(mode)
+            action.setChecked(mode == "wipe_vertical")
+            action.triggered.connect(
+                lambda _checked=False, selected=mode: self.set_compare_mode(selected)
+            )
+            self.compareModeActionGroup.addAction(action)
+            mode_menu.addAction(action)
+            self.compareModeActions[mode] = action
+        self.actionSwapCompare = QtGui.QAction("Swap A/B", self)
+        self.actionSwapCompare.setIcon(NamePixmapIcon("loop"))
+        self.actionSwapCompare.triggered.connect(self.swap_compare)
+        compare_menu.addAction(self.actionSwapCompare)
+        self.actionExitCompare = QtGui.QAction("Exit Compare", self)
+        self.actionExitCompare.setIcon(NamePixmapIcon("remove"))
+        self.actionExitCompare.triggered.connect(self.exit_compare)
+        compare_menu.addAction(self.actionExitCompare)
+
+        self.actionOCIO = QtGui.QAction("OCIO Color Management...", self)
+        self.actionOCIO.setIcon(NamePixmapIcon("ocio"))
+        self.actionOCIO.triggered.connect(self.call_ocio)
+        color_menu.addAction(self.actionOCIO)
+
+        self.actionCacheCurrent = QtGui.QAction("Cache Current Shot", self)
+        self.actionCacheCurrent.setIcon(NamePixmapIcon("attach"))
+        self.actionCacheCurrent.triggered.connect(self.cache_current_media)
+        tools_menu.addAction(self.actionCacheCurrent)
+        self.actionCacheSelected = QtGui.QAction("Cache Selected Shots", self)
+        self.actionCacheSelected.setIcon(NamePixmapIcon("recaps"))
+        self.actionCacheSelected.triggered.connect(self.cache_selected_media)
+        tools_menu.addAction(self.actionCacheSelected)
+        self.actionCacheManager = QtGui.QAction("Cache Manager...", self)
+        self.actionCacheManager.setIcon(NamePixmapIcon("render"))
+        self.actionCacheManager.triggered.connect(self.show_cache_manager)
+        tools_menu.addAction(self.actionCacheManager)
+        tools_menu.addSeparator()
+        tools_menu.addAction(self.actionExportNotes)
+        self.actionHelp = QtGui.QAction("FrameDeck Help", self)
+        self.actionHelp.setIcon(NamePixmapIcon("help"))
+        self.actionHelp.setShortcut(QtGui.QKeySequence("F2"))
+        self.actionHelp.triggered.connect(self.help)
+        help_menu.addAction(self.actionHelp)
+
+        self.reviewToolbar = QtWidgets.QToolBar("Review", self)
+        self.reviewToolbar.setObjectName("ReviewToolbar")
+        self.reviewToolbar.setMovable(False)
+        self.reviewToolbar.setFloatable(False)
+        self.reviewToolbar.setIconSize(QtCore.QSize(18, 18))
+        self.addToolBar(QtCore.Qt.ToolBarArea.TopToolBarArea, self.reviewToolbar)
+        self.reviewToolbar.addAction(self.actionImport)
+        self.reviewToolbar.addAction(self.actionPrevious)
+        self.reviewToolbar.addAction(self.actionPlay)
+        self.reviewToolbar.addAction(self.actionNext)
+        self.reviewToolbar.addSeparator()
+        self.reviewToolbar.addAction(self.actionCompare)
+        self.reviewToolbar.addAction(self.actionSwapCompare)
+        self.reviewToolbar.addAction(self.actionFit)
+        self.reviewToolbar.addSeparator()
+
+        self.sourceStatusLabel = QtWidgets.QLabel(" SOURCE  |  No Media ")
+        self.sourceStatusLabel.setObjectName("SourceStatusLabel")
+        self.reviewToolbar.addWidget(self.sourceStatusLabel)
+        spacer = QtWidgets.QWidget(self)
+        spacer.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        self.reviewToolbar.addWidget(spacer)
+        self.colorStatusLabel = QtWidgets.QLabel(" COLOR  |  Auto ")
+        self.colorStatusLabel.setObjectName("ColorStatusLabel")
+        self.reviewToolbar.addWidget(self.colorStatusLabel)
+        self.reviewToolbar.addAction(self.actionOCIO)
+        self.reviewToolbar.addAction(self.actionExportMP4)
+        self.reviewToolbar.addAction(self.actionExportNotes)
+
+        status = QtWidgets.QStatusBar(self)
+        status.setSizeGripEnabled(False)
+        status.showMessage(
+            "Wheel: Zoom  |  Double-click viewer: Full screen  |  Ctrl+click 2 shots: Compare  |  Space: Play"
+        )
+        self.setStatusBar(status)
+
+    def apply_review_styles(self):
+        """Apply the custom graphite/navy review-player palette."""
+        self.setStyleSheet(
+            """
+            QMainWindow, QWidget { background-color: #101820; color: #d9e2e8; }
+            QMenuBar { background: #17232d; border-bottom: 1px solid #30404c; padding: 2px; }
+            QMenuBar::item:selected, QMenu::item:selected { background: #187f78; color: white; }
+            QMenu { background: #17232d; border: 1px solid #3a4b58; }
+            QToolBar#ReviewToolbar { background: #15232c; border: none; border-bottom: 1px solid #38505e; spacing: 3px; padding: 3px; }
+            QToolBar QToolButton { background: #21333f; border: 1px solid #3d5361; border-radius: 2px; padding: 4px 8px; }
+            QToolBar QToolButton:hover { background: #187f78; }
+            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel { background: #0c1319; border: 1px solid #344a58; color: #9ddbd3; padding: 4px 9px; }
+            QFrame#ViewerPanel { background: #070b0e; border: 1px solid #344653; }
+            QWidget#SourcesPanel { background: #17232d; border: 1px solid #344653; }
+            QFrame#ShotTimelinePanel { background: #14212a; border: 1px solid #344653; }
+            QTreeWidget, QListWidget, QScrollArea { background: #0e171e; alternate-background-color: #14222b; border: 1px solid #304653; color: #d8e2e8; }
+            QTreeWidget::item:selected, QListWidget::item:selected { background: #80651c; color: white; }
+            QPushButton { background: #213440; border: 1px solid #405765; border-radius: 2px; padding: 4px 8px; color: #e2edf2; }
+            QPushButton:hover { background: #187f78; border-color: #31b9aa; }
+            QPushButton:pressed, QPushButton:checked { background: #11665f; }
+            QPushButton:disabled { background: #17242c; color: #60717b; border-color: #273944; }
+            QComboBox, QSpinBox, QLineEdit { background: #0d161c; border: 1px solid #3c5360; padding: 3px; }
+            QSlider::groove:horizontal { height: 4px; background: #314551; }
+            QSlider::handle:horizontal { width: 12px; margin: -5px 0; background: #31b9aa; border-radius: 6px; }
+            QStatusBar { background: #111c23; border-top: 1px solid #304653; color: #8fa5b1; }
+            QSplitter::handle { background: #304653; }
+            QToolTip { background: #0b1116; color: white; border: 1px solid #31b9aa; }
+            """
+        )
+
     def set_current_project(self, project):
         self.current_project = project
         self.viewframe.viewer.clear()
+
+    @staticmethod
+    def _playlist_frame_count(context):
+        count = int(context.get("frame_count") or 0)
+        if count <= 0:
+            count = round(
+                float(context.get("duration") or 0.0)
+                * float(context.get("fps") or constants.VL_FPS)
+            )
+        return max(1, count)
+
+    def _playlist_changed(self, contexts):
+        """Rebuild continuous global frame ranges after add/remove/reorder."""
+        contexts = list(contexts)
+        active_instance = None
+        if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
+            active_instance = self.playlist_entries[self.playlist_entry_index][
+                "context"
+            ].get("playlist_instance_id")
+        self.shotSequenceWidget.set_contexts(contexts)
+        entries = list()
+        start = constants.VL_START_FRAME
+        for context in contexts:
+            count = self._playlist_frame_count(context)
+            entries.append(
+                {
+                    "context": context,
+                    "start": start,
+                    "end": start + count - 1,
+                    "count": count,
+                }
+            )
+            start += count
+        self.playlist_entries = entries
+        if self.playlist_playback_active:
+            if entries:
+                matched_index = next(
+                    (
+                        index
+                        for index, entry in enumerate(entries)
+                        if active_instance is not None
+                        and entry["context"].get("playlist_instance_id")
+                        == active_instance
+                    ),
+                    -1,
+                )
+                if matched_index >= 0:
+                    self.playlist_entry_index = matched_index
+                else:
+                    self.playlist_entry_index = min(
+                        max(0, self.playlist_entry_index), len(entries) - 1
+                    )
+                self.viewframe.timeline.set_range(
+                    constants.VL_START_FRAME, entries[-1]["end"]
+                )
+            else:
+                self.playlist_playback_active = False
+                self.playlist_entry_index = -1
+                self.viewframe.timeline.set_range(
+                    constants.VL_START_FRAME, constants.VL_START_FRAME
+                )
+
+    def _playlist_entry_for_context(self, context):
+        instance = context.get("playlist_instance_id")
+        for index, entry in enumerate(self.playlist_entries):
+            candidate = entry["context"]
+            if instance is not None and candidate.get("playlist_instance_id") == instance:
+                return index, entry
+            if candidate is context:
+                return index, entry
+        return -1, None
+
+    def _playlist_entry_for_frame(self, global_frame):
+        frame = int(global_frame)
+        for index, entry in enumerate(self.playlist_entries):
+            if entry["start"] <= frame <= entry["end"]:
+                return index, entry
+        if self.playlist_entries:
+            if frame < self.playlist_entries[0]["start"]:
+                return 0, self.playlist_entries[0]
+            return len(self.playlist_entries) - 1, self.playlist_entries[-1]
+        return -1, None
+
+    def _on_primary_frame_changed(self, local_frame):
+        if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
+            entry = self.playlist_entries[self.playlist_entry_index]
+            global_frame = entry["start"] + int(local_frame) - constants.VL_START_FRAME
+            self.viewframe.timeline.set_current_frame(
+                min(entry["end"], max(entry["start"], global_frame))
+            )
+        else:
+            self.viewframe.timeline.set_current_frame(local_frame)
+
+    def _on_primary_cache_changed(self, local_frames):
+        if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
+            offset = self.playlist_entries[self.playlist_entry_index]["start"] - constants.VL_START_FRAME
+            self.viewframe.timeline.set_cached_frames(
+                [int(frame) + offset for frame in local_frames]
+            )
+        else:
+            self.viewframe.timeline.set_cached_frames(local_frames)
+
+    def _load_playlist_entry(self, index, local_frame=None, autoplay=False):
+        if index < 0 or index >= len(self.playlist_entries):
+            return False
+        entry = self.playlist_entries[index]
+        context = entry["context"]
+        self.playlist_playback_active = True
+        self.playlist_entry_index = index
+        self._playlist_loading = True
+        try:
+            opened = self.openMedia(context.get("media"), add_to_playlist=False)
+        finally:
+            self._playlist_loading = False
+        if not opened:
+            return False
+        self.player.set_loop(False)
+        self.viewframe.timeline.set_range(
+            constants.VL_START_FRAME, self.playlist_entries[-1]["end"]
+        )
+        if local_frame is not None:
+            self.player.seek(local_frame)
+        self.recapsWidget.inputWidget.set_version_context(context)
+        self.recapsWidget.outputWidget.set_version_context(context)
+        if autoplay:
+            self.player.toggle_play_pause()
+            self.viewframe.timelineToolbarLayout.playPauseButton.switch(True)
+        return True
+
+    def start_playlist_playback(self):
+        """Play the ordered shot strip as one continuous frame timeline."""
+        if not self.playlist_entries:
+            return False
+        self.exit_compare()
+        return self._load_playlist_entry(0, constants.VL_START_FRAME, autoplay=True)
+
+    def play_from_shot_timeline(self, play, context):
+        index, entry = self._playlist_entry_for_context(context)
+        if entry is None:
+            return
+        self.exit_compare()
+        self._load_playlist_entry(index, constants.VL_START_FRAME, autoplay=play)
+
+    def _seek_playlist_frame(self, global_frame, resume=False):
+        index, entry = self._playlist_entry_for_frame(global_frame)
+        if entry is None:
+            return
+        target = min(entry["end"], max(entry["start"], int(global_frame)))
+        local_frame = constants.VL_START_FRAME + target - entry["start"]
+        if index != self.playlist_entry_index or not self.player.reader:
+            self._load_playlist_entry(index, local_frame, autoplay=resume)
+        else:
+            self.player.seek(local_frame)
+            if resume:
+                self.player.toggle_play_pause()
+                self.viewframe.timelineToolbarLayout.playPauseButton.switch(True)
+        # Container seeks may decode from a neighboring keyframe. The edit
+        # playhead represents the user's exact global-frame request.
+        self.viewframe.timeline.set_current_frame(target)
 
     def play_from_playlist(self, play, context):
         """
@@ -294,6 +740,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 Playlist version context.
         """
 
+        # Clicking a Source previews that individual source, outside the
+        # continuous Shot Playlist Timeline.
+        self.playlist_playback_active = False
+        self.playlist_entry_index = -1
+
         # Clear viewer if media is missing
         if not context.get("media"):
             self.viewframe.viewer.clear()
@@ -303,15 +754,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Build watermark resources
         logs = {
-            "project_logo": self.current_project["image"],
-            "studio_logo": PathPixmap(resources.getIconFilepath(constants.STUDIO_NAME)),
+            "project_logo": None
+            if context.get("type") == "LocalMedia"
+            else (self.current_project or {}).get("image"),
+            "studio_logo": NamePixmap(constants.STUDIO_NAME),
         }
 
         # Update watermark values
         self.viewframe.viewToolbarLayout.update_watermarks(context, **logs)
 
         # Load media
-        self.openMedia(filepath=context.get("media"))
+        if not self.openMedia(filepath=context.get("media"), add_to_playlist=False):
+            return
 
         # Start playback if enabled
         if play:
@@ -321,7 +775,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recapsWidget.inputWidget.set_version_context(context)
         self.recapsWidget.outputWidget.set_version_context(context)
 
-    def openMedia(self, filepath=None):
+    def openMedia(self, filepath=None, add_to_playlist=True):
         """
         Open media file or sequence.
 
@@ -330,27 +784,101 @@ class MainWindow(QtWidgets.QMainWindow):
                 Media file path or sequence pattern.
         """
 
+        if self.playlist_playback_active and not self._playlist_loading:
+            self.playlist_playback_active = False
+            self.playlist_entry_index = -1
+
+        if self.compare_active and not self._starting_compare:
+            self.exit_compare()
+
         # Open browse dialog if filepath is not provided
         if not filepath:
             dialog = OpenMediaDialog(self, browsepath=self.browsepath)
             if dialog.exec():
-                filepath = dialog.getfile()
-                self.browsepath = utils.dirname(filepath)
+                files = dialog.getfiles()
+                if files:
+                    self.browsepath = utils.dirname(files[0])
+                    media_files = [
+                        path
+                        for path in files
+                        if utils.fileExtension(path, dot=False).lower()
+                        in constants.OPEN_EXTENSIONS
+                    ]
+                    if media_files:
+                        return self.import_media_files(media_files)
+                    return self.openMedia(files[0], add_to_playlist=False)
 
             # Update watermark resources
-            logs = {"studio_logo": PathPixmap(resources.getIconFilepath(constants.STUDIO_NAME))}
+            logs = {"studio_logo": NamePixmap(constants.STUDIO_NAME)}
             self.viewframe.viewToolbarLayout.update_watermarks(dict(), **logs)
+
+        if isinstance(filepath, (list, tuple)):
+            return self.import_media_files(filepath)
+
+        if (
+            add_to_playlist
+            and utils.fileExtension(filepath, dot=False).lower()
+            in constants.OPEN_EXTENSIONS
+        ):
+            added = self.playlistWidget.add_local_media([filepath])
+            if added:
+                filepath = added[0]["media"]
 
         # Clear current viewer frame
         self.viewframe.viewer.clear()
+        self.viewframe.viewer.reset_view()
 
         if not filepath:
             return
 
-        LOGGER.info(f"Source filepath, {filepath}")
+        source_filepath = filepath
+        playback_filepath = self.media_cache.resolve(source_filepath)
+        self.media_cache.set_active(playback_filepath)
+        LOGGER.info(f"Source filepath, {source_filepath}")
+        if playback_filepath != source_filepath:
+            LOGGER.info(f"Using local media cache, {playback_filepath}")
 
         # Load media into player
-        self.player.load(filepath)
+        try:
+            self.player.load(playback_filepath)
+        except Exception as error:
+            LOGGER.exception("Unable to load media")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Unable to load media",
+                f"Could not open:\n{source_filepath}\n\n{error}",
+            )
+            return False
+
+        self.ocio_widget.set_current_media(
+            self.player.reader.input_color_space
+            if self.player.reader.media_type == "sequence"
+            else "",
+            source_filepath,
+        )
+        if self.player.reader.media_type == "sequence" and self.ocio_widget.config_path:
+            self.ocio_widget.apply_auto_input(
+                self.player.reader.input_color_space,
+                source_filepath,
+            )
+
+        # Server playlist entries are intentionally lightweight during
+        # import. Reuse the frame already decoded by the player for metadata
+        # and thumbnail instead of reopening the network file.
+        self.playlistWidget.update_local_media(
+            source_filepath,
+            self.player.reader,
+            self.viewframe.viewer.qimage,
+        )
+
+        if playback_filepath != source_filepath:
+            self.playlistWidget.update_cache_ready(source_filepath, playback_filepath)
+        elif self.player.reader.is_network_source:
+            self.playlistWidget.update_cache_progress(source_filepath, 0)
+            QtCore.QTimer.singleShot(
+                1500,
+                lambda path=source_filepath: self.media_cache.cache(path),
+            )
 
         # Sequence media supports AOVs
         self.viewframe.viewToolbarLayout.set_aovs(
@@ -358,14 +886,523 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         # Update timeline range
-        self.viewframe.timeline.set_range(
-            constants.VL_START_FRAME, constants.VL_START_FRAME + (self.player.frame_count - 1)
-        )
+        if not self._playlist_loading:
+            self.viewframe.timeline.set_range(
+                constants.VL_START_FRAME,
+                constants.VL_START_FRAME + (self.player.frame_count - 1),
+            )
+
+        self.playlistWidget.set_active_media(source_filepath)
+        self.shotSequenceWidget.set_active_media(source_filepath)
+        self.current_source_filepath = source_filepath
+        if hasattr(self, "sourceStatusLabel"):
+            self.sourceStatusLabel.setText(
+                f" SOURCE  |  {os.path.basename(source_filepath)} "
+            )
+            if self.player.reader.media_type == "sequence":
+                source_color = (
+                    self.ocio_widget.active_input
+                    or self.player.reader.input_color_space
+                    or "Auto"
+                )
+                mode = self.ocio_widget.config_label
+                self.colorStatusLabel.setText(
+                    f" COLOR  |  {mode}: {source_color} -> sRGB "
+                )
+            else:
+                self.colorStatusLabel.setText(" COLOR  |  Video / display encoded ")
 
         self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+        return True
+
+    def import_media_files(self, paths, autoplay=False):
+        """Add multiple videos to the local playlist and load the first new clip."""
+        if isinstance(paths, str):
+            paths = [paths]
+        paths = list(paths)
+        playlist_files = [
+            path for path in paths if str(path).lower().endswith(".fdplaylist")
+        ]
+        media_paths = [path for path in paths if path not in playlist_files]
+
+        loaded_playlist = False
+        if playlist_files:
+            loaded_playlist = self.load_playlist(playlist_files[0])
+
+        added = self.playlistWidget.add_local_media(media_paths)
+        if not added:
+            return loaded_playlist
+
+        context = added[0]
+        if not self.openMedia(context["media"], add_to_playlist=False):
+            return False
+
+        if autoplay:
+            self.toggle_play_pause()
+        return True
+
+    def save_playlist(self, filepath=None):
+        """Save shot order and the active review position to .fdplaylist."""
+        if not self.playlistWidget.local_contexts:
+            QtWidgets.QMessageBox.information(
+                self, "Save Playlist", "Import at least one shot before saving."
+            )
+            return False
+
+        if not isinstance(filepath, str) or not filepath:
+            suggested = self.current_playlist_path or os.path.join(
+                self.browsepath or os.path.expanduser("~"), "review.fdplaylist"
+            )
+            filepath, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self,
+                "Save FrameDeck Playlist",
+                suggested,
+                "FrameDeck Playlist (*.fdplaylist)",
+            )
+        if not filepath:
+            return False
+        if not filepath.lower().endswith(".fdplaylist"):
+            filepath += ".fdplaylist"
+
+        filepath = os.path.abspath(filepath)
+        base_directory = os.path.dirname(filepath)
+        shots = list()
+        for context in self.playlistWidget.local_contexts:
+            media = context.get("media", "")
+            try:
+                relative_media = os.path.relpath(media, base_directory)
+            except ValueError:
+                relative_media = ""
+            shots.append(
+                {
+                    "media": media,
+                    "relative_media": relative_media,
+                    "duration": context.get("duration", 0.0),
+                    "fps": context.get("fps", 0.0),
+                    "frame_count": context.get("frame_count", 0),
+                    "resolution": context.get("resolution", "Unknown size"),
+                    "colorspace": context.get("colorspace", "Auto"),
+                }
+            )
+
+        document = {
+            "schema": "framedeck-playlist-v1",
+            "application": "FrameDeck",
+            "application_version": constants.VL_VERSION,
+            "shots": shots,
+            "active_media": self.playlistWidget.current_local_path,
+            "current_frame": self.viewframe.timeline.current_frame,
+            "shot_timeline_visible": self.shotSequenceWidget.isVisible(),
+        }
+        temporary = filepath + ".tmp"
+        try:
+            os.makedirs(base_directory, exist_ok=True)
+            with open(temporary, "w", encoding="utf-8") as stream:
+                json.dump(document, stream, ensure_ascii=False, indent=2)
+            os.replace(temporary, filepath)
+        except Exception as error:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+            QtWidgets.QMessageBox.critical(
+                self, "Save Playlist", f"Could not save playlist:\n{error}"
+            )
+            return False
+
+        self.current_playlist_path = filepath
+        self.setWindowTitle(
+            f"{constants.VL_TOOL_NAME}-{constants.VL_VERSION} - {os.path.basename(filepath)}"
+        )
+        self.statusBar().showMessage(f"Playlist saved: {filepath}", 5000)
+        return True
+
+    def load_playlist(self, filepath=None):
+        """Open a .fdplaylist and restore shot order and active frame."""
+        if not isinstance(filepath, str) or not filepath:
+            filepath, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self,
+                "Open FrameDeck Playlist",
+                self.browsepath or os.path.expanduser("~"),
+                "FrameDeck Playlist (*.fdplaylist)",
+            )
+        if not filepath:
+            return False
+
+        filepath = os.path.abspath(filepath)
+        try:
+            with open(filepath, "r", encoding="utf-8") as stream:
+                document = json.load(stream)
+            if document.get("schema") != "framedeck-playlist-v1":
+                raise ValueError("This is not a supported FrameDeck playlist file.")
+            shots = document.get("shots")
+            if not isinstance(shots, list):
+                raise ValueError("Playlist has no valid shot list.")
+        except Exception as error:
+            QtWidgets.QMessageBox.critical(
+                self, "Open Playlist", f"Could not open playlist:\n{error}"
+            )
+            return False
+
+        self.exit_compare()
+        contexts, missing = self.playlistWidget.restore_local_playlist(
+            shots,
+            base_directory=os.path.dirname(filepath),
+            active_media=document.get("active_media"),
+        )
+        if not contexts:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Open Playlist",
+                "None of the saved media files are currently available.",
+            )
+            return False
+
+        self.current_playlist_path = filepath
+        self.browsepath = os.path.dirname(filepath)
+        self.actionShotTimeline.setChecked(
+            bool(document.get("shot_timeline_visible", True))
+        )
+        saved_frame = int(document.get("current_frame") or constants.VL_START_FRAME)
+        index, entry = self._playlist_entry_for_frame(saved_frame)
+        if entry is None:
+            opened = False
+        else:
+            local_frame = constants.VL_START_FRAME + saved_frame - entry["start"]
+            opened = self._load_playlist_entry(index, local_frame, autoplay=False)
+
+        self.setWindowTitle(
+            f"{constants.VL_TOOL_NAME}-{constants.VL_VERSION} - {os.path.basename(filepath)}"
+        )
+        self.statusBar().showMessage(
+            f"Playlist restored: {len(contexts)} shots", 5000
+        )
+        if missing:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Playlist Restored with Missing Media",
+                f"Loaded {len(contexts)} shots. {len(missing)} missing path(s) were skipped:\n\n"
+                + "\n".join(missing[:10]),
+            )
+        return bool(opened)
+
+    def handle_active_media_removed(self, replacement):
+        """Switch to the neighboring shot, or reset when the playlist is empty."""
+        if replacement and replacement.get("media"):
+            self.play_from_playlist(False, replacement)
+            return
+
+        self.exit_compare()
+        self._release_media_player(self.player)
+        self.current_source_filepath = None
+        self.media_cache.set_active(None)
+        self.primary_compare_frame = None
+        self.viewframe.viewer.clear()
+        self.viewframe.viewer.reset_view()
+        self.viewframe.timeline.set_range(constants.VL_START_FRAME, constants.VL_START_FRAME)
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+        if hasattr(self, "sourceStatusLabel"):
+            self.sourceStatusLabel.setText(" SOURCE  |  No Media ")
+            self.colorStatusLabel.setText(" COLOR  |  Auto ")
+
+    def cache_current_media(self):
+        if not self.current_source_filepath:
+            return
+        self.playlistWidget.update_cache_progress(self.current_source_filepath, 0)
+        self.media_cache.cache(self.current_source_filepath)
+
+    def cache_selected_media(self):
+        contexts = self.playlistWidget.selected_contexts()
+        if not contexts and self.current_source_filepath:
+            self.cache_current_media()
+            return
+        for context in contexts:
+            path = context.get("media")
+            if path:
+                self.playlistWidget.update_cache_progress(path, 0)
+                self.media_cache.cache(path)
+
+    def show_cache_manager(self):
+        dialog = CacheManagerDialog(self.media_cache, self)
+        dialog.cache_cleared.connect(self.playlistWidget.reset_cache_statuses)
+        dialog.exec()
+
+    def handle_media_cache_ready(self, source_path, cached_path):
+        """Switch an active server sequence to its completed local cache."""
+        if not self.current_source_filepath or not self.player.reader:
+            return
+        if (
+            os.path.normcase(os.path.abspath(source_path))
+            != os.path.normcase(os.path.abspath(self.current_source_filepath))
+            or self.player.reader.media_type != "sequence"
+            or not self.player.reader.is_network_source
+        ):
+            return
+        current_frame = self.viewframe.timeline.current_frame
+        if self.playlist_playback_active:
+            resume = self.player.is_playing
+            index, entry = self._playlist_entry_for_frame(current_frame)
+            local_frame = (
+                constants.VL_START_FRAME + current_frame - entry["start"]
+                if entry is not None
+                else constants.VL_START_FRAME
+            )
+            switched = self._load_playlist_entry(index, local_frame, autoplay=resume)
+            self.viewframe.timeline.set_current_frame(current_frame)
+        else:
+            switched = self.openMedia(source_path, add_to_playlist=False)
+            if switched:
+                self.player.seek(current_frame)
+        if switched:
+            self.statusBar().showMessage(
+                "Server sequence cache ready; switched playback to local disk",
+                6000,
+            )
 
     def open_media(self, *args):
         self.openMedia()
+
+    @staticmethod
+    def _release_media_player(media_player):
+        implementation = media_player.player
+        if implementation is None:
+            return
+        if hasattr(implementation, "reset"):
+            implementation.reset()
+        else:
+            implementation.pause()
+            if implementation.reader is not None:
+                implementation.reader.close()
+                implementation.reader = None
+
+    def _set_primary_frame(self, frame):
+        self.primary_compare_frame = frame
+        if self.compare_active and self.compare_swapped:
+            self.viewframe.viewer.set_compare_frame(frame)
+        else:
+            self.viewframe.viewer.set_frame(frame)
+
+        # Sequence open returns immediately. Build the playlist thumbnail only
+        # when its background decoder supplies the first proxy frame.
+        if (
+            self.player.reader is not None
+            and self.player.reader.media_type == "sequence"
+            and self.current_source_filepath
+        ):
+            context = self.playlistWidget._local_context_for_path(
+                self.current_source_filepath
+            )
+            if context is not None and not context.get("image"):
+                self.playlistWidget.update_local_media(
+                    self.current_source_filepath,
+                    self.player.reader,
+                    self.viewframe.viewer.qimage,
+                )
+            self.statusBar().showMessage(
+                f"EXR/image frame ready  |  memory cache: "
+                f"{len(self.player.player.cache.cached_frames())} frames",
+                2500,
+            )
+
+    def _set_secondary_frame(self, frame):
+        self.secondary_compare_frame = frame
+        if self.compare_active and self.compare_swapped:
+            self.viewframe.viewer.set_frame(frame)
+        else:
+            self.viewframe.viewer.set_compare_frame(frame)
+
+    def start_compare(self, contexts):
+        """Load two selected clips as synchronized A/B Wipe sources."""
+        if len(contexts) != 2:
+            return False
+        paths = [context.get("media") for context in contexts]
+        if not all(paths):
+            return False
+
+        self.exit_compare()
+        self._starting_compare = True
+        try:
+            if not self.openMedia(paths[0], add_to_playlist=False):
+                return False
+
+            secondary_path = self.media_cache.resolve(paths[1])
+            self.compare_player.load(secondary_path)
+            self.compare_player.volume_changed(0)
+            self._configure_compare_color(
+                paths[1],
+                self.player.ocio_processor,
+                self.player.display,
+                self.player.view,
+            )
+        except Exception as error:
+            LOGGER.exception("Unable to start A/B comparison")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Unable to compare clips",
+                f"Could not open the second clip:\n{paths[1]}\n\n{error}",
+            )
+            self._release_media_player(self.compare_player)
+            return False
+        finally:
+            self._starting_compare = False
+
+        self.compare_contexts = list(contexts)
+        self.compare_swapped = False
+        self.compare_active = True
+        self.viewframe.viewer.enable_compare(
+            contexts[0].get("code") or "A",
+            contexts[1].get("code") or "B",
+        )
+        self.playlistWidget.set_compare_active(True)
+        if hasattr(self, "sourceStatusLabel"):
+            self.sourceStatusLabel.setText(
+                f" COMPARE A/B  |  {contexts[0].get('code')}  <>  {contexts[1].get('code')} "
+            )
+
+        if (
+            self.compare_player.reader
+            and self.compare_player.reader.media_type == "video"
+            and self.compare_player.reader.is_network_source
+        ):
+            QtCore.QTimer.singleShot(1500, lambda path=paths[1]: self.media_cache.cache(path))
+        return True
+
+    def set_compare_mode(self, mode):
+        """Select an RV-style A/B presentation without restarting playback."""
+        self.viewframe.viewer.set_compare_mode(mode)
+        self.playlistWidget.set_compare_mode(mode)
+        action = getattr(self, "compareModeActions", {}).get(mode)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
+        if self.compare_active:
+            label = dict(constants.COMPARE_MODES).get(mode, mode)
+            self.statusBar().showMessage(f"Compare mode: {label}", 3000)
+
+    def set_compare_opacity(self, opacity):
+        self.viewframe.viewer.set_compare_opacity(opacity)
+
+    def swap_compare(self):
+        if not self.compare_active:
+            return
+        self.compare_swapped = not self.compare_swapped
+        viewer = self.viewframe.viewer
+        viewer.qimage, viewer.compare_qimage = viewer.compare_qimage, viewer.qimage
+        viewer.swap_compare_labels()
+        viewer.update()
+
+    def exit_compare(self):
+        self._release_media_player(self.compare_player)
+        was_active = self.compare_active
+        self.compare_active = False
+        self.compare_swapped = False
+        self.compare_contexts = list()
+        self.secondary_compare_frame = None
+        if was_active and self.primary_compare_frame is not None:
+            self.viewframe.viewer.set_frame(self.primary_compare_frame)
+        self.viewframe.viewer.disable_compare()
+        if hasattr(self, "playlistWidget"):
+            self.playlistWidget.set_compare_active(False)
+        if was_active and hasattr(self, "sourceStatusLabel"):
+            name = os.path.basename(self.current_source_filepath or "No Media")
+            self.sourceStatusLabel.setText(f" SOURCE  |  {name} ")
+
+    def apply_ocio(self, processor, input_space, display, view):
+        self.player.set_ocio(processor, input_space, display, view)
+        if self.compare_active:
+            secondary_path = (
+                self.compare_contexts[1].get("media")
+                if len(self.compare_contexts) > 1
+                else ""
+            )
+            self._configure_compare_color(
+                secondary_path, processor, display, view
+            )
+        if hasattr(self, "colorStatusLabel"):
+            if processor is None:
+                self.colorStatusLabel.setText(" COLOR  |  OCIO disabled ")
+                message = "OCIO disabled; showing source pixels"
+            else:
+                state = self.ocio_widget.config_label
+                self.colorStatusLabel.setText(
+                    f" COLOR  |  {state}: {input_space} -> {display} / {view} "
+                )
+                message = f"OCIO applied: {input_space} -> {display} / {view}"
+            self.statusBar().showMessage(message, 5000)
+
+    def _configure_compare_color(self, media_path, primary_processor, display, view):
+        """Give source B an independent OCIO transform and input interpretation."""
+        if primary_processor is None:
+            self.compare_player.set_ocio(None, "", "", "")
+            return
+        reader = self.compare_player.reader
+        detected_input = (
+            reader.input_color_space
+            if reader is not None and reader.media_type == "sequence"
+            else ""
+        )
+        input_space = self.ocio_widget.resolve_input(detected_input, media_path)
+        config_path = getattr(primary_processor, "config_path", None)
+        if config_path == "environment":
+            config_path = None
+        processor = OCIOProcessor(config_path)
+        processor.working_space = getattr(primary_processor, "working_space", None)
+        processor.set_enabled(True)
+        self.compare_player.set_ocio(processor, input_space, display, view)
+
+    def _secondary_frame_for(self, primary_frame):
+        if not self.player.reader or not self.compare_player.reader:
+            return constants.VL_START_FRAME
+        primary_fps = max(0.001, self.player.reader.get_fps())
+        secondary_fps = max(0.001, self.compare_player.reader.get_fps())
+        seconds = (int(primary_frame) - constants.VL_START_FRAME) / primary_fps
+        frame = constants.VL_START_FRAME + round(seconds * secondary_fps)
+        return max(
+            constants.VL_START_FRAME,
+            min(
+                frame,
+                constants.VL_START_FRAME + self.compare_player.frame_count - 1,
+            ),
+        )
+
+    def closeEvent(self, event):
+        """Stop decoder/cache threads cleanly before application exit."""
+        self._release_media_player(self.player)
+        self._release_media_player(self.compare_player)
+        self.media_cache.shutdown()
+        event.accept()
+
+    def play_next_playlist_item(self):
+        """Advance automatically when the current local clip finishes."""
+        if self.compare_active:
+            if self.compare_player.player is not None:
+                self.compare_player.player.pause()
+            self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+            return
+        if not self.playlist_playback_active:
+            self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+            return
+        next_index = self.playlist_entry_index + 1
+        if next_index < len(self.playlist_entries):
+            self._load_playlist_entry(
+                next_index, constants.VL_START_FRAME, autoplay=True
+            )
+            return
+        if self.actionLoop.isChecked() and self.playlist_entries:
+            self._load_playlist_entry(0, constants.VL_START_FRAME, autoplay=True)
+            return
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+        if paths:
+            self.import_media_files(paths)
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
 
     def call_ocio(self, *args):
         SetStylesheet(self.ocio_widget, theme=self.current_theme)
@@ -386,16 +1423,35 @@ class MainWindow(QtWidgets.QMainWindow):
             self.player.reader.media_type, self.player.reader.get_fps(rounded=3)
         )
 
-    def seek(self):
+    def seek(self, frame=None):
         """
         Seek playback to timeline frame.
         """
 
         # if self.player.reader.media_type == "sequence":
-        self.player.seek(self.viewframe.timeline.current_frame)
+        self.pending_seek_frame = (
+            frame if frame is not None else self.viewframe.timeline.current_frame
+        )
+        if not self.seekTimer.isActive():
+            self.seekTimer.start()
 
-        # Sync FPS display
+    def _perform_seek(self):
+        target = self.pending_seek_frame
+        self.pending_seek_frame = None
+        if target is None or not self.player.reader:
+            return
+
+        if self.playlist_playback_active:
+            self._seek_playlist_frame(target)
+        else:
+            self.player.seek(target)
+        if self.compare_active and self.compare_player.reader:
+            self.compare_player.seek(self._secondary_frame_for(target))
         self.reset_video_fps()
+
+        # An event may have arrived while decoding the previous target.
+        if self.pending_seek_frame is not None:
+            self.seekTimer.start()
 
     def trigger_timeline(self, typed, enabled):
         if typed == "backward":
@@ -415,7 +1471,21 @@ class MainWindow(QtWidgets.QMainWindow):
         Move playback backward by one frame.
         """
 
-        self.player.backward_frame()
+        if self.playlist_playback_active:
+            target = max(
+                constants.VL_START_FRAME,
+                self.viewframe.timeline.current_frame - 1,
+            )
+            self._seek_playlist_frame(target)
+        elif self.compare_active:
+            target = max(
+                constants.VL_START_FRAME,
+                self.viewframe.timeline.current_frame - 1,
+            )
+            self.player.seek(target)
+            self.compare_player.seek(self._secondary_frame_for(target))
+        else:
+            self.player.backward_frame()
 
         # Sync FPS display
         self.reset_video_fps()
@@ -425,7 +1495,21 @@ class MainWindow(QtWidgets.QMainWindow):
         Toggle playback state.
         """
 
-        self.player.toggle_play_pause()
+        if self.playlist_playback_active and self.player.player is None:
+            self.start_playlist_playback()
+        elif self.compare_active and self.compare_player.player is not None:
+            if self.player.is_playing:
+                self.player.player.pause()
+                self.compare_player.player.pause()
+            else:
+                target = self.viewframe.timeline.current_frame
+                self.compare_player.seek(self._secondary_frame_for(target))
+                # Start B first, then A immediately. A remains the master
+                # clock and the only audible source.
+                self.compare_player.player.play()
+                self.player.player.play()
+        else:
+            self.player.toggle_play_pause()
 
         # Update play button icon
 
@@ -439,7 +1523,21 @@ class MainWindow(QtWidgets.QMainWindow):
         Move playback forward by one frame.
         """
 
-        self.player.forward_frame()
+        if self.playlist_playback_active:
+            target = min(
+                self.playlist_entries[-1]["end"],
+                self.viewframe.timeline.current_frame + 1,
+            )
+            self._seek_playlist_frame(target)
+        elif self.compare_active:
+            target = min(
+                constants.VL_START_FRAME + self.player.frame_count - 1,
+                self.viewframe.timeline.current_frame + 1,
+            )
+            self.player.seek(target)
+            self.compare_player.seek(self._secondary_frame_for(target))
+        else:
+            self.player.forward_frame()
 
         # Sync FPS display
         self.reset_video_fps()
@@ -448,10 +1546,54 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Toggle playback loop state.
         """
-        self.player.set_loop(enabled)
+        # In playlist mode Loop means loop the whole edit, not one shot.
+        self.player.set_loop(False if self.playlist_playback_active else enabled)
+        if self.compare_active:
+            self.compare_player.set_loop(enabled)
 
     def set_draw_enabled(self, tool, enabled, font):
         self.viewframe.viewer.set_sketch_enabled(tool, enabled, font)
+
+    def exit_annotation_mode(self):
+        self.viewframe.viewToolbarLayout.deactivate_tools()
+        self.viewframe.viewer.setFocus()
+
+    def set_fullscreen(self, enabled):
+        """Toggle an immersive viewer while keeping playback shortcuts live."""
+        if enabled:
+            self._pre_fullscreen_maximized = self.isMaximized()
+            chrome = (
+                self.menuBar(),
+                self.reviewToolbar,
+                self.statusBar(),
+                self.playlistWidget,
+                self.recapsWidget,
+                self.shotSequenceWidget,
+            )
+            self._fullscreen_visibility = {
+                widget: not widget.isHidden() for widget in chrome
+            }
+            for widget in chrome:
+                widget.hide()
+            self.showFullScreen()
+        else:
+            self.showNormal()
+            for widget, was_visible in self._fullscreen_visibility.items():
+                widget.setVisible(was_visible)
+            self._fullscreen_visibility.clear()
+            if self._pre_fullscreen_maximized:
+                self.showMaximized()
+        self.viewframe.viewer.setFocus()
+
+    def toggle_fullscreen(self):
+        """Toggle full screen from a viewer double-click."""
+        self.actionFullscreen.setChecked(not self.isFullScreen())
+
+    def handle_escape(self):
+        if self.isFullScreen():
+            self.actionFullscreen.setChecked(False)
+            return
+        self.exit_annotation_mode()
 
     def render(self):
         if not self.viewframe.viewer.current_frame:
@@ -480,6 +1622,175 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.viewframe.viewer.save_frame(filepath, post_process=True)
 
+    def export_mp4(self):
+        """Export the active MOV/video or image sequence as a high-quality MP4."""
+        if not self.current_source_filepath or not self.player.reader:
+            QtWidgets.QMessageBox.information(
+                self, "Export MP4", "Open a MOV, video, or image sequence first."
+            )
+            return
+
+        if self.player.player is not None:
+            self.player.player.pause()
+        if self.compare_player.player is not None:
+            self.compare_player.player.pause()
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+        reader = self.player.reader
+        source = self.current_source_filepath
+        playback_source = self.media_cache.resolve(source)
+        has_audio = reader.has_audio() if reader.media_type == "video" else False
+        ocio_processor = (
+            self.player.ocio_processor
+            if reader.media_type == "sequence" and self.player.ocio_processor
+            else None
+        )
+        aov = getattr(self.player.player, "current_aov", "rgb") or "rgb"
+        dialog = VideoExportDialog(
+            source,
+            playback_source,
+            reader.media_type,
+            reader.get_fps(),
+            has_audio=has_audio,
+            ocio_processor=ocio_processor,
+            aov=aov,
+            parent=self,
+        )
+        dialog.exec()
+
+    def export_image_sequence(self):
+        """Extract the active view to full-resolution JPG or PNG frames."""
+        if not self.current_source_filepath or not self.player.reader:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Image Sequence",
+                "Open a MOV, video, or image sequence first.",
+            )
+            return
+
+        if self.player.player is not None:
+            self.player.player.pause()
+        if self.compare_player.player is not None:
+            self.compare_player.player.pause()
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+        reader = self.player.reader
+        source = self.current_source_filepath
+        playback_source = self.media_cache.resolve(source)
+        ocio_processor = (
+            self.player.ocio_processor
+            if reader.media_type == "sequence" and self.player.ocio_processor
+            else None
+        )
+        aov = getattr(self.player.player, "current_aov", "rgb") or "rgb"
+        dialog = ImageSequenceExportDialog(
+            source,
+            playback_source,
+            reader.media_type,
+            ocio_processor=ocio_processor,
+            aov=aov,
+            parent=self,
+        )
+        dialog.exec()
+
+    def export_notes(self):
+        """Export every annotated frame as a PNG with notes burned in."""
+        frames = self.viewframe.viewer.annotations.annotated_frames()
+        if not frames:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Notes",
+                "No frames contain Pencil or Text notes yet.",
+            )
+            return
+        if not self.current_source_filepath:
+            return
+
+        directory = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Choose folder for annotated frames",
+            self.browsepath or os.path.dirname(self.current_source_filepath),
+        )
+        if not directory:
+            return
+
+        if self.player.player is not None:
+            self.player.player.pause()
+        if self.compare_player.player is not None:
+            self.compare_player.player.pause()
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+        source = self.media_cache.resolve(self.current_source_filepath)
+        reader = None
+        exported = list()
+        failed = list()
+        progress = QtWidgets.QProgressDialog(
+            "Rendering annotated frames...",
+            "Cancel",
+            0,
+            len(frames),
+            self,
+        )
+        progress.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+
+        try:
+            extension = os.path.splitext(source)[1].lower()
+            reader = (
+                SequenceReader(source, review_proxy=False)
+                if extension in PlaylistWidget.IMAGE_EXTENSIONS
+                else MovieReader(source)
+            )
+            fps = max(0.001, reader.get_fps())
+            shot_name = os.path.splitext(os.path.basename(self.current_source_filepath))[0]
+            for index, frame_number in enumerate(frames, start=1):
+                if progress.wasCanceled():
+                    break
+                progress.setLabelText(f"Rendering frame {frame_number}...")
+                progress.setValue(index - 1)
+                QtWidgets.QApplication.processEvents()
+
+                if reader.media_type == "sequence":
+                    image = reader.get_frame(frame_number, aov="rgb")
+                else:
+                    seconds = (frame_number - constants.VL_START_FRAME) / fps
+                    video_frame = reader.seek_time(seconds)
+                    image = (
+                        video_frame.to_ndarray(format="rgb24")
+                        if video_frame is not None
+                        else None
+                    )
+                if image is None:
+                    failed.append(frame_number)
+                    continue
+                rendered = self.viewframe.viewer.render_annotated_frame(image, frame_number)
+                output = os.path.join(
+                    directory,
+                    f"{shot_name}_notes_f{frame_number:04d}.png",
+                )
+                if rendered is not None and rendered.save(output, "PNG"):
+                    exported.append(output)
+                else:
+                    failed.append(frame_number)
+            progress.setValue(len(frames))
+        except Exception as error:
+            LOGGER.exception("Unable to export annotated frames")
+            QtWidgets.QMessageBox.critical(self, "Export Notes", str(error))
+            return
+        finally:
+            if reader is not None:
+                reader.close()
+            progress.close()
+            self.viewframe.viewer.annotations.set_frame(
+                self.viewframe.viewer.current_frame
+            )
+            self.viewframe.viewer.update()
+
+        message = f"Exported {len(exported)} annotated frame(s) to:\n{directory}"
+        if failed:
+            message += f"\n\nCould not render frames: {', '.join(map(str, failed))}"
+        QtWidgets.QMessageBox.information(self, "Export Notes", message)
+
     def update_fps(self, context):
         """
         Update playback FPS.
@@ -506,14 +1817,18 @@ class MainWindow(QtWidgets.QMainWindow):
         SetStylesheet(self, theme=self.current_theme)
 
     def help(self):
-        """
-        Open support or documentation URL.
-        """
-
-        LOGGER.info(f"Support, {constants.WEB_DOC_LINK}")
-
-        # Open help URL in browser
-        utils.openUrl(constants.WEB_DOC_LINK)
+        QtWidgets.QMessageBox.information(
+            self,
+            "FrameDeck Shortcuts",
+            "Space: Play / Pause\n"
+            "Wheel: Zoom\nMiddle drag: Pan\nRight drag: Continuous zoom\n"
+            "Double-click viewer or F11: Toggle Full Screen\n"
+            "F: Fit image to viewer\n"
+            "Esc: Exit Full Screen or leave Pencil/Text\n"
+            "Alt+Left / Alt+Right: Reorder selected shot\n"
+            "Ctrl+Shift+E: Export high-quality MP4\n"
+            "Ctrl+click two Sources: Compare A/B Wipe",
+        )
 
 
 if __name__ == "__main__":

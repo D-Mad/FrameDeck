@@ -372,6 +372,10 @@ class Sketch(object):
 
         return len(self.strokes)
 
+    def annotated_frames(self):
+        """Return sorted frame numbers that contain at least one note."""
+        return sorted(frame for frame, strokes in self.strokes.items() if strokes)
+
     def generate_id(self):
         """
         Generate unique stroke ID.
