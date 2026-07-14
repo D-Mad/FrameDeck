@@ -29,6 +29,9 @@ Dieu khien chuot:
 - Lan con lan giua: zoom tai con tro, van play khi zoom.
 - Giu chuot giua hoac Alt+chuot trai: pan.
 - Giu chuot phai va keo doc: zoom lien tuc.
+- Bam Y, sau do keo chuot trai len/xuong: Gamma Check; Y hoac Esc de reset.
+- Bam E, sau do keo chuot trai len/xuong: Exposure Check; E hoac Esc de reset.
+- Thanh tren viewer cho phep xem RGB/R/G/B/A/Luma va mask 1.85:1/2.39:1.
 - Double-click chuot trai tren viewer: bat/tat Full Screen.
 - F: Fit hinh vao viewer; F11: bat/tat Full Screen; Esc: thoat Full Screen.
 
@@ -66,4 +69,4 @@ Cache Manager:
 Khong can cai Python. Khong xoa thu muc _internal.
 Du lieu: %USERPROFILE%\Documents\framedeck
 Cache: %LOCALAPPDATA%\FrameDeck\media-cache
-Phien ban: 0.0.1-beta.10
+Phien ban: 0.0.1-beta.11

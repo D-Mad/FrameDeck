@@ -110,43 +110,58 @@ class ShotSequenceWidget(QtWidgets.QFrame):
         layout.setSpacing(3)
 
         header = QtWidgets.QHBoxLayout()
+        header.setSpacing(4)
         self.trackLabel = QtWidgets.QLabel("V1  SHOT PLAYLIST")
-        self.trackLabel.setStyleSheet("font-weight: 700; color: #d7d7d7;")
+        self.trackLabel.setObjectName("PanelTitle")
         header.addWidget(self.trackLabel)
+        self.summaryLabel = QtWidgets.QLabel("0 shots  |  00:00")
+        self.summaryLabel.setObjectName("PanelHint")
+        header.addWidget(self.summaryLabel)
         header.addStretch(1)
-        self.playAllButton = QtWidgets.QPushButton("Play Playlist")
+        self.playAllButton = QtWidgets.QPushButton("Play")
+        self.playAllButton.setObjectName("PrimaryButton")
         self.playAllButton.setIcon(NamePixmapIcon("play"))
         self.playAllButton.setToolTip("Play all shots on one continuous global timeline")
         self.playAllButton.setEnabled(False)
         header.addWidget(self.playAllButton)
-        self.removeButton = QtWidgets.QPushButton("Remove Shot")
-        self.removeButton.setIcon(NamePixmapIcon("remove"))
-        self.removeButton.setToolTip("Remove selected occurrence from playlist (Delete)")
-        self.removeButton.setEnabled(False)
-        header.addWidget(self.removeButton)
-        self.clearButton = QtWidgets.QPushButton("Clear Playlist")
-        self.clearButton.setEnabled(False)
-        header.addWidget(self.clearButton)
-        self.earlierButton = QtWidgets.QPushButton(" Earlier")
+
+        self.earlierButton = QtWidgets.QToolButton(self)
+        self.earlierButton.setObjectName("PanelToolButton")
+        self.earlierButton.setFixedSize(28, 26)
         self.earlierButton.setIcon(NamePixmapIcon("backward"))
         self.earlierButton.setToolTip("Move selected shot earlier (Alt+Left)")
         self.earlierButton.setEnabled(False)
         header.addWidget(self.earlierButton)
-        self.laterButton = QtWidgets.QPushButton("Later ")
+        self.laterButton = QtWidgets.QToolButton(self)
+        self.laterButton.setObjectName("PanelToolButton")
+        self.laterButton.setFixedSize(28, 26)
         self.laterButton.setIcon(NamePixmapIcon("forward"))
         self.laterButton.setToolTip("Move selected shot later (Alt+Right)")
         self.laterButton.setEnabled(False)
         header.addWidget(self.laterButton)
-        self.summaryLabel = QtWidgets.QLabel("0 shots  |  drag shots left/right to reorder")
-        self.summaryLabel.setStyleSheet("color: #999;")
-        header.addWidget(self.summaryLabel)
+
+        self.removeButton = QtWidgets.QToolButton(self)
+        self.removeButton.setObjectName("PanelToolButton")
+        self.removeButton.setFixedSize(28, 26)
+        self.removeButton.setIcon(NamePixmapIcon("remove"))
+        self.removeButton.setToolTip("Remove selected occurrence from playlist (Delete)")
+        self.removeButton.setEnabled(False)
+        header.addWidget(self.removeButton)
+        self.clearButton = QtWidgets.QToolButton(self)
+        self.clearButton.setObjectName("PanelToolButton")
+        self.clearButton.setFixedSize(28, 26)
+        self.clearButton.setIcon(NamePixmapIcon("clear"))
+        self.clearButton.setToolTip("Clear the complete Shot Playlist")
+        self.clearButton.setEnabled(False)
+        header.addWidget(self.clearButton)
         layout.addLayout(header)
 
         self.shotList = ShotListWidget(self)
         self.shotList.setStyleSheet(
-            "QListWidget { background: #202224; border: 1px solid #444; }"
-            "QListWidget::item { background: #176078; border: 1px solid #111; color: white; }"
-            "QListWidget::item:selected { background: #6b6d1d; border: 2px solid #ffbe28; }"
+            "QListWidget { background: #151719; border: 1px solid #30343a; }"
+            "QListWidget::item { background: #25282c; border: 1px solid #363a40; color: #d9d9d9; }"
+            "QListWidget::item:hover { background: #2d3237; border-color: #50575f; }"
+            "QListWidget::item:selected { background: #343a40; border: 2px solid #d9a441; }"
         )
         layout.addWidget(self.shotList)
 
@@ -243,8 +258,9 @@ class ShotSequenceWidget(QtWidgets.QFrame):
 
         minutes, seconds = divmod(int(round(total_duration)), 60)
         self.summaryLabel.setText(
-            f"{len(contexts)} shots  |  {minutes:02d}:{seconds:02d}  |  drag shots left/right"
+            f"{len(contexts)} shots  |  {minutes:02d}:{seconds:02d}"
         )
+        self.summaryLabel.setToolTip("Drag shots left or right to reorder")
         self.playAllButton.setEnabled(bool(contexts))
         self.clearButton.setEnabled(bool(contexts))
         self._update_reorder_buttons(self.shotList.currentRow())
