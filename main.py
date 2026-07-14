@@ -46,10 +46,14 @@ def main():
     window.show()
 
     # Files passed from Explorer (Open with / drag onto EXE) become one local
-    # playlist, in the same order supplied by Windows.
+    # playlist, in the same order supplied by Windows. With no files, the
+    # optional (default-off) restore preference decides whether to reopen the
+    # last session or leave the workspace empty.
     media_paths = [path for path in sys.argv[1:] if Path(path).is_file()]
     if media_paths:
         window.import_media_files(media_paths)
+    else:
+        window.restore_last_session()
 
     sys.exit(app.exec())
 
