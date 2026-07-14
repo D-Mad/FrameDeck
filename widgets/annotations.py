@@ -378,6 +378,60 @@ class Sketch(object):
         """Return sorted frame numbers that contain at least one note."""
         return sorted(frame for frame, strokes in self.strokes.items() if strokes)
 
+    def serialize(self):
+        """Return a JSON-serializable snapshot of every frame's strokes.
+
+        Frame numbers become string keys (JSON object keys must be strings) and
+        coordinate/color tuples serialize to lists. Empty frames are omitted.
+        """
+        return {
+            str(frame): copy.deepcopy(strokes)
+            for frame, strokes in self.strokes.items()
+            if strokes
+        }
+
+    def deserialize(self, data):
+        """Replace all strokes from a snapshot produced by :meth:`serialize`.
+
+        Coordinate/color fields are converted back from lists to tuples so the
+        loaded strokes render identically to freshly drawn ones. Undo/redo
+        history is reset -- the loaded state becomes the new baseline.
+        """
+        self.strokes = dict()
+        items = data.items() if isinstance(data, dict) else ()
+        for frame_key, strokes in items:
+            try:
+                frame = int(frame_key)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(strokes, list):
+                continue
+            restored = [
+                self._restore_stroke(stroke)
+                for stroke in strokes
+                if isinstance(stroke, dict)
+            ]
+            if restored:
+                self.strokes[frame] = restored
+        self.undo_history.clear()
+        self.redo_history.clear()
+
+    @staticmethod
+    def _restore_stroke(stroke):
+        """Convert a stroke's JSON list coordinates/colour back to tuples."""
+        restored = dict(stroke)
+        points = restored.get("points")
+        if isinstance(points, list):
+            restored["points"] = [tuple(point) for point in points]
+        for key in ("start", "end", "position", "move_start"):
+            value = restored.get(key)
+            if isinstance(value, list):
+                restored[key] = tuple(value)
+        color = restored.get("color")
+        if isinstance(color, list):
+            restored["color"] = tuple(color)
+        return restored
+
     def generate_id(self):
         """
         Generate unique stroke ID.
