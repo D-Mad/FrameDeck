@@ -1280,7 +1280,18 @@ class Sketch(object):
         if self.current_frame is None:
             return
 
-        # Safely remove frame entry if it exists
+        frame_strokes = self.strokes.get(self.current_frame)
+        if not frame_strokes:
+            return
+
+        # Treat Clear Notes on Frame like an erase so it can be undone/redone.
+        self._record_action(
+            {
+                "type": "erase",
+                "frame": self.current_frame,
+                "strokes": copy.deepcopy(frame_strokes),
+            }
+        )
         self.strokes.pop(self.current_frame, None)
 
     def clear_all(self):
@@ -1294,6 +1305,10 @@ class Sketch(object):
         """
 
         self.strokes.clear()
+        # A source change calls clear_all(); history from the previous source
+        # must never be able to restore notes into the newly opened source.
+        self.undo_history.clear()
+        self.redo_history.clear()
 
     def draw_overlays(self, painter, rect):
         """

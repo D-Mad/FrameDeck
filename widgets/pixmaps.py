@@ -137,6 +137,11 @@ def _draw_named_icon(name, size=64):
     elif name == "undo":
         painter.setPen(QtGui.QPen(accent, 4)); path([(12, 27), (22, 17), (22, 25)])
         painter.drawArc(QtCore.QRectF(18, 18, 35, 31), 25 * 16, 275 * 16)
+    elif name == "redo":
+        painter.save(); painter.translate(64, 0); painter.scale(-1, 1)
+        painter.setPen(QtGui.QPen(accent, 4)); path([(12, 27), (22, 17), (22, 25)])
+        painter.drawArc(QtCore.QRectF(18, 18, 35, 31), 25 * 16, 275 * 16)
+        painter.restore()
     elif name in {"clear", "remove"}:
         painter.setPen(QtGui.QPen(warm, 4)); painter.drawEllipse(QtCore.QRectF(10, 10, 44, 44))
         line(21, 21, 43, 43); line(43, 21, 21, 43)

@@ -400,7 +400,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionUndo.triggered.connect(self.viewframe.viewer.undo_strokes)
         edit_menu.addAction(self.actionUndo)
         self.actionRedo = QtGui.QAction("Redo Note", self)
-        self.actionRedo.setIcon(NamePixmapIcon("loop"))
+        self.actionRedo.setIcon(NamePixmapIcon("redo"))
         self.actionRedo.setShortcuts(
             [QtGui.QKeySequence("Ctrl+Shift+Z"), QtGui.QKeySequence("Ctrl+Y")]
         )
