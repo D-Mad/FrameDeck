@@ -1789,6 +1789,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.seek(self._timeline_frame_for_local(target))
+
     def auto_save_last_session(self):
         """Write the current playlist to the profile last-session file on exit."""
         if not session.restore_enabled():
