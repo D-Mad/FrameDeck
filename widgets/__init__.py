@@ -973,6 +973,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if added:
                 filepath = added[0]["media"]
 
+        # Persist the outgoing source's annotations before the viewer is wiped.
+        self._save_current_notes()
+
         # Clear current viewer frame
         self.viewframe.viewer.clear()
         self.viewframe.viewer.reset_view()
@@ -1050,6 +1053,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.playlistWidget.set_active_media(source_filepath)
         self.shotSequenceWidget.set_active_media(source_filepath)
         self.current_source_filepath = source_filepath
+        # Restore any saved annotations for the incoming source.
+        self._load_notes_for_source(source_filepath)
         if hasattr(self, "sourceStatusLabel"):
             self.sourceStatusLabel.setText(
                 f" SOURCE  |  {os.path.basename(source_filepath)} "
@@ -1523,8 +1528,31 @@ class MainWindow(QtWidgets.QMainWindow):
             ),
         )
 
+    def _save_current_notes(self):
+        """Persist the current source's annotations to its note sidecar."""
+        source = self.current_source_filepath
+        if not source:
+            return
+        try:
+            from widgets import notestore
+
+            notestore.save_notes(source, self.viewframe.viewer.annotations)
+        except Exception:
+            LOGGER.exception("Unable to save annotation notes")
+
+    def _load_notes_for_source(self, source):
+        """Restore annotations for *source* from its note sidecar (if any)."""
+        try:
+            from widgets import notestore
+
+            notestore.load_notes(source, self.viewframe.viewer.annotations)
+            self.viewframe.viewer.update()
+        except Exception:
+            LOGGER.exception("Unable to load annotation notes")
+
     def closeEvent(self, event):
         """Stop decoder/cache threads cleanly before application exit."""
+        self._save_current_notes()
         self._release_media_player(self.player)
         self._release_media_player(self.compare_player)
         self.media_cache.shutdown()
