@@ -31,6 +31,36 @@ if str(_REPO_ROOT) not in sys.path:
 
 import pytest
 
+# Qt no longer ships fonts, and the offscreen platform plugin finds none on its
+# own: QFontDatabase.families() comes back EMPTY. Every drawText() then silently
+# draws nothing -- no glyphs in a rendered widget, no text operators in a
+# generated PDF -- so any test asserting on drawn text fails for reasons that
+# have nothing to do with the code under test. Register a real font so text
+# rendering is exercised for real.
+_FONT_CANDIDATES = (
+    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\segoeui.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+)
+
+
+def _ensure_font():
+    """Give Qt at least one usable font family. Returns True when it has one."""
+    from PySide6.QtGui import QFontDatabase
+
+    if QFontDatabase.families():
+        return True
+
+    for candidate in _FONT_CANDIDATES:
+        if os.path.exists(candidate):
+            QFontDatabase.addApplicationFont(candidate)
+            if QFontDatabase.families():
+                return True
+
+    return bool(QFontDatabase.families())
+
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -38,5 +68,14 @@ def qapp():
     from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication([])
+    _ensure_font()
     yield app
     # Do not call app.quit(): a session-wide instance is reused across tests.
+
+
+@pytest.fixture(scope="session")
+def qfont(qapp):
+    """Skip a text-rendering test when the environment has no font at all."""
+    if not _ensure_font():
+        pytest.skip("no font available to Qt; text cannot be rendered")
+    return True
