@@ -2497,6 +2497,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     notes,
                     entity_type=dialog.entity_type(),
                     entity_id=dialog.entity_id(),
+                    clip_name=os.path.splitext(
+                        os.path.basename(self.current_source_filepath or "")
+                    )[0],
                 )
         except (FtrackError, ShotGridError) as error:
             LOGGER.exception("Tracker push failed")

@@ -117,27 +117,57 @@ class FtrackTracker(object):
 
         return found
 
-    def payload(self, note, entity_type, entity_id, user_id):
+    def payload(self, note, entity_type, entity_id, user_id, clip_name=""):
         """Return the ftrack Note field dict for one FrameDeck note.
 
         Every key here exists on the live Note schema; the conformance test
         pins that so a typo cannot reach a server.
         """
-        return {
-            "content": note.text,
-            # ftrack anchors notes to a frame natively -- no need to encode it
-            # into the text.
+        fields = {
+            # The frame is in the body as well as in frame_number. frame_number
+            # is what lets ftrack anchor the note to a frame in its player, but
+            # anywhere that field is not surfaced (a notes list, an email digest)
+            # the note still has to say which frame it is about.
+            "content": self.content(note, clip_name),
             "frame_number": int(note.frame),
             "parent_id": entity_id,
             "parent_type": entity_type,
             "user_id": user_id,
-            # A resolved FrameDeck comment arrives as a completed to-do rather
-            # than as an open note the artist has to triage again.
-            "is_todo": bool(note.done),
+            # A review note is an action item, so is_todo is always True.
+            # Completion is a SEPARATE field: is_todo says "this is actionable",
+            # completed_at says "it has been done". Toggling is_todo off for a
+            # resolved note would just make it a plain comment, and toggling it
+            # on ONLY for resolved notes -- the obvious-looking mapping -- lands
+            # every note the reviewer already closed in the artist's queue as
+            # fresh, uncompleted work.
+            "is_todo": True,
             "metadata": {SOURCE_KEY: note.source_id},
         }
 
-    def push(self, notes, entity_type, entity_id):
+        if note.done:
+            fields["completed_at"] = self.now()
+            fields["completed_by_id"] = user_id
+
+        return fields
+
+    @staticmethod
+    def content(note, clip_name=""):
+        """Return the note body, led by the clip and frame it refers to."""
+        head = "F{0:04d}".format(note.frame)
+        if note.timecode:
+            head = "{0}  {1}".format(head, note.timecode)
+        if clip_name:
+            head = "[{0}] {1}".format(clip_name, head)
+        return "{0} - {1}".format(head, note.text)
+
+    @staticmethod
+    def now():
+        """Completion timestamp, in the ISO form ftrack expects."""
+        import datetime
+
+        return datetime.datetime.now().isoformat()
+
+    def push(self, notes, entity_type, entity_id, clip_name=""):
         """Create (or update) the notes on an ftrack entity.
 
         Returns:
@@ -154,13 +184,16 @@ class FtrackTracker(object):
         updated = 0
 
         for note in notes:
-            fields = self.payload(note, entity_type, entity_id, user_id)
+            fields = self.payload(note, entity_type, entity_id, user_id, clip_name)
 
             previous = existing.get(note.source_id) if note.source_id else None
             if previous is not None:
                 # Re-pushing a shot must not litter the tracker with duplicates.
                 previous["content"] = fields["content"]
-                previous["is_todo"] = fields["is_todo"]
+                # Resolving a note in FrameDeck and pushing again must close the
+                # ftrack to-do, not just rewrite its text.
+                previous["completed_at"] = fields.get("completed_at")
+                previous["completed_by_id"] = fields.get("completed_by_id")
                 updated += 1
                 continue
 

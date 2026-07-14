@@ -173,27 +173,66 @@ def test_ftrack_uses_the_native_frame_field(qapp):
     tracker = FtrackTracker(session_factory=lambda: _FakeSession())
 
     fields = tracker.payload(
-        Note(frame=42, text="soften this", source_id="c1"),
+        Note(frame=42, text="soften this", timecode="00:00:01:18", source_id="c1"),
         "AssetVersion",
         "v1",
         "u1",
+        clip_name="KP_010_020",
     )
 
-    # ftrack anchors notes to a frame itself. Burying the frame in the text
-    # would throw away the one thing that makes the note reviewable in place.
+    # frame_number is what lets ftrack anchor the note to a frame in its player.
     assert fields["frame_number"] == 42
-    assert fields["content"] == "soften this"
     assert fields["metadata"] == {SOURCE_KEY: "c1"}
 
+    # The frame is ALSO in the body: anywhere frame_number is not surfaced (a
+    # notes list, an email digest) the note still has to say what it is about.
+    assert fields["content"] == "[KP_010_020] F0042  00:00:01:18 - soften this"
 
-def test_resolved_notes_arrive_as_completed_todos(qapp):
+
+def test_every_note_is_an_actionable_todo(qapp):
+    """is_todo says 'actionable'; completed_at says 'done'. They are separate.
+
+    The obvious-looking mapping -- is_todo = the reviewer's done flag -- is
+    backwards, and quietly so: it turns every note the reviewer had ALREADY
+    resolved into an open, uncompleted to-do sitting in the artist's queue as
+    fresh work, while leaving the genuinely open notes as plain comments nobody
+    is asked to action.
+    """
     tracker = FtrackTracker(session_factory=lambda: _FakeSession())
 
     open_note = tracker.payload(Note(1, "open"), "Task", "t1", "u1")
     done_note = tracker.payload(Note(1, "done", done=True), "Task", "t1", "u1")
 
-    assert open_note["is_todo"] is False
+    # Both are action items...
+    assert open_note["is_todo"] is True
     assert done_note["is_todo"] is True
+
+    # ...but only the resolved one is closed.
+    assert "completed_at" not in open_note
+    assert done_note["completed_at"]
+    assert done_note["completed_by_id"] == "u1"
+
+
+def test_resolving_a_note_and_repushing_closes_the_ftrack_todo(qapp):
+    """Re-pushing after resolving must close the to-do, not just reword it."""
+    existing = _FakeNote(
+        {
+            "content": "F0001 - fix the edge",
+            "completed_at": None,
+            "metadata": {SOURCE_KEY: "c1"},
+        }
+    )
+    session = _FakeSession(notes=[existing])
+    tracker = FtrackTracker(session_factory=lambda: session)
+
+    tracker.push(
+        [Note(frame=1, text="fix the edge", done=True, source_id="c1")],
+        entity_type="Task",
+        entity_id="t1",
+    )
+
+    assert existing["completed_at"]
+    assert existing["completed_by_id"] == "user-1"
 
 
 # --------------------------------------------------------------------------- #
@@ -239,19 +278,18 @@ def test_pushing_twice_updates_rather_than_duplicates(qapp):
 
 def test_an_edited_comment_updates_the_existing_note(qapp):
     existing = _FakeNote(
-        {"content": "old text", "is_todo": False, "metadata": {SOURCE_KEY: "c1"}}
+        {"content": "old text", "is_todo": True, "metadata": {SOURCE_KEY: "c1"}}
     )
     session = _FakeSession(notes=[existing])
     tracker = FtrackTracker(session_factory=lambda: session)
 
     tracker.push(
-        [Note(frame=1, text="new text", done=True, source_id="c1")],
+        [Note(frame=1, text="new text", source_id="c1")],
         entity_type="Task",
         entity_id="t1",
     )
 
-    assert existing["content"] == "new text"
-    assert existing["is_todo"] is True
+    assert existing["content"] == "F0001 - new text"
     assert session.created == []
 
 
