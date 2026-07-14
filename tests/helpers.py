@@ -68,17 +68,24 @@ def make_solid_mp4(path, frames=16, width=128, height=72, color=(200, 40, 40), f
 
 def make_png_sequence(directory, frames=4, width=64, height=64, start=1, pad=4, base="frame"):
     """Write a numbered PNG sequence (``base.0001.png`` ...). Returns path list."""
-    import cv2
+    import OpenImageIO as oiio
 
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     paths = []
     for i in range(frames):
         number = start + i
-        bgr = np.zeros((height, width, 3), dtype=np.uint8)
-        bgr[:, :] = ((i * 30) % 256, 40, 200)  # BGR: mostly-red, varies per frame
+        rgb = np.zeros((height, width, 3), dtype=np.uint8)
+        rgb[:, :] = (200, 40, (i * 30) % 256)
         out = directory / f"{base}.{number:0{pad}d}.png"
-        cv2.imwrite(str(out), bgr)
+        output = oiio.ImageOutput.create(str(out))
+        if output is None:  # pragma: no cover - only if OIIO lacks PNG support
+            raise RuntimeError("OpenImageIO could not create a PNG writer")
+        try:
+            output.open(str(out), oiio.ImageSpec(width, height, 3, "uint8"))
+            output.write_image(rgb)
+        finally:
+            output.close()
         paths.append(out)
     return paths
 

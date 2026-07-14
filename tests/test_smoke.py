@@ -44,18 +44,13 @@ def test_framedeck_module_imports(qapp, module):
 
 
 def test_make_solid_mp4_decodes(tmp_path, qapp):
-    import cv2
+    import av
 
     clip = make_solid_mp4(tmp_path / "solid.mp4", frames=8, color=(200, 40, 40))
-    cap = cv2.VideoCapture(str(clip))
-    try:
-        assert cap.get(cv2.CAP_PROP_FRAME_COUNT) >= 1
-        ok, frame = cap.read()
-        assert ok and frame is not None
-        b, g, r = frame[frame.shape[0] // 2, frame.shape[1] // 2]
-        assert r > g and r > b  # decoded frame is reddish
-    finally:
-        cap.release()
+    with av.open(str(clip)) as container:
+        frame = next(container.decode(video=0)).to_ndarray(format="rgb24")
+    r, g, b = frame[frame.shape[0] // 2, frame.shape[1] // 2]
+    assert r > g and r > b  # decoded frame is reddish
 
 
 def test_make_png_sequence(tmp_path):

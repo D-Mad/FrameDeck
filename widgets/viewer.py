@@ -2206,6 +2206,15 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
         self.update()
 
+    def redo_strokes(self):
+        """
+        Reapply the most recently undone annotation.
+        """
+
+        self.annotations.redo()
+
+        self.update()
+
     def clear_strokes(self):
         """
         Clear annotations only on the current frame.
