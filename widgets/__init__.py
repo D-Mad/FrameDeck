@@ -26,6 +26,7 @@ from __future__ import absolute_import
 
 import os
 import json
+import datetime
 
 import utils
 import logger
@@ -39,6 +40,8 @@ from playback import proxy
 from playback.stats import PlaybackStats
 from playback import stats as statsmath
 from utils import notescsv
+
+from widgets import pdfreport
 
 from PySide6 import QtGui
 from PySide6 import QtCore
@@ -445,6 +448,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionExportNotes.setIcon(NamePixmapIcon("recaps"))
         self.actionExportNotes.triggered.connect(self.export_notes)
         file_menu.addAction(self.actionExportNotes)
+        self.actionExportPdf = QtGui.QAction("Export Review PDF...", self)
+        self.actionExportPdf.setIcon(NamePixmapIcon("export"))
+        self.actionExportPdf.setShortcut(QtGui.QKeySequence("Ctrl+Alt+P"))
+        self.actionExportPdf.triggered.connect(self.export_pdf_report)
+        file_menu.addAction(self.actionExportPdf)
         self.actionExportNotesCsv = QtGui.QAction("Export Notes as CSV...", self)
         self.actionExportNotesCsv.setIcon(NamePixmapIcon("export"))
         self.actionExportNotesCsv.triggered.connect(self.export_notes_csv)
@@ -2668,6 +2676,147 @@ class MainWindow(QtWidgets.QMainWindow):
             ),
             5000,
         )
+
+    def export_pdf_report(self):
+        """Render every annotated frame and its notes into a review PDF."""
+        annotations = self.viewframe.viewer.annotations
+        frames = annotations.annotated_frames()
+
+        if not frames:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Review PDF",
+                "There are no notes to export yet.",
+            )
+            return
+        if not self.current_source_filepath:
+            return
+
+        shot_name = os.path.splitext(
+            os.path.basename(self.current_source_filepath)
+        )[0]
+
+        filepath, _selected = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export review PDF",
+            os.path.join(
+                self.browsepath or os.path.dirname(self.current_source_filepath),
+                f"{shot_name}_review.pdf",
+            ),
+            "PDF files (*.pdf)",
+        )
+        if not filepath:
+            return
+
+        if self.player.player is not None:
+            self.player.player.pause()
+        if self.compare_player.player is not None:
+            self.compare_player.player.pause()
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+        source = self.media_cache.resolve(self.current_source_filepath)
+        reader = None
+        pages = list()
+        failed = list()
+
+        progress = QtWidgets.QProgressDialog(
+            "Rendering review pages...", "Cancel", 0, len(frames), self
+        )
+        progress.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+
+        try:
+            extension = os.path.splitext(source)[1].lower()
+            reader = (
+                SequenceReader(source, review_proxy=False)
+                if extension in PlaylistWidget.IMAGE_EXTENSIONS
+                else MovieReader(source)
+            )
+            fps = max(0.001, reader.get_fps())
+
+            for index, frame_number in enumerate(frames, start=1):
+                if progress.wasCanceled():
+                    break
+                progress.setLabelText(f"Rendering frame {frame_number}...")
+                progress.setValue(index - 1)
+                QtWidgets.QApplication.processEvents()
+
+                if reader.media_type == "sequence":
+                    image = reader.get_frame(frame_number, aov="rgb")
+                else:
+                    seconds = (frame_number - constants.VL_START_FRAME) / fps
+                    video_frame = reader.seek_time(seconds)
+                    image = (
+                        video_frame.to_ndarray(format="rgb24")
+                        if video_frame is not None
+                        else None
+                    )
+
+                if image is None:
+                    failed.append(frame_number)
+                    continue
+
+                rendered = self.viewframe.viewer.render_annotated_frame(
+                    image, frame_number
+                )
+                if rendered is None:
+                    failed.append(frame_number)
+                    continue
+
+                pages.append(
+                    {
+                        "frame": frame_number,
+                        "timecode": timecode.frame_to_timecode(
+                            max(0, frame_number - constants.VL_START_FRAME),
+                            self._current_fps(),
+                        ),
+                        "image": rendered,
+                        "comments": annotations.get_comments(frame_number),
+                        "stroke_count": len(annotations.strokes.get(frame_number, [])),
+                    }
+                )
+
+            progress.setValue(len(frames))
+
+            if not pages:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Export Review PDF",
+                    "None of the annotated frames could be rendered.",
+                )
+                return
+
+            written = pdfreport.build_report(
+                filepath,
+                pages,
+                meta={
+                    "shot": shot_name,
+                    "source": self.current_source_filepath,
+                    "date": datetime.datetime.now().strftime(
+                        constants.DATE_TIME_FORMAT
+                    ),
+                    "fps": f"{self._current_fps():g}" if self._current_fps() else "",
+                },
+            )
+        except (OSError, RuntimeError, ValueError):
+            LOGGER.exception("Unable to write review PDF")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Export Review PDF",
+                f"Could not export the review PDF to:\n{filepath}",
+            )
+            return
+        finally:
+            progress.close()
+            if reader is not None:
+                reader.close()
+
+        message = f"Exported {written} page review PDF to {filepath}"
+        if failed:
+            # Say which frames are missing rather than shipping a quietly
+            # incomplete report.
+            message = f"{message} ({len(failed)} frame(s) could not be rendered)"
+        self.statusBar().showMessage(message, 6000)
 
     def export_notes(self):
         """Export every annotated frame as a PNG with notes burned in."""
