@@ -153,6 +153,12 @@ IMAGE_EXTENSIONS = [
 
 OPEN_EXTENSIONS = IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + ["fdplaylist"]
 
+LOOP_MODES = (
+    ("off", "Play Once"),
+    ("loop", "Loop"),
+    ("pingpong", "Ping-Pong"),
+)
+
 COMPARE_MODES = (
     ("wipe_vertical", "Vertical Wipe"),
     ("wipe_horizontal", "Horizontal Wipe"),

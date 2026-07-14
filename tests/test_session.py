@@ -98,6 +98,7 @@ def test_opted_in_session_roundtrip_restores_playlist_without_claiming_file(
         ]
         first.playlistWidget._refresh_local_playlist()
         assert first.openMedia(str(media), add_to_playlist=False) is True
+        first.set_loop_mode("pingpong")
         assert first.auto_save_last_session() is True
         assert session.last_session_path().exists()
 
@@ -109,6 +110,7 @@ def test_opted_in_session_roundtrip_restores_playlist_without_claiming_file(
         assert second.restore_last_session() is True
         assert len(second.playlistWidget.local_contexts) == 1
         assert second.current_source_filepath == str(media)
+        assert second.loop_mode == "pingpong"
         assert second.current_playlist_path is None
         assert "last_session.fdplaylist" not in second.windowTitle()
     finally:
