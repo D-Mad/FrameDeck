@@ -1202,6 +1202,11 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     fullscreen_requested = QtCore.Signal()
     comment_pin_clicked = QtCore.Signal(float, float)
 
+    # Emitted whenever the stroke set changes (drawn, undone, redone, cleared),
+    # so the timeline markers follow the annotations instead of drifting from
+    # them until the next reload.
+    annotations_changed = QtCore.Signal()
+
     def __init__(self, parent=None):
         """
         Initialize viewer widget.
@@ -2184,6 +2189,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             self.annotations.set_enabled(False)
             self.annotation_tool_finished.emit("txt")
 
+        self.annotations_changed.emit()
+
         self.update()
 
     def wheelEvent(self, event):
@@ -2242,6 +2249,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
         self.annotations.undo()
 
+        self.annotations_changed.emit()
+
         self.update()
 
     def redo_strokes(self):
@@ -2251,6 +2260,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
 
         self.annotations.redo()
 
+        self.annotations_changed.emit()
+
         self.update()
 
     def clear_strokes(self):
@@ -2259,6 +2270,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.annotations.clear()
+
+        self.annotations_changed.emit()
 
         self.update()
 
