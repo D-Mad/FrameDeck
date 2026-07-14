@@ -420,6 +420,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionExportNotes.setIcon(NamePixmapIcon("recaps"))
         self.actionExportNotes.triggered.connect(self.export_notes)
         file_menu.addAction(self.actionExportNotes)
+        self.actionPushNotes = QtGui.QAction("Push Notes to Tracker...", self)
+        self.actionPushNotes.setIcon(NamePixmapIcon("attach"))
+        self.actionPushNotes.triggered.connect(self.push_notes_to_tracker)
+        file_menu.addAction(self.actionPushNotes)
         self.actionExportNotesCsv = QtGui.QAction("Export Notes as CSV...", self)
         self.actionExportNotesCsv.setIcon(NamePixmapIcon("export"))
         self.actionExportNotesCsv.triggered.connect(self.export_notes_csv)
@@ -2443,6 +2447,74 @@ class MainWindow(QtWidgets.QMainWindow):
                 written, "" if written == 1 else "s", filepath
             ),
             5000,
+        )
+
+    def push_notes_to_tracker(self):
+        """Send this source's comments to ftrack or ShotGrid as review notes."""
+        from trackers import build_notes
+        from trackers.ftrack import FtrackError, FtrackTracker
+        from trackers.shotgrid import ShotGridError, ShotGridTracker
+        from widgets.trackerdialog import TrackerPushDialog
+
+        annotations = self.viewframe.viewer.annotations
+        if not annotations.comment_count():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Push Notes to Tracker",
+                "There are no comments to push.\n\n"
+                "Drawings stay in FrameDeck; a tracker note is words.",
+            )
+            return
+
+        dialog = TrackerPushDialog(self, note_count=annotations.comment_count())
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        notes = build_notes(
+            annotations,
+            fps=self._current_fps(),
+            include_done=dialog.include_done(),
+        )
+        if not notes:
+            self.statusBar().showMessage("No comments matched the push filter.", 4000)
+            return
+
+        QtWidgets.QApplication.setOverrideCursor(
+            QtCore.Qt.CursorShape.WaitCursor
+        )
+        try:
+            if dialog.tracker() == "shotgrid":
+                tracker = ShotGridTracker()
+                result = tracker.push(
+                    notes,
+                    entity_type=dialog.entity_type(),
+                    entity_id=dialog.entity_id(),
+                    project_id=dialog.project_id(),
+                )
+            else:
+                tracker = FtrackTracker()
+                result = tracker.push(
+                    notes,
+                    entity_type=dialog.entity_type(),
+                    entity_id=dialog.entity_id(),
+                )
+        except (FtrackError, ShotGridError) as error:
+            LOGGER.exception("Tracker push failed")
+            QtWidgets.QMessageBox.warning(
+                self, "Push Notes to Tracker", str(error)
+            )
+            return
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+
+        self.statusBar().showMessage(
+            "Pushed {0} new and updated {1} existing note(s) on {2} {3}".format(
+                result["created"],
+                result["updated"],
+                dialog.entity_type(),
+                dialog.entity_id(),
+            ),
+            6000,
         )
 
     def export_notes(self):
