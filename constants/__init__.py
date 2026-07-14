@@ -130,6 +130,11 @@ SMALL_FONT_SIZE = 8
 
 DEFAULT_SKETCH_COLOR = (255, 170, 0)
 
+# Pinned-comment markers drawn on the frame.
+COMMENT_PIN_RADIUS = 10
+COMMENT_PIN_COLOR = (255, 68, 68)
+COMMENT_PIN_DONE_COLOR = (76, 175, 80)
+
 # Container support is provided by the FFmpeg libraries bundled with PyAV.
 # Keep these lists centralized so import, drag/drop and reader selection never
 # disagree about a valid movie. Codec support is detected from the stream, not

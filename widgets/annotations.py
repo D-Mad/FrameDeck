@@ -106,6 +106,7 @@ Notes:
 from __future__ import absolute_import
 
 import copy
+import datetime
 import math
 import uuid
 
@@ -204,6 +205,10 @@ class Sketch(object):
         # ----------------------------
         # Stroke Storage
         self.strokes = dict()
+
+        # Comment storage: frame -> list of comment dicts. Comments are text
+        # notes, optionally pinned to a normalized (x, y) point on the frame.
+        self.comments = dict()
 
         # ----------------------------
         # Image configuration
@@ -375,8 +380,162 @@ class Sketch(object):
         return len(self.strokes)
 
     def annotated_frames(self):
-        """Return sorted frame numbers that contain at least one note."""
-        return sorted(frame for frame, strokes in self.strokes.items() if strokes)
+        """Return sorted frames holding at least one stroke or comment."""
+        frames = {frame for frame, strokes in self.strokes.items() if strokes}
+        frames.update(
+            frame for frame, comments in self.comments.items() if comments
+        )
+        return sorted(frames)
+
+    # ----------------------------------------------------------------------- #
+    # Comments
+    # ----------------------------------------------------------------------- #
+    def add_comment(self, frame, text, x=None, y=None):
+        """Add a text comment to *frame*.
+
+        Pass normalized ``x``/``y`` (0.0-1.0) to pin the comment to a point on
+        the frame; omit them for a frame-level note. Empty text is ignored.
+
+        Returns:
+            dict | None: The stored comment, or None when *text* was blank.
+        """
+
+        text = str(text or "").strip()
+        if not text:
+            return None
+
+        comment = {
+            "id": self.generate_id(),
+            "text": text,
+            "timestamp": datetime.datetime.now().strftime(constants.DATE_TIME_FORMAT),
+            "done": False,
+        }
+
+        if x is not None and y is not None:
+            comment["x"] = max(0.0, min(1.0, float(x)))
+            comment["y"] = max(0.0, min(1.0, float(y)))
+
+        self.comments.setdefault(int(frame), list()).append(comment)
+        return comment
+
+    def get_comments(self, frame=None):
+        """Return the comment list for *frame* (defaults to the current frame)."""
+        if frame is None:
+            frame = self.current_frame
+        if frame is None:
+            return list()
+        return self.comments.get(int(frame), list())
+
+    def delete_comment(self, frame, comment_id):
+        """Remove a comment by id. Returns True when one was removed."""
+        frame = int(frame)
+        existing = self.comments.get(frame)
+        if not existing:
+            return False
+
+        remaining = [
+            comment for comment in existing if comment.get("id") != comment_id
+        ]
+        if len(remaining) == len(existing):
+            return False
+
+        if remaining:
+            self.comments[frame] = remaining
+        else:
+            del self.comments[frame]
+        return True
+
+    def toggle_comment_done(self, frame, comment_id):
+        """Flip a comment's done flag. Returns the new state, or None if absent."""
+        for comment in self.comments.get(int(frame), list()):
+            if comment.get("id") == comment_id:
+                comment["done"] = not comment.get("done", False)
+                return comment["done"]
+        return None
+
+    def commented_frames(self):
+        """Return sorted frame numbers that hold at least one comment."""
+        return sorted(
+            frame for frame, comments in self.comments.items() if comments
+        )
+
+    def comment_count(self):
+        """Return the total number of comments across every frame."""
+        return sum(len(comments) for comments in self.comments.values())
+
+    def draw_comment_pins(self, painter, point_converter=None):
+        """Draw numbered markers for the current frame's pinned comments.
+
+        Numbering follows the frame's comment order, so a marker's number
+        matches its row in the comment list. Done comments use a distinct fill.
+        """
+
+        comments = self.get_comments()
+        if not any("x" in comment and "y" in comment for comment in comments):
+            return
+
+        radius = constants.COMMENT_PIN_RADIUS
+
+        painter.save()
+        for number, comment in enumerate(comments, start=1):
+            if "x" not in comment or "y" not in comment:
+                continue
+            point = (comment["x"], comment["y"])
+            point = point_converter(point) if point_converter else QtCore.QPointF(*point)
+
+            fill = (
+                constants.COMMENT_PIN_DONE_COLOR
+                if comment.get("done")
+                else constants.COMMENT_PIN_COLOR
+            )
+
+            painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0), 1.5))
+            painter.setBrush(QtGui.QColor(*fill))
+            painter.drawEllipse(point, radius, radius)
+
+            font = painter.font()
+            font.setBold(True)
+            font.setPointSize(8)
+            painter.setFont(font)
+            painter.setPen(QtGui.QColor(255, 255, 255))
+            painter.drawText(
+                QtCore.QRectF(
+                    point.x() - radius,
+                    point.y() - radius,
+                    radius * 2,
+                    radius * 2,
+                ),
+                QtCore.Qt.AlignCenter,
+                str(number),
+            )
+        painter.restore()
+
+    def serialize_comments(self):
+        """Return a JSON-serializable snapshot of every frame's comments."""
+        return {
+            str(frame): copy.deepcopy(comments)
+            for frame, comments in self.comments.items()
+            if comments
+        }
+
+    def deserialize_comments(self, data):
+        """Replace all comments from a :meth:`serialize_comments` snapshot."""
+        self.comments = dict()
+        items = data.items() if isinstance(data, dict) else ()
+        for frame_key, comments in items:
+            try:
+                frame = int(frame_key)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(comments, list):
+                continue
+            restored = [
+                dict(comment)
+                for comment in comments
+                if isinstance(comment, dict) and comment.get("text")
+            ]
+            if restored:
+                self.comments[frame] = restored
 
     def serialize(self):
         """Return a JSON-serializable snapshot of every frame's strokes.
@@ -693,6 +852,9 @@ class Sketch(object):
             # Draw selection box for selected stroke
             if stroke is self.selected_stroke:
                 self.draw_selection(painter, stroke, point_converter)
+
+        # Draw pinned comment markers above the strokes
+        self.draw_comment_pins(painter, point_converter)
 
         # Draw Watermarks
         if rect:
@@ -1434,7 +1596,7 @@ class Sketch(object):
 
     def clear(self):
         """
-        Remove all strokes from the current frame.
+        Remove all notes (strokes and comments) from the current frame.
 
         This does NOT affect other frames.
 
@@ -1445,22 +1607,23 @@ class Sketch(object):
             return
 
         frame_strokes = self.strokes.get(self.current_frame)
-        if not frame_strokes:
-            return
-
-        # Treat Clear Notes on Frame like an erase so it can be undone/redone.
-        self._record_action(
-            {
-                "type": "erase",
-                "frame": self.current_frame,
-                "strokes": copy.deepcopy(frame_strokes),
-            }
-        )
+        if frame_strokes:
+            # Treat Clear Notes on Frame like an erase so strokes can be
+            # undone/redone. Comments are managed as review records and are
+            # intentionally outside the drawing undo stack.
+            self._record_action(
+                {
+                    "type": "erase",
+                    "frame": self.current_frame,
+                    "strokes": copy.deepcopy(frame_strokes),
+                }
+            )
         self.strokes.pop(self.current_frame, None)
+        self.comments.pop(self.current_frame, None)
 
     def clear_all(self):
         """
-        Remove all strokes from all frames.
+        Remove all notes (strokes and comments) from all frames.
 
         This resets the entire sketch system.
 
@@ -1469,6 +1632,7 @@ class Sketch(object):
         """
 
         self.strokes.clear()
+        self.comments.clear()
         # A source change calls clear_all(); history from the previous source
         # must never be able to restore notes into the newly opened source.
         self.undo_history.clear()
