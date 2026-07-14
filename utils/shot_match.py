@@ -9,19 +9,20 @@ The module is dependency-free (stdlib only) and side-effect free apart from the
 folder-scanning helpers, so the scoring logic is straightforward to unit test.
 """
 
+import os
 import re
 from pathlib import Path
 
-# Extensions recognized as movie files.
-VIDEO_EXTS = {".mov", ".mp4", ".mxf", ".avi", ".mkv", ".wmv"}
+import constants
 
-# Extensions recognized as image-sequence frames.
-IMAGE_EXTS = {".exr", ".dpx", ".tif", ".tiff", ".png", ".jpg", ".jpeg", ".tga", ".hdr"}
+# Use the same centralized extension policy as import/drag-drop/playback.
+VIDEO_EXTS = {f".{extension}" for extension in constants.VIDEO_EXTENSIONS}
+IMAGE_EXTS = {f".{extension}" for extension in constants.IMAGE_EXTENSIONS}
 
 # Suffixes stripped during normalization (longer entries first so that, e.g.,
 # "_comp_lut" is removed before "_comp").
 _STRIP_SUFFIXES = [
-    "_comp_lut", "_preslate", "_comp", "_final", "_lut",
+    "_comp_lut", "_platemain", "_preslate", "_comp", "_final", "_lut",
     "_prores", "_dnxhd", "_dnxhr", "_dnx", "_h264", "_h265",
     "_hevc", "_out", "_output", "_render", "_plate",
     "_review", "_grade", "_graded", "_online", "_offline",
@@ -29,7 +30,7 @@ _STRIP_SUFFIXES = [
 ]
 
 # Version pattern: _v001, _v02, _V1, etc.
-_VERSION_RE = re.compile(r"_v\d+$", re.IGNORECASE)
+_VERSION_RE = re.compile(r"[._-]v\d+$", re.IGNORECASE)
 
 # AE-style frame range: .[1001-1389]
 _FRAME_RANGE_RE = re.compile(r"\.\[\d+-\d+\]")
@@ -37,8 +38,13 @@ _FRAME_RANGE_RE = re.compile(r"\.\[\d+-\d+\]")
 # Trailing frame number: .1001 or _1001 (4+ digits at end).
 _TRAILING_FRAME_RE = re.compile(r"[._]\d{4,}$")
 
-# Element/layer suffix: _EL01, _LYR02, etc.
-_ELEMENT_SUFFIX_RE = re.compile(r"_[A-Z]+\d+$")
+# Element/layer suffixes. Keep this deliberately narrow: a broad ``_[A-Z]+\d``
+# rule incorrectly strips real shot tokens such as ``_SH003``.
+_ELEMENT_SUFFIX_RE = re.compile(
+    r"_(?:EL|ELEM|ELEMENT|LYR|LAYER|AOV)\d+$", re.IGNORECASE
+)
+
+_NUMBERED_IMAGE_RE = re.compile(r"^(.*?)(\d+)(\.[^.]+)$")
 
 # SHOW_SCENE_SHOT patterns.
 _SSS_PATTERNS = [
@@ -135,39 +141,56 @@ def calculate_match_score(name_a: str, name_b: str) -> int:
     return 0
 
 
-def _find_first_frame(directory: Path):
-    """Return the first image-sequence frame in *directory*, or ``None``."""
-    frames = sorted(
-        f for f in directory.iterdir()
-        if f.is_file() and f.suffix.lower() in IMAGE_EXTS
-    )
-    return str(frames[0]) if frames else None
+def _first_frames(files):
+    """Collapse numbered image files into one first frame per sequence."""
+    groups = {}
+    for path in files:
+        if path.suffix.lower() not in IMAGE_EXTS:
+            continue
+        match = _NUMBERED_IMAGE_RE.match(path.name)
+        if match:
+            key = (match.group(1).lower(), len(match.group(2)), match.group(3).lower())
+        else:
+            # A still image is its own one-frame sequence.
+            key = (path.name.lower(), 0, path.suffix.lower())
+        previous = groups.get(key)
+        if previous is None or path.name.lower() < previous.name.lower():
+            groups[key] = path
+    return [str(groups[key]) for key in sorted(groups)]
 
 
-def scan_folder_for_media(folder: str) -> list:
-    """Scan *folder* for movie files and image-sequence directories.
+def scan_folder_for_media(folder: str, max_depth=3, max_results=2000) -> list:
+    """Scan *folder* for movies and collapsed image sequences.
 
-    Returns movie files at the top level plus the first frame of each image
-    sequence found in a subfolder (or loose in the folder itself).
+    Scanning is recursive but bounded by *max_depth* and *max_results* so a
+    broad server share cannot expand without limit. Each numbered image
+    sequence contributes only its first frame.
     """
-    folder = Path(folder)
-    if not folder.is_dir():
+    root = Path(folder)
+    if not root.is_dir():
         return []
 
     results = []
-    for f in sorted(folder.iterdir()):
-        if f.is_file() and f.suffix.lower() in VIDEO_EXTS:
-            results.append(str(f))
+    root_depth = len(root.parts)
+    try:
+        walker = os.walk(root)
+        for directory, subdirectories, filenames in walker:
+            depth = len(Path(directory).parts) - root_depth
+            subdirectories[:] = sorted(
+                name for name in subdirectories if not name.startswith(".")
+            )
+            if depth >= max(0, int(max_depth)):
+                subdirectories[:] = []
 
-    for d in sorted(folder.iterdir()):
-        if d.is_dir():
-            first = _find_first_frame(d)
-            if first:
-                results.append(first)
-
-    top_first = _find_first_frame(folder)
-    if top_first and top_first not in results:
-        results.append(top_first)
+            paths = [Path(directory) / name for name in sorted(filenames)]
+            results.extend(
+                str(path) for path in paths if path.suffix.lower() in VIDEO_EXTS
+            )
+            results.extend(_first_frames(paths))
+            if len(results) >= max_results:
+                return results[:max_results]
+    except OSError:
+        return results
 
     return results
 
@@ -175,20 +198,14 @@ def scan_folder_for_media(folder: str) -> list:
 def _match_key(path: str) -> str:
     """Return the best matching name for a media path.
 
-    Image-sequence frames living in a named subfolder (more than one frame)
-    use the folder name as their identity; everything else uses the file stem.
+    A descriptive image filename is preferred. Generic sequence names such as
+    ``frame.1001.exr`` use the parent folder as their shot identity.
     """
     pp = Path(path)
     if pp.suffix.lower() in IMAGE_EXTS:
-        try:
-            siblings = [
-                f for f in pp.parent.iterdir()
-                if f.is_file() and f.suffix.lower() in IMAGE_EXTS
-            ]
-            if len(siblings) > 1:
-                return pp.parent.name
-        except OSError:
-            pass
+        identity = normalize_name(pp.name)
+        if identity in {"FRAME", "IMAGE", "RENDER", "BEAUTY", "RGB"}:
+            return pp.parent.name
     return pp.stem
 
 
@@ -211,7 +228,9 @@ def match_renders_to_plates(render_paths: list, plate_paths: list) -> dict:
             if score > 0:
                 scored.append((score, pi, ri))
 
-    scored.sort(reverse=True)
+    # Prefer the earlier plate/render when scores tie; reverse tuple sorting
+    # made equally named candidates choose the last filesystem entry.
+    scored.sort(key=lambda item: (-item[0], item[1], item[2]))
     used_renders = set()
     used_plates = set()
     result = {}

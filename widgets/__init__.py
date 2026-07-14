@@ -1657,6 +1657,12 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         renders = shot_match.scan_folder_for_media(folder)
+        source_key = os.path.normcase(os.path.abspath(self.current_source_filepath))
+        renders = [
+            path
+            for path in renders
+            if os.path.normcase(os.path.abspath(path)) != source_key
+        ]
         matches = shot_match.match_renders_to_plates(
             renders, [self.current_source_filepath]
         )
@@ -1674,6 +1680,9 @@ class MainWindow(QtWidgets.QMainWindow):
             {"media": match, "code": "B"},
         ]
         self.start_compare(contexts)
+        self.statusBar().showMessage(
+            f"Auto-matched B-side: {os.path.basename(match)}", 5000
+        )
 
     def apply_ocio(self, processor, input_space, display, view):
         self.player.set_ocio(processor, input_space, display, view)
