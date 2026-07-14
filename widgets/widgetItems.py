@@ -158,13 +158,23 @@ class PlaylistWidgetItem(QtWidgets.QTreeWidgetItem):
             ]
             if self.context.get("media_kind") == "sequence":
                 values.append(f"Color: {self.context.get('colorspace', 'Auto')}")
+            else:
+                values.append(
+                    f"{self.context.get('container_format', 'Video')}  •  "
+                    f"{self.context.get('codec', 'Unknown codec')}"
+                )
+            if self.context.get("metadata_error"):
+                values.append("Metadata probe failed — click to retry")
             elif self.context.get("network_source"):
                 status = self.context.get("cache_status", "Waiting")
                 progress = int(self.context.get("cache_progress") or 0)
                 if status == "Caching":
                     status = f"{status} {progress}%"
                 values.append(f"Server cache: {status}")
-            self.setToolTip(0, self.context.get("media", ""))
+            tooltip = self.context.get("media", "")
+            if self.context.get("metadata_error"):
+                tooltip += f"\n\nProbe error: {self.context['metadata_error']}"
+            self.setToolTip(0, tooltip)
         else:
             # Build production/version display text.
             values = [

@@ -160,8 +160,8 @@ class PlaylistWidget(QtWidgets.QWidget):
     local_playlist_changed = QtCore.Signal(list)
     active_media_removed = QtCore.Signal(object)
 
-    VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi"}
-    IMAGE_EXTENSIONS = {".exr", ".png", ".jpg", ".jpeg"}
+    VIDEO_EXTENSIONS = {f".{extension}" for extension in constants.VIDEO_EXTENSIONS}
+    IMAGE_EXTENSIONS = {f".{extension}" for extension in constants.IMAGE_EXTENSIONS}
 
     @classmethod
     def normalize_media_path(cls, path):
@@ -581,12 +581,16 @@ class PlaylistWidget(QtWidgets.QWidget):
         frame_count = 0
         resolution = "Load to read metadata"
         colorspace = "Auto"
+        codec = "Unknown"
+        container_format = extension.lstrip(".").upper() or "Unknown"
+        metadata_error = ""
 
         # Do not open or seek a server file during playlist import. Metadata
         # and thumbnail are filled from the player's first real decode.
         if not network_source and not lazy:
-            reader = SequenceReader(path) if is_sequence else MovieReader(path)
+            reader = None
             try:
+                reader = SequenceReader(path) if is_sequence else MovieReader(path)
                 fps = reader.get_fps(rounded=3)
                 duration = reader.duration()
                 frame_count = reader.frame_count()
@@ -597,9 +601,18 @@ class PlaylistWidget(QtWidgets.QWidget):
                     )
                 else:
                     resolution = f"{reader.video_stream.width}x{reader.video_stream.height}"
+                    codec = reader.codec_name()
+                    container_format = reader.container_name()
                 thumbnail = PlaylistWidget._thumbnail_path(path, reader)
+            except Exception as error:
+                # Import the source even if probing fails. The user can retry
+                # playback and gets a detailed decoder error instead of the
+                # clip silently disappearing from Sources.
+                metadata_error = str(error)
+                resolution = "Metadata unavailable"
             finally:
-                reader.close()
+                if reader is not None:
+                    reader.close()
 
         filename = os.path.basename(path)
         return {
@@ -620,10 +633,17 @@ class PlaylistWidget(QtWidgets.QWidget):
             "frame_count": frame_count,
             "resolution": resolution,
             "colorspace": colorspace,
+            "codec": codec,
+            "container_format": container_format,
+            "metadata_error": metadata_error,
             "media_kind": "sequence" if is_sequence else "video",
             "playlist_index": index,
             "network_source": network_source,
-            "cache_status": "Waiting" if network_source else "Local file",
+            "cache_status": (
+                "Waiting"
+                if network_source
+                else ("Probe failed" if metadata_error else "Local file")
+            ),
             "cache_progress": 0,
             "cached_path": None,
         }
@@ -796,6 +816,17 @@ class PlaylistWidget(QtWidgets.QWidget):
                     if reader.media_type == "sequence"
                     else f"{reader.video_stream.width}x{reader.video_stream.height}"
                 ),
+                "codec": (
+                    reader.codec_name()
+                    if reader.media_type == "video"
+                    else context.get("codec", "Unknown")
+                ),
+                "container_format": (
+                    reader.container_name()
+                    if reader.media_type == "video"
+                    else context.get("container_format", "Image sequence")
+                ),
+                "metadata_error": "",
                 "colorspace": (
                     f"{reader.input_color_space or 'Auto / scene_linear'} -> sRGB"
                     if reader.media_type == "sequence"

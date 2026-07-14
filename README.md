@@ -35,6 +35,8 @@ release builds.
   Luma channel views, and 1.85:1 or 2.39:1 aspect masks.
 - Audio playback, volume/mute controls, and synchronized playlist playback.
 - Local media/proxy cache for server sources and color-aware 2K EXR previews.
+- Broad FFmpeg/PyAV movie decoding for MP4/MOV/MXF/MKV/WebM/MTS and other
+  professional containers, with codec metadata and visible probe diagnostics.
 - Full-resolution JPG/PNG extraction and high-quality MP4 export.
 - Portable Windows build and Ubuntu AppImage release automation.
 

@@ -250,7 +250,7 @@ class MediaPlayer(BasePlayer):
         extension = utils.fileExtension(path, dot=False)
 
         # Create appropriate playback implementation.
-        if extension in ["mp4", "mov", "avi"]:
+        if extension.lower() in constants.VIDEO_EXTENSIONS:
             self.player = MoviePlayer()
         else:
             self.player = SequencePlayer()
@@ -1107,6 +1107,15 @@ class MoviePlayer(BasePlayer):
                 first_frame = decoded_frame
             else:
                 self.audio_queue.append(decoded_frame)
+
+        if first_frame is None:
+            details = self.reader.media_description()
+            decode_error = self.reader.last_video_error or "no video frames were decoded"
+            self.reset()
+            raise RuntimeError(
+                f"FFmpeg could not decode the video stream ({details}). "
+                f"Decoder response: {decode_error}"
+            )
 
         if first_frame is not None:
             frame_time = first_frame.time

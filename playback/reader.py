@@ -108,12 +108,42 @@ class MovieReader(object):
         self.media_type = "video"
         self.path = path
         self.is_network_source = self._is_network_path(path)
+        self.last_video_error = ""
+        self.audio_decode_error = ""
+        self.video_decode_errors = 0
 
         # Open media container.
         self.container = av.open(path)
 
         # Media streams.
-        self.video_stream = self.container.streams.video[0]
+        video_streams = [
+            stream
+            for stream in self.container.streams.video
+            if int(getattr(stream.codec_context, "width", 0) or 0) > 0
+            and int(getattr(stream.codec_context, "height", 0) or 0) > 0
+        ]
+        if not video_streams:
+            self.container.close()
+            raise RuntimeError("The container has no usable video stream")
+
+        # Some MP4/MOV files expose artwork or proxy streams before the real
+        # picture stream. Prefer the largest valid raster instead of assuming
+        # streams.video[0] is always the review image.
+        attached_flags = (
+            av.stream.Disposition.attached_pic | av.stream.Disposition.timed_thumbnails
+        )
+        picture_streams = [
+            stream for stream in video_streams if not (stream.disposition & attached_flags)
+        ] or video_streams
+        self.video_stream = max(
+            picture_streams,
+            key=lambda stream: (
+                bool(stream.disposition & av.stream.Disposition.default),
+                int(stream.duration or 0),
+                int(stream.codec_context.width or 0)
+                * int(stream.codec_context.height or 0),
+            ),
+        )
         self.audio_stream = (
             self.container.streams.audio[0] if self.container.streams.audio else None
         )
@@ -279,12 +309,33 @@ class MovieReader(object):
                 return None
 
             if packet.stream == self.video_stream:
-                for frame in packet.decode():
-                    self.pending_frames.append(("video", frame))
+                try:
+                    for frame in packet.decode():
+                        self.pending_frames.append(("video", frame))
+                except av.error.DecoderNotFoundError as error:
+                    self.last_video_error = str(error)
+                    raise RuntimeError(
+                        f"No FFmpeg decoder is available for {self.codec_name()}: {error}"
+                    ) from error
+                except av.error.FFmpegError as error:
+                    # A damaged packet should not make the whole clip vanish;
+                    # tolerate a bounded number and continue to the next GOP.
+                    self.last_video_error = str(error)
+                    self.video_decode_errors += 1
+                    if self.video_decode_errors >= 12:
+                        raise RuntimeError(
+                            f"Repeated decode failures in {self.codec_name()}: {error}"
+                        ) from error
 
             elif self.audio_stream and packet.stream == self.audio_stream:
-                for frame in packet.decode():
-                    self.pending_frames.append(("audio", frame))
+                try:
+                    for frame in packet.decode():
+                        self.pending_frames.append(("audio", frame))
+                except av.error.FFmpegError as error:
+                    # Unsupported or malformed audio must not prevent picture
+                    # review. Drop audio for this source and keep decoding video.
+                    self.audio_decode_error = str(error)
+                    self.audio_stream = None
 
     def seek_time(self, seconds):
         """
@@ -369,12 +420,59 @@ class MovieReader(object):
                 Frames per second.
         """
 
-        fps = float(self.video_stream.average_rate)
+        fps = 0.0
+        for attribute in ("average_rate", "base_rate", "guessed_rate"):
+            try:
+                rate = getattr(self.video_stream, attribute, None)
+                candidate = float(rate) if rate is not None else 0.0
+            except (AttributeError, RuntimeError, TypeError, ValueError, ZeroDivisionError):
+                candidate = 0.0
+            if candidate > 0.0:
+                fps = candidate
+                break
+
+        if fps <= 0.0:
+            try:
+                rate = self.video_stream.codec_context.framerate
+                fps = float(rate) if rate is not None else 0.0
+            except (AttributeError, TypeError, ValueError, ZeroDivisionError):
+                fps = 0.0
+
+        if fps <= 0.0:
+            stream_frames = int(self.video_stream.frames or 0)
+            duration = self.duration()
+            if stream_frames > 1 and duration > 0.0:
+                fps = stream_frames / duration
+
+        # Valid VFR and camera files occasionally omit every rate hint. Use a
+        # safe review default instead of rejecting the source during import.
+        if fps <= 0.0:
+            fps = float(constants.DEFULT_FPS["value"])
 
         if rounded == 0:
             return fps
         result = round(fps, rounded)
         return result
+
+    def codec_name(self):
+        """Return a human-readable codec identifier for UI diagnostics."""
+        context = getattr(self.video_stream, "codec_context", None)
+        name = getattr(context, "name", None) or "unknown"
+        long_name = getattr(getattr(context, "codec", None), "long_name", None)
+        return f"{name} ({long_name})" if long_name and long_name != name else name
+
+    def container_name(self):
+        """Return the demuxer/container name reported by FFmpeg."""
+        container_format = getattr(self.container, "format", None)
+        return getattr(container_format, "long_name", None) or getattr(
+            container_format, "name", "unknown"
+        )
+
+    def media_description(self):
+        """Return concise container/codec/raster details for error messages."""
+        width = int(getattr(self.video_stream, "width", 0) or 0)
+        height = int(getattr(self.video_stream, "height", 0) or 0)
+        return f"{self.container_name()}, {self.codec_name()}, {width}x{height}"
 
     def frame_count(self):
         """

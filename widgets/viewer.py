@@ -423,8 +423,6 @@ class ViewToolbarLayout(HorizontalLayout):
             None, tooltip="Arrow Shape", checkable=True, width=22, height=22
         )
 
-        # Hidden until arrow support is enabled
-        self.arrowButton.setVisible(False)
         self.addWidget(self.arrowButton)
 
         # Ellipse annotation tool
@@ -2205,6 +2203,15 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         """
 
         self.annotations.undo()
+
+        self.update()
+
+    def redo_strokes(self):
+        """
+        Reapply the most recently undone annotation.
+        """
+
+        self.annotations.redo()
 
         self.update()
 
