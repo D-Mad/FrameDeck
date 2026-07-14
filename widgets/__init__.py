@@ -406,6 +406,18 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.actionRedo.triggered.connect(self.viewframe.viewer.redo_strokes)
         edit_menu.addAction(self.actionRedo)
+        self.actionPrevNote = QtGui.QAction("Previous Annotated Frame", self)
+        self.actionPrevNote.setShortcut(QtGui.QKeySequence("["))
+        self.actionPrevNote.triggered.connect(
+            lambda: self.jump_to_annotation(-1)
+        )
+        edit_menu.addAction(self.actionPrevNote)
+        self.actionNextNote = QtGui.QAction("Next Annotated Frame", self)
+        self.actionNextNote.setShortcut(QtGui.QKeySequence("]"))
+        self.actionNextNote.triggered.connect(
+            lambda: self.jump_to_annotation(1)
+        )
+        edit_menu.addAction(self.actionNextNote)
         self.actionClearFrame = QtGui.QAction("Clear Notes on Frame", self)
         self.actionClearFrame.setIcon(NamePixmapIcon("clear"))
         self.actionClearFrame.triggered.connect(self.viewframe.viewer.clear_strokes)
@@ -1527,6 +1539,42 @@ class MainWindow(QtWidgets.QMainWindow):
                 constants.VL_START_FRAME + self.compare_player.frame_count - 1,
             ),
         )
+
+    def _timeline_frame_for_local(self, local_frame):
+        """Map a player-local frame to its timeline frame.
+
+        Annotations are keyed by the player's local frame, but the timeline is a
+        global range while a playlist is playing.
+        """
+        if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(
+            self.playlist_entries
+        ):
+            entry = self.playlist_entries[self.playlist_entry_index]
+            return entry["start"] + int(local_frame) - constants.VL_START_FRAME
+        return int(local_frame)
+
+    def jump_to_annotation(self, step):
+        """Seek to the previous/next frame holding a note or comment."""
+        annotations = self.viewframe.viewer.annotations
+        frames = annotations.annotated_frames()
+        if not frames:
+            return
+
+        current = annotations.current_frame
+        if current is None:
+            current = constants.VL_START_FRAME
+
+        if step > 0:
+            following = [frame for frame in frames if frame > current]
+            target = following[0] if following else None
+        else:
+            preceding = [frame for frame in frames if frame < current]
+            target = preceding[-1] if preceding else None
+
+        if target is None:
+            return
+
+        self.seek(self._timeline_frame_for_local(target))
 
     def _save_current_notes(self):
         """Persist the current source's annotations to its note sidecar."""

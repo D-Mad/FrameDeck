@@ -130,6 +130,11 @@ SMALL_FONT_SIZE = 8
 
 DEFAULT_SKETCH_COLOR = (255, 170, 0)
 
+# Pinned-comment markers drawn on the frame.
+COMMENT_PIN_RADIUS = 10
+COMMENT_PIN_COLOR = (255, 68, 68)
+COMMENT_PIN_DONE_COLOR = (76, 175, 80)
+
 OPEN_EXTENSIONS = [
     "exr", "png", "jpg", "jpeg", "mp4", "mov", "avi", "fdplaylist"
 ]
