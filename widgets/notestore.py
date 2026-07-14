@@ -37,8 +37,14 @@ def notes_path_for(source):
     return notes_dir() / f"{stem}_{digest}.fdnotes.json"
 
 
+def _clear(sketch):
+    """Reset a sketch to an empty, defined state (strokes and comments)."""
+    sketch.deserialize({})
+    sketch.deserialize_comments({})
+
+
 def save_notes(source, sketch):
-    """Write *sketch*'s strokes to *source*'s sidecar.
+    """Write *sketch*'s strokes and comments to *source*'s sidecar.
 
     An empty annotation set removes any existing sidecar so a later load starts
     clean. Returns the sidecar path when written, else ``None``.
@@ -48,8 +54,9 @@ def save_notes(source, sketch):
 
     path = notes_path_for(source)
     data = sketch.serialize()
+    comments = sketch.serialize_comments()
 
-    if not data:
+    if not data and not comments:
         try:
             if path.exists():
                 path.unlink()
@@ -61,6 +68,7 @@ def save_notes(source, sketch):
         "schema": SCHEMA,
         "source": os.path.abspath(str(source)),
         "annotations": data,
+        "comments": comments,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -79,38 +87,40 @@ def save_notes(source, sketch):
 
 
 def load_notes(source, sketch):
-    """Load *source*'s sidecar into *sketch*.
+    """Load *source*'s sidecar (strokes and comments) into *sketch*.
 
     Always leaves *sketch* in a defined state: if there is no sidecar (or it is
     unreadable/foreign) the sketch is cleared. Returns ``True`` when notes were
     loaded from a valid sidecar.
     """
     if not source:
-        sketch.deserialize({})
+        _clear(sketch)
         return False
 
     path = notes_path_for(source)
     if not path.exists():
-        sketch.deserialize({})
+        _clear(sketch)
         return False
 
     try:
         with open(path, "r", encoding="utf-8") as stream:
             document = json.load(stream)
     except (OSError, ValueError):
-        sketch.deserialize({})
+        _clear(sketch)
         return False
 
     if not isinstance(document, dict) or document.get("schema") != SCHEMA:
-        sketch.deserialize({})
+        _clear(sketch)
         return False
 
     saved_source = document.get("source")
     if not saved_source or os.path.normcase(os.path.abspath(str(saved_source))) != (
         os.path.normcase(os.path.abspath(str(source)))
     ):
-        sketch.deserialize({})
+        _clear(sketch)
         return False
 
+    # "comments" is absent in sidecars written before comments existed.
     sketch.deserialize(document.get("annotations") or {})
+    sketch.deserialize_comments(document.get("comments") or {})
     return True
