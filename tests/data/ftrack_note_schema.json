@@ -1,0 +1,33 @@
+{
+  "entity": "Note",
+  "required": [
+    "id",
+    "user_id"
+  ],
+  "properties": [
+    "author",
+    "category",
+    "category_id",
+    "completed_at",
+    "completed_by",
+    "completed_by_id",
+    "content",
+    "date",
+    "frame_number",
+    "id",
+    "in_reply_to",
+    "in_reply_to_id",
+    "is_todo",
+    "metadata",
+    "note_components",
+    "note_label_links",
+    "parent_id",
+    "parent_type",
+    "project",
+    "project_id",
+    "recipients",
+    "replies",
+    "thread_activity",
+    "user_id"
+  ]
+}
