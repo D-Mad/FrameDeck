@@ -239,6 +239,7 @@ class Sketch(object):
         # Undo system
         # ----------------------------
         self.undo_history = list()
+        self.redo_history = list()
 
     def set_tool(self, tool):
         """
@@ -413,7 +414,7 @@ class Sketch(object):
         # Eraser
         if self.tool == "eraser":
             # Save current frame state ONCE
-            self.undo_history.append(
+            self._record_action(
                 {
                     "type": "erase",
                     "frame": self.current_frame,
@@ -438,7 +439,7 @@ class Sketch(object):
                 self.strokes.setdefault(self.current_frame, [])
                 self.strokes[self.current_frame].append(stroke)
 
-                self.undo_history.append(
+                self._record_action(
                     {
                         "type": "create",
                         "frame": self.current_frame,
@@ -530,7 +531,7 @@ class Sketch(object):
         if self.tool == "move":
 
             if self.selected_stroke and self.original_stroke:
-                self.undo_history.append(
+                self._record_action(
                     {
                         "type": "move",
                         "stroke_id": self.selected_stroke["id"],
@@ -559,7 +560,7 @@ class Sketch(object):
             if typed in ["rectangle", "ellipse"]:
                 self.current_shape["end"] = point
 
-            self.undo_history.append(
+            self._record_action(
                 {
                     "type": "create",
                     "frame": self.current_frame,
@@ -954,6 +955,15 @@ class Sketch(object):
         painter.setPen(pen)
         painter.drawRect(rect)
 
+    def _record_action(self, action):
+        """Record an undoable action and invalidate the redo stack.
+
+        Any new edit clears the redo history, matching standard undo/redo
+        semantics -- you cannot redo past a fresh change.
+        """
+        self.undo_history.append(action)
+        self.redo_history.clear()
+
     def undo(self):
         """
         Undo last action (create, move, erase).
@@ -963,6 +973,9 @@ class Sketch(object):
             - Move: restore previous stroke state
             - Erase: restore full frame snapshot
 
+        The full pre-undo stroke state is captured onto the redo stack so the
+        action can be reapplied by :meth:`redo`.
+
         Returns:
             None
         """
@@ -971,6 +984,9 @@ class Sketch(object):
             return
 
         action = self.undo_history.pop()
+
+        # Snapshot the state we are about to leave so redo() can restore it.
+        pre_undo = copy.deepcopy(self.strokes)
 
         # Create undo
         if action["type"] == "create":
@@ -986,23 +1002,39 @@ class Sketch(object):
                 if not self.strokes[frame]:
                     del self.strokes[frame]
 
-            return
-
         # Move undo
-        if action["type"] == "move":
+        elif action["type"] == "move":
             stroke = self.find_stroke(action["stroke_id"])
 
             if stroke:
                 stroke.clear()
                 stroke.update(copy.deepcopy(action["old_data"]))
 
-            return
-
         # Erase undo
-        if action["type"] == "erase":
+        elif action["type"] == "erase":
             self.strokes[action["frame"]] = copy.deepcopy(action["strokes"])
 
+        self.redo_history.append({"action": action, "strokes": pre_undo})
+
+    def redo(self):
+        """
+        Reapply the most recently undone action.
+
+        Restores the stroke state captured by :meth:`undo` (mutating the
+        existing ``strokes`` dict in place so held references stay valid) and
+        pushes the action back onto the undo stack.
+
+        Returns:
+            None
+        """
+
+        if not self.redo_history:
             return
+
+        entry = self.redo_history.pop()
+        self.strokes.clear()
+        self.strokes.update(copy.deepcopy(entry["strokes"]))
+        self.undo_history.append(entry["action"])
 
     def find_stroke(self, stroke_id):
         """
@@ -1248,7 +1280,18 @@ class Sketch(object):
         if self.current_frame is None:
             return
 
-        # Safely remove frame entry if it exists
+        frame_strokes = self.strokes.get(self.current_frame)
+        if not frame_strokes:
+            return
+
+        # Treat Clear Notes on Frame like an erase so it can be undone/redone.
+        self._record_action(
+            {
+                "type": "erase",
+                "frame": self.current_frame,
+                "strokes": copy.deepcopy(frame_strokes),
+            }
+        )
         self.strokes.pop(self.current_frame, None)
 
     def clear_all(self):
@@ -1262,6 +1305,10 @@ class Sketch(object):
         """
 
         self.strokes.clear()
+        # A source change calls clear_all(); history from the previous source
+        # must never be able to restore notes into the newly opened source.
+        self.undo_history.clear()
+        self.redo_history.clear()
 
     def draw_overlays(self, painter, rect):
         """
