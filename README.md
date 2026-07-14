@@ -1,6 +1,6 @@
 # FrameDeck
 
-![FrameDeck review interface](doc/docs/resources/framedeck-overview.png)
+![FrameDeck OCIO and Shot Playlist interface](doc/docs/resources/framedeck-color-playlist-overview.png)
 
 FrameDeck is a portable VFX shot-review player for Windows and Ubuntu. It is
 based on [subing85/viewline](https://github.com/subing85/viewline) and extends
