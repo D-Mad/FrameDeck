@@ -33,6 +33,8 @@ import resources
 import constants
 
 from utils import timecode
+
+from playback import proxy
 from utils import notescsv
 
 from PySide6 import QtGui
@@ -524,6 +526,21 @@ class MainWindow(QtWidgets.QMainWindow):
             self.loopModeActionGroup.addAction(action)
             loop_mode_menu.addAction(action)
             self.loopModeActions[mode] = action
+
+        proxy_menu = playback_menu.addMenu("Proxy Resolution")
+        self.proxyActionGroup = QtGui.QActionGroup(self)
+        self.proxyActionGroup.setExclusive(True)
+        self.proxyActions = {}
+        for key, label, _limits in proxy.levels():
+            action = QtGui.QAction(label, self, checkable=True)
+            action.setData(key)
+            action.setChecked(key == proxy.current_level())
+            action.triggered.connect(
+                lambda _checked=False, selected=key: self.set_proxy_level(selected)
+            )
+            self.proxyActionGroup.addAction(action)
+            proxy_menu.addAction(action)
+            self.proxyActions[key] = action
 
         self.actionCompare = QtGui.QAction("Compare Selected A/B", self)
         self.actionCompare.setIcon(NamePixmapIcon("display"))
@@ -2194,6 +2211,45 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             message = f"Playback mode: {label}"
         self.statusBar().showMessage(message, 4500)
+
+    def set_proxy_level(self, key):
+        """Set the display-proxy resolution and reload the current source.
+
+        The open reader, the frame cache and the on-disk preview cache all hold
+        frames at the old proxy size, so the level cannot simply be swapped
+        under a running player -- the source is reopened at the frame the
+        reviewer is already sitting on.
+        """
+
+        applied = proxy.set_level(key)
+
+        for level, action in getattr(self, "proxyActions", dict()).items():
+            selected = level == applied
+            if action.isChecked() != selected:
+                blocker = QtCore.QSignalBlocker(action)
+                action.setChecked(selected)
+                del blocker
+
+        label = proxy.label_for(applied)
+
+        source = self.current_source_filepath
+        if not source:
+            self.statusBar().showMessage(f"Proxy resolution: {label}", 4500)
+            return
+
+        # Reopen on the frame the reviewer is looking at, not back at frame one.
+        frame = self.viewframe.timeline.current_frame
+
+        if self.player.player is not None:
+            self.player.player.pause()
+        self.viewframe.timelineToolbarLayout.playPauseButton.switch(False)
+
+        if self.openMedia(source, add_to_playlist=False):
+            self.seek(frame)
+
+        self.statusBar().showMessage(
+            f"Proxy resolution: {label} (source reloaded)", 4500
+        )
 
     def set_gamma_check(self, enabled):
         """Toggle temporary Y-drag gamma inspection in the viewer."""
