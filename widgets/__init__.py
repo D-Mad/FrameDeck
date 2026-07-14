@@ -58,6 +58,7 @@ from playback.disk_cache import MediaCache
 from playback.reader import MovieReader
 from playback.reader import SequenceReader
 
+from widgets import session
 from widgets.recaps import RecapsWidget
 from widgets.styles import SetStylesheet
 from widgets.playlist import PlaylistWidget
@@ -565,6 +566,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionCacheManager.setIcon(NamePixmapIcon("render"))
         self.actionCacheManager.triggered.connect(self.show_cache_manager)
         tools_menu.addAction(self.actionCacheManager)
+        tools_menu.addSeparator()
+        self.actionRestoreSession = QtGui.QAction(
+            "Restore Last Session on Startup", self, checkable=True
+        )
+        self.actionRestoreSession.setChecked(session.restore_enabled())
+        self.actionRestoreSession.setToolTip(
+            "Off by default: start with an empty workspace unless explicitly enabled"
+        )
+        self.actionRestoreSession.toggled.connect(
+            self.set_session_restore_enabled
+        )
+        tools_menu.addAction(self.actionRestoreSession)
         tools_menu.addSeparator()
         tools_menu.addAction(self.actionExportNotes)
         self.actionHelp = QtGui.QAction("FrameDeck Help", self)
@@ -1220,14 +1233,19 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toggle_play_pause()
         return True
 
-    def save_playlist(self, filepath=None):
-        """Save shot order and the active review position to .fdplaylist."""
+    def save_playlist(self, filepath=None, quiet=False):
+        """Save shot order and the active review position to .fdplaylist.
+
+        With ``quiet=True`` no message boxes are shown (used by the auto-saved
+        last session on exit).
+        """
         if not self.playlistWidget.local_contexts:
-            QtWidgets.QMessageBox.information(
-                self,
-                "Save Playlist",
-                "Add at least one source to Shot Playlist before saving.",
-            )
+            if not quiet:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Save Playlist",
+                    "Add at least one source to Shot Playlist before saving.",
+                )
             return False
 
         if not isinstance(filepath, str) or not filepath:
@@ -1274,6 +1292,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "active_media": self.playlistWidget.current_local_path,
             "current_frame": self.viewframe.timeline.current_frame,
             "shot_timeline_visible": self.shotSequenceWidget.isVisible(),
+            "window": {"geometry": session.encode_geometry(self.saveGeometry())},
         }
         temporary = filepath + ".tmp"
         try:
@@ -1284,20 +1303,26 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as error:
             if os.path.exists(temporary):
                 os.remove(temporary)
-            QtWidgets.QMessageBox.critical(
-                self, "Save Playlist", f"Could not save playlist:\n{error}"
-            )
+            if not quiet:
+                QtWidgets.QMessageBox.critical(
+                    self, "Save Playlist", f"Could not save playlist:\n{error}"
+                )
             return False
 
-        self.current_playlist_path = filepath
-        self.setWindowTitle(
-            f"{constants.VL_TOOL_NAME}-{constants.VL_VERSION} - {os.path.basename(filepath)}"
-        )
-        self.statusBar().showMessage(f"Playlist saved: {filepath}", 5000)
+        if not quiet:
+            self.current_playlist_path = filepath
+            self.setWindowTitle(
+                f"{constants.VL_TOOL_NAME}-{constants.VL_VERSION} - {os.path.basename(filepath)}"
+            )
+            self.statusBar().showMessage(f"Playlist saved: {filepath}", 5000)
         return True
 
-    def load_playlist(self, filepath=None):
-        """Open a .fdplaylist and restore shot order and active frame."""
+    def load_playlist(self, filepath=None, quiet=False):
+        """Open a .fdplaylist and restore shot order and active frame.
+
+        With ``quiet=True`` no message boxes are shown (used when auto-restoring
+        the last session on launch).
+        """
         if not isinstance(filepath, str) or not filepath:
             filepath, _ = QtWidgets.QFileDialog.getOpenFileName(
                 self,
@@ -1318,9 +1343,10 @@ class MainWindow(QtWidgets.QMainWindow):
             if not isinstance(shots, list):
                 raise ValueError("Playlist has no valid shot list.")
         except Exception as error:
-            QtWidgets.QMessageBox.critical(
-                self, "Open Playlist", f"Could not open playlist:\n{error}"
-            )
+            if not quiet:
+                QtWidgets.QMessageBox.critical(
+                    self, "Open Playlist", f"Could not open playlist:\n{error}"
+                )
             return False
 
         self.exit_compare()
@@ -1330,15 +1356,21 @@ class MainWindow(QtWidgets.QMainWindow):
             active_media=document.get("active_media"),
         )
         if not contexts:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Open Playlist",
-                "None of the saved media files are currently available.",
-            )
+            if not quiet:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Open Playlist",
+                    "None of the saved media files are currently available.",
+                )
             return False
 
-        self.current_playlist_path = filepath
+        if not quiet:
+            self.current_playlist_path = filepath
         self.browsepath = os.path.dirname(filepath)
+        window_state = document.get("window") or {}
+        saved_geometry = window_state.get("geometry")
+        if saved_geometry:
+            self.restoreGeometry(session.decode_geometry(saved_geometry))
         self.actionShotTimeline.setChecked(
             bool(document.get("shot_timeline_visible", True))
         )
@@ -1350,13 +1382,14 @@ class MainWindow(QtWidgets.QMainWindow):
             local_frame = constants.VL_START_FRAME + saved_frame - entry["start"]
             opened = self._load_playlist_entry(index, local_frame, autoplay=False)
 
-        self.setWindowTitle(
-            f"{constants.VL_TOOL_NAME}-{constants.VL_VERSION} - {os.path.basename(filepath)}"
-        )
-        self.statusBar().showMessage(
-            f"Playlist restored: {len(contexts)} shots", 5000
-        )
-        if missing:
+        if not quiet:
+            self.setWindowTitle(
+                f"{constants.VL_TOOL_NAME}-{constants.VL_VERSION} - {os.path.basename(filepath)}"
+            )
+            self.statusBar().showMessage(
+                f"Playlist restored: {len(contexts)} shots", 5000
+            )
+        if missing and not quiet:
             QtWidgets.QMessageBox.warning(
                 self,
                 "Playlist Restored with Missing Media",
@@ -1756,6 +1789,46 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.seek(self._timeline_frame_for_local(target))
+    def auto_save_last_session(self):
+        """Write the current playlist to the profile last-session file on exit."""
+        if not session.restore_enabled():
+            return False
+        if not self.playlistWidget.local_contexts:
+            session.remove_last_session()
+            return False
+        try:
+            return self.save_playlist(str(session.last_session_path()), quiet=True)
+        except Exception:
+            LOGGER.exception("Unable to auto-save last session")
+            return False
+
+    def restore_last_session(self):
+        """Reload the auto-saved last session on launch, if one exists."""
+        if not session.restore_enabled():
+            return False
+        path = session.last_session_path()
+        if not path.exists():
+            return False
+        try:
+            return self.load_playlist(str(path), quiet=True)
+        except Exception:
+            LOGGER.exception("Unable to restore last session")
+            return False
+
+    def set_session_restore_enabled(self, enabled):
+        """Apply the explicit startup-restore opt-in preference."""
+        try:
+            session.set_restore_enabled(enabled)
+        except Exception:
+            LOGGER.exception("Unable to save session restore preference")
+            blocker = QtCore.QSignalBlocker(self.actionRestoreSession)
+            self.actionRestoreSession.setChecked(session.restore_enabled())
+            del blocker
+            return
+        state = "enabled" if enabled else "disabled"
+        self.statusBar().showMessage(
+            f"Restore Last Session is {state}", 3000
+        )
 
     def _save_current_notes(self):
         """Persist the current source's annotations to its note sidecar."""
@@ -1786,6 +1859,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         """Stop decoder/cache threads cleanly before application exit."""
         self._save_current_notes()
+        self.auto_save_last_session()
         self._release_media_player(self.player)
         self._release_media_player(self.compare_player)
         self.media_cache.shutdown()
