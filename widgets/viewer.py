@@ -423,8 +423,6 @@ class ViewToolbarLayout(HorizontalLayout):
             None, tooltip="Arrow Shape", checkable=True, width=22, height=22
         )
 
-        # Hidden until arrow support is enabled
-        self.arrowButton.setVisible(False)
         self.addWidget(self.arrowButton)
 
         # Ellipse annotation tool
