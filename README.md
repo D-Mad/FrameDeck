@@ -12,10 +12,10 @@ release builds.
 
 | Platform | Direct download | How to run |
 | --- | --- | --- |
-| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.9/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
-| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.9/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
+| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.10/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
+| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.10/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
 
-[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.9).
+[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.10).
 
 ## Highlights
 
