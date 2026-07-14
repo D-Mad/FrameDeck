@@ -399,6 +399,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionUndo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
         self.actionUndo.triggered.connect(self.viewframe.viewer.undo_strokes)
         edit_menu.addAction(self.actionUndo)
+        self.actionRedo = QtGui.QAction("Redo Note", self)
+        self.actionRedo.setIcon(NamePixmapIcon("loop"))
+        self.actionRedo.setShortcuts(
+            [QtGui.QKeySequence("Ctrl+Shift+Z"), QtGui.QKeySequence("Ctrl+Y")]
+        )
+        self.actionRedo.triggered.connect(self.viewframe.viewer.redo_strokes)
+        edit_menu.addAction(self.actionRedo)
         self.actionClearFrame = QtGui.QAction("Clear Notes on Frame", self)
         self.actionClearFrame.setIcon(NamePixmapIcon("clear"))
         self.actionClearFrame.triggered.connect(self.viewframe.viewer.clear_strokes)
