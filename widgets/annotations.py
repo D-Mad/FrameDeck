@@ -601,6 +601,13 @@ class Sketch(object):
         if self.current_frame is None:
             return
 
+        # Comment tool: the viewer pins a note at this point instead. Bail out
+        # before any stroke is created -- a {"type": "comment"} stroke would
+        # render as nothing and be silently discarded by erase(), which only
+        # re-appends the stroke types it recognizes.
+        if self.tool == "comment":
+            return
+
         # Enable drag operation
         self.drawing = True
 

@@ -156,6 +156,15 @@ def _draw_named_icon(name, size=64):
     elif name == "attach":
         painter.setPen(QtGui.QPen(accent, 4)); painter.drawArc(QtCore.QRectF(15, 8, 34, 48), -35 * 16, 245 * 16)
         painter.drawArc(QtCore.QRectF(23, 14, 18, 34), -45 * 16, 235 * 16)
+    elif name == "comment":
+        painter.setPen(QtGui.QPen(accent, 4))
+        painter.setBrush(QtGui.QColor("#3a3f45"))
+        painter.drawEllipse(QtCore.QRectF(16, 8, 32, 32))
+        painter.setBrush(QtGui.QColor("#3a3f45"))
+        path([(23, 35), (32, 56), (41, 35)], True)
+        painter.setBrush(warm)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.drawEllipse(QtCore.QRectF(27, 19, 10, 10))
     elif name == "recaps":
         painter.setPen(QtGui.QPen(accent, 4)); path([(10, 13), (54, 13), (54, 44), (31, 44), (20, 54), (20, 44), (10, 44)], True)
         line(19, 24, 45, 24); line(19, 33, 38, 33)

@@ -151,6 +151,7 @@ from widgets.buttons import ColorButton
 from widgets.buttons import ClearButton
 from widgets.buttons import ArrowButton
 from widgets.buttons import PencilButton
+from widgets.buttons import CommentButton
 from widgets.buttons import NavigateButton
 from widgets.buttons import EraserButton
 from widgets.buttons import RenderButton
@@ -439,6 +440,16 @@ class ViewToolbarLayout(HorizontalLayout):
         )
         self.addWidget(self.rectangleButton)
 
+        # Comment pin tool
+        self.commentButton = CommentButton(
+            None,
+            tooltip="Pin Comment (click the frame to place a note)",
+            checkable=True,
+            width=22,
+            height=22,
+        )
+        self.addWidget(self.commentButton)
+
         # Eraser tool
         self.eraserButton = EraserButton(
             None, tooltip="Erasier Tool", checkable=True, width=22, height=22
@@ -570,6 +581,9 @@ class ViewToolbarLayout(HorizontalLayout):
         self.pencilButton.toggled.connect(lambda enabled: self.set_draw_enabled("pencil", enabled))
         self.navigateButton.clicked.connect(self.deactivate_tools)
         self.arrowButton.toggled.connect(lambda enabled: self.set_draw_enabled("arrow", enabled))
+        self.commentButton.toggled.connect(
+            lambda enabled: self.set_draw_enabled("comment", enabled)
+        )
         self.ellipseButton.toggled.connect(
             lambda enabled: self.set_draw_enabled("ellipse", enabled)
         )
@@ -724,6 +738,7 @@ class ViewToolbarLayout(HorizontalLayout):
         buttons = [
             self.pencilButton,
             self.arrowButton,
+            self.commentButton,
             self.ellipseButton,
             self.rectangleButton,
             self.eraserButton,
@@ -789,6 +804,7 @@ class ViewToolbarLayout(HorizontalLayout):
         for button in (
             self.pencilButton,
             self.arrowButton,
+            self.commentButton,
             self.ellipseButton,
             self.rectangleButton,
             self.eraserButton,
@@ -1202,6 +1218,11 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
     render_finished = QtCore.Signal(str)
     annotation_tool_finished = QtCore.Signal(str)
     fullscreen_requested = QtCore.Signal()
+
+    # Emitted when the comment tool is clicked on the frame, carrying the
+    # normalized (x, y) hit point. The window prompts for the note text; the
+    # viewer deliberately owns no dialog of its own.
+    comment_requested = QtCore.Signal(tuple)
 
     def __init__(self, parent=None):
         """
@@ -2045,6 +2066,15 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             return
 
         point = self.widget_to_image_point(event.position().toPoint())
+
+        # The comment tool pins a note instead of drawing a stroke. Hand the hit
+        # point to the window (which collects the text) and never let it reach
+        # the sketch, which would otherwise store a bogus "comment" stroke.
+        if self.annotations.tool == "comment":
+            if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                self.comment_requested.emit(point)
+            event.accept()
+            return
 
         self.annotations.mousePressEvent(point)
 

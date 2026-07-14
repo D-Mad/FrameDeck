@@ -270,6 +270,12 @@ class AttachButton(IconButton):
     name = "attach"
 
 
+class CommentButton(IconButton):
+    """Pin a comment to a point on the frame."""
+
+    name = "comment"
+
+
 class RecapsButton(IconButton):
     """Recaps button."""
 

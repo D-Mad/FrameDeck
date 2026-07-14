@@ -57,6 +57,7 @@ from playback.reader import MovieReader
 from playback.reader import SequenceReader
 
 from widgets.recaps import RecapsWidget
+from widgets.commentpanel import CommentPanel
 from widgets.styles import SetStylesheet
 from widgets.playlist import PlaylistWidget
 from widgets.shotstrip import ShotSequenceWidget
@@ -181,6 +182,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe = ViewFrame(self)
         self.splitter.addWidget(self.viewframe)
 
+        # Local per-frame comments (sidecar-backed, no tracker involved).
+        self.commentPanel = CommentPanel(self)
+        self.splitter.addWidget(self.commentPanel)
+
         self.recapsWidget = RecapsWidget(self)
         self.splitter.addWidget(self.recapsWidget)
 
@@ -281,6 +286,14 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.viewframe.viewer.fullscreen_requested.connect(self.toggle_fullscreen)
 
+        # --------------------------------------------------------------------
+        # Comment Panel Signal Connections
+        # --------------------------------------------------------------------
+        self.commentPanel.set_sketch(self.viewframe.viewer.annotations)
+        self.viewframe.viewer.comment_requested.connect(self.add_pinned_comment)
+        self.commentPanel.seek_requested.connect(self.seek_to_comment)
+        self.commentPanel.comments_changed.connect(self.handle_comments_changed)
+
         # self.recapsWidget.inputWidget.trigger_snapshot.connect(self.render_snapshot)
 
         # --------------------------------------------------------------------
@@ -321,7 +334,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.apply_review_styles()
 
         # Initial splitter sizes
-        self.splitter.setSizes([320, 1100, 0])
+        self.splitter.setSizes([320, 1100, 0, 0])
 
     def setupIcons(self):
         """
@@ -445,6 +458,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionShotTimeline.setChecked(True)
         self.actionShotTimeline.toggled.connect(self.shotSequenceWidget.setVisible)
         view_menu.addAction(self.actionShotTimeline)
+        self.actionCommentPanel = QtGui.QAction("Comments Panel", self, checkable=True)
+        self.actionCommentPanel.setIcon(NamePixmapIcon("comment"))
+        self.actionCommentPanel.setShortcut(QtGui.QKeySequence("Ctrl+M"))
+        self.actionCommentPanel.toggled.connect(self.set_comment_panel_visible)
+        view_menu.addAction(self.actionCommentPanel)
         self.actionRecaps = QtGui.QAction("Review Notes Panel", self, checkable=True)
         self.actionRecaps.setIcon(NamePixmapIcon("txt"))
         self.actionRecaps.toggled.connect(self.recapsWidget.set_current_recaps)
@@ -822,6 +840,9 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             self.viewframe.timeline.set_current_frame(local_frame)
+
+        # New notes attach to the frame the viewer is actually showing.
+        self.commentPanel.set_current_frame(int(local_frame))
 
     def _on_primary_cache_changed(self, local_frames):
         if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
@@ -1576,6 +1597,68 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.seek(self._timeline_frame_for_local(target))
 
+    def set_comment_panel_visible(self, enabled):
+        """Show or hide the comment sidebar, giving it width on first open."""
+        self.commentPanel.set_visible_state(enabled)
+
+        if not enabled:
+            return
+
+        # The panel starts collapsed to zero width in the splitter; open it to a
+        # usable size the first time it is shown, but never fight a user resize.
+        sizes = self.splitter.sizes()
+        index = self.splitter.indexOf(self.commentPanel)
+        if index < 0 or sizes[index] > 0:
+            return
+
+        width = 320
+        viewer_index = self.splitter.indexOf(self.viewframe)
+        if viewer_index >= 0 and sizes[viewer_index] > width * 2:
+            sizes[viewer_index] -= width
+        sizes[index] = width
+        self.splitter.setSizes(sizes)
+
+    def add_pinned_comment(self, point):
+        """Prompt for text and pin the resulting comment to *point* on the frame.
+
+        Args:
+            point (tuple):
+                Normalized (x, y) hit point emitted by the viewer.
+        """
+
+        annotations = self.viewframe.viewer.annotations
+        frame = annotations.current_frame
+        if frame is None:
+            return
+
+        text, accepted = QtWidgets.QInputDialog.getMultiLineText(
+            self,
+            "Pin Comment",
+            "Note for frame {0}:".format(
+                str(frame).zfill(constants.VL_FRAME_PADDING)
+            ),
+        )
+        if not accepted:
+            return
+
+        if annotations.add_comment(frame, text, x=point[0], y=point[1]) is None:
+            return
+
+        # Make the note visible immediately, even if the panel was closed.
+        self.actionCommentPanel.setChecked(True)
+
+        self.commentPanel.refresh()
+        self.handle_comments_changed()
+
+    def seek_to_comment(self, frame):
+        """Seek to the frame a comment row points at."""
+        self.seek(self._timeline_frame_for_local(frame))
+
+    def handle_comments_changed(self):
+        """Repaint the pins and persist the change to the note sidecar."""
+        self.viewframe.viewer.update()
+        self._save_current_notes()
+
     def _save_current_notes(self):
         """Persist the current source's annotations to its note sidecar."""
         source = self.current_source_filepath
@@ -1595,6 +1678,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             notestore.load_notes(source, self.viewframe.viewer.annotations)
             self.viewframe.viewer.update()
+            self.commentPanel.refresh()
         except Exception:
             LOGGER.exception("Unable to load annotation notes")
 
@@ -1872,6 +1956,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.reviewToolbar,
                 self.statusBar(),
                 self.playlistWidget,
+                self.commentPanel,
                 self.recapsWidget,
                 self.shotSequenceWidget,
             )
