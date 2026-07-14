@@ -385,7 +385,7 @@ class Sketch(object):
         coordinate/color tuples serialize to lists. Empty frames are omitted.
         """
         return {
-            str(frame): strokes
+            str(frame): copy.deepcopy(strokes)
             for frame, strokes in self.strokes.items()
             if strokes
         }
@@ -398,12 +398,19 @@ class Sketch(object):
         history is reset -- the loaded state becomes the new baseline.
         """
         self.strokes = dict()
-        for frame_key, strokes in (data or dict()).items():
+        items = data.items() if isinstance(data, dict) else ()
+        for frame_key, strokes in items:
             try:
                 frame = int(frame_key)
             except (TypeError, ValueError):
                 continue
-            restored = [self._restore_stroke(stroke) for stroke in strokes]
+            if not isinstance(strokes, list):
+                continue
+            restored = [
+                self._restore_stroke(stroke)
+                for stroke in strokes
+                if isinstance(stroke, dict)
+            ]
             if restored:
                 self.strokes[frame] = restored
         self.undo_history.clear()

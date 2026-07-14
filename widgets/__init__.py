@@ -990,6 +990,9 @@ class MainWindow(QtWidgets.QMainWindow):
             # Update watermark resources
             logs = {"studio_logo": NamePixmap(constants.STUDIO_NAME)}
             self.viewframe.viewToolbarLayout.update_watermarks(dict(), **logs)
+            # Cancelling Open must leave the current source and its unsaved
+            # annotations untouched.
+            return False
 
         if isinstance(filepath, (list, tuple)):
             return self.import_media_files(filepath)
@@ -1005,6 +1008,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Persist the outgoing source's annotations before the viewer is wiped.
         self._save_current_notes()
+        # The old source is no longer active. Clearing this before opening the
+        # replacement prevents a failed import followed by app exit from
+        # overwriting the outgoing shot's sidecar with an empty sketch.
+        self.current_source_filepath = None
 
         # Clear current viewer frame
         self.viewframe.viewer.clear()
@@ -1282,6 +1289,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.play_from_playlist(False, replacement)
             return
 
+        self._save_current_notes()
         self.exit_compare()
         self._release_media_player(self.player)
         self.current_source_filepath = None

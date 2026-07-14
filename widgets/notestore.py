@@ -28,8 +28,13 @@ def notes_dir():
 def notes_path_for(source):
     """Return the sidecar path for a given media source path."""
     absolute = os.path.abspath(str(source))
-    digest = hashlib.md5(os.path.normcase(absolute).encode("utf-8")).hexdigest()[:8]
-    return notes_dir() / f"{Path(absolute).stem}_{digest}.fdnotes.json"
+    digest = hashlib.sha256(
+        os.path.normcase(absolute).encode("utf-8")
+    ).hexdigest()[:16]
+    # Keep the filename comfortably below Windows path component limits. The
+    # digest, not the readable stem, is the source identity.
+    stem = Path(absolute).stem[:80] or "media"
+    return notes_dir() / f"{stem}_{digest}.fdnotes.json"
 
 
 def save_notes(source, sketch):
@@ -58,10 +63,18 @@ def save_notes(source, sketch):
         "annotations": data,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with open(temporary, "w", encoding="utf-8") as stream:
-        json.dump(document, stream, ensure_ascii=False, indent=2)
-    os.replace(temporary, path)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with open(temporary, "w", encoding="utf-8") as stream:
+            json.dump(document, stream, ensure_ascii=False, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
     return path
 
 
@@ -89,6 +102,13 @@ def load_notes(source, sketch):
         return False
 
     if not isinstance(document, dict) or document.get("schema") != SCHEMA:
+        sketch.deserialize({})
+        return False
+
+    saved_source = document.get("source")
+    if not saved_source or os.path.normcase(os.path.abspath(str(saved_source))) != (
+        os.path.normcase(os.path.abspath(str(source)))
+    ):
         sketch.deserialize({})
         return False
 

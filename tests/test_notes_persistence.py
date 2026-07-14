@@ -37,6 +37,13 @@ def test_serialize_deserialize_roundtrip_through_json(qapp):
     assert restored.strokes == source.strokes
 
 
+def test_serialize_returns_an_independent_snapshot(qapp):
+    source = _sketch_with_strokes()
+    snapshot = source.serialize()
+    source.strokes[5][0]["points"].append((0.8, 0.9))
+    assert snapshot["5"][0]["points"] == [(0.1, 0.2), (0.3, 0.4)]
+
+
 def test_deserialize_resets_undo_and_redo(qapp):
     sketch = _sketch_with_strokes()
     sketch._record_action({"type": "create", "frame": 5, "stroke_id": "a"})
@@ -78,6 +85,51 @@ def test_notestore_load_missing_clears_sketch(tmp_path, monkeypatch, qapp):
     loaded = notestore.load_notes(str(tmp_path / "never_saved.mov"), sketch)
     assert loaded is False
     assert sketch.strokes == {}
+
+
+def test_notestore_corrupt_json_clears_sketch(tmp_path, monkeypatch, qapp):
+    monkeypatch.setenv("FRAMEDECK_PROFILE_ROOT", str(tmp_path))
+    source = str(tmp_path / "broken.mov")
+    path = notestore.notes_path_for(source)
+    path.parent.mkdir(parents=True)
+    path.write_text("{ definitely not JSON", encoding="utf-8")
+
+    sketch = _sketch_with_strokes()
+    assert notestore.load_notes(source, sketch) is False
+    assert sketch.strokes == {}
+
+
+def test_notestore_rejects_foreign_source(tmp_path, monkeypatch, qapp):
+    monkeypatch.setenv("FRAMEDECK_PROFILE_ROOT", str(tmp_path))
+    source = str(tmp_path / "shot.mov")
+    path = notestore.notes_path_for(source)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema": notestore.SCHEMA,
+                "source": str(tmp_path / "another.mov"),
+                "annotations": _sketch_with_strokes().serialize(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    sketch = _sketch_with_strokes()
+    assert notestore.load_notes(source, sketch) is False
+    assert sketch.strokes == {}
+
+
+def test_deserialize_ignores_malformed_frames_and_strokes(qapp):
+    sketch = _sketch_with_strokes()
+    sketch.deserialize(
+        {
+            "bad-frame": [],
+            "5": "not-a-list",
+            "9": [None, "not-a-stroke", {"id": "ok", "type": "txt"}],
+        }
+    )
+    assert sketch.strokes == {9: [{"id": "ok", "type": "txt"}]}
 
 
 def test_notes_path_is_stable_and_scoped_to_profile(tmp_path, monkeypatch, qapp):
