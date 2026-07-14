@@ -51,6 +51,8 @@ import constants
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
+from playback import speed as speedmath
+
 from widgets.styles import Font
 from widgets.styles import WaitCursor
 
@@ -201,6 +203,81 @@ class ContextCombobox(QtWidgets.QComboBox):
         result = next(filter(lambda x: x[key] == value, self.contextList), None)
 
         return result
+
+
+class SpeedCombobox(QtWidgets.QComboBox):
+    """
+    Playback speed multiplier selector.
+
+    Signals:
+        speed_changed(float):
+            Emits the selected multiplier (1.0 is real time).
+
+    Example:
+        >>> combobox.speed_changed.connect(callback)
+    """
+
+    speed_changed = QtCore.Signal(float)
+
+    def __init__(self, parent=None, **kwargs):
+        """
+        Initialize the playback speed combobox.
+
+        Args:
+            parent (QtWidgets.QWidget):
+                Parent widget.
+        """
+
+        super(SpeedCombobox, self).__init__(parent)
+
+        self.setToolTip("Playback speed (audio is silent off 1x)")
+
+        # Transparent styling, matching the FPS selector beside it.
+        self.setStyleSheet("QComboBox {background: transparent; border: none;}")
+
+        for value in constants.PLAYBACK_SPEEDS:
+            self.addItem(speedmath.label_for(value), float(value))
+
+        self.setValue(constants.DEFAULT_PLAYBACK_SPEED)
+
+        self.currentIndexChanged.connect(self.indexChange)
+
+    def indexChange(self, index):
+        """
+        Handle a speed selection change.
+
+        Args:
+            index (int):
+                Current combobox index.
+        """
+
+        value = self.itemData(index)
+
+        if value is None:
+            return
+
+        self.speed_changed.emit(float(value))
+
+    def setValue(self, value):
+        """
+        Select *value* without re-emitting speed_changed.
+
+        Used to reflect a speed set from elsewhere (menu, shortcut) back into
+        the combobox without looping the signal straight back out again.
+
+        Args:
+            value (float):
+                Speed multiplier to select.
+        """
+
+        index = self.findData(float(value))
+
+        if index < 0:
+            return
+
+        blocker = QtCore.QSignalBlocker(self)
+        self.setCurrentIndex(index)
+        del blocker
 
 
 class FbsCombobox(ContextCombobox):

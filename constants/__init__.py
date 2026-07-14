@@ -171,6 +171,13 @@ COMPARE_MODES = (
     ("flicker", "Flicker A/B"),
 )
 
+# Playback speed multipliers offered in the UI, and the range accepted at all.
+# Audio is only submitted at 1x -- see MoviePlayer.play_audio.
+PLAYBACK_SPEEDS = (0.25, 0.5, 1.0, 1.5, 2.0, 4.0)
+DEFAULT_PLAYBACK_SPEED = 1.0
+MIN_PLAYBACK_SPEED = 0.1
+MAX_PLAYBACK_SPEED = 8.0
+
 FPS_VALUES = [
     {"code": "23.976- FPS", "value": 23.976},
     {"code": "24- FPS", "value": 24},

@@ -63,6 +63,7 @@ import logger
 import constants
 
 from playback import loopmode
+from playback import speed
 
 from collections import deque
 
@@ -355,6 +356,11 @@ class MediaPlayer(BasePlayer):
         if self.player and hasattr(self.player, "set_fps"):
             self.player.set_fps(fps)
 
+    def set_speed(self, value):
+        """Set the playback speed multiplier on the active implementation."""
+        if self.player and hasattr(self.player, "set_speed"):
+            self.player.set_speed(value)
+
     def set_aov(self, aov):
         """Set active AOV.
 
@@ -453,6 +459,10 @@ class SequencePlayer(BasePlayer):
         # +1 forward, -1 reverse (only ever reverses while ping-ponging).
         self.playback_direction = 1
         self.is_playing = False
+
+        # Playback speed multiplier. Scales the timer interval, so the sequence
+        # still shows every frame -- it just steps through them faster/slower.
+        self.speed = constants.DEFAULT_PLAYBACK_SPEED
 
         # Active AOV
         self.current_aov = "rgb"
@@ -617,8 +627,10 @@ class SequencePlayer(BasePlayer):
         # Get Playback FPS
         fps = self.reader.get_fps()
 
-        # Convert FPS To Timer Interval
-        interval = int(1000 / fps)
+        # Convert FPS To Timer Interval, scaled by the playback speed
+        interval = speed.interval_ms(fps, self.speed)
+        if not interval:
+            return
 
         # Start Playback Timer
         self.timer.start(interval)
@@ -707,11 +719,34 @@ class SequencePlayer(BasePlayer):
 
         # Restart timer if currently playing
         if self.is_playing:
-            interval = int(1000 / fps)
-            self.timer.start(interval)
+            interval = speed.interval_ms(fps, self.speed)
+            if interval:
+                self.timer.start(interval)
 
         # Log FPS Update
         LOGGER.info(f'Current FPS, has been changed into, "{fps}-FPS"')
+
+    def set_speed(self, value):
+        """Set the playback speed multiplier.
+
+        The sequence still steps one frame per tick -- only the tick rate
+        changes -- so every frame is still shown, just sooner or later.
+
+        Args:
+            value (float):
+                Speed multiplier (1.0 is real time).
+        """
+
+        self.speed = speed.normalize(value)
+
+        # Re-arm the running timer so the new rate takes effect immediately
+        # rather than after the next tick.
+        if self.is_playing and self.reader:
+            interval = speed.interval_ms(self.reader.get_fps(), self.speed)
+            if interval:
+                self.timer.start(interval)
+
+        LOGGER.info(f'Playback speed set to "{speed.label_for(self.speed)}"')
 
     def set_aov(self, aov):
         """Set active AOV/layer.
@@ -1025,6 +1060,9 @@ class MoviePlayer(BasePlayer):
         self.loop_enabled = False
         self.loop_mode = loopmode.OFF
 
+        # Playback speed multiplier, applied to the elapsed playback clock.
+        self.speed = constants.DEFAULT_PLAYBACK_SPEED
+
         # Timeline start frame.
         self.start_frame = constants.VL_START_FRAME
 
@@ -1203,9 +1241,14 @@ class MoviePlayer(BasePlayer):
             When playback is paused, only the stored playback offset is returned.
         """
 
-        # While playing, combine the stored playback position with the elapsed time measured by the high-resolution timer.
+        # While playing, combine the stored playback position with the elapsed
+        # time measured by the high-resolution timer, scaled by the playback
+        # speed. Presentation stays timestamp-driven, so a faster clock simply
+        # makes more frames fall due per tick -- no frames are decoded twice.
         if self.is_playing:
-            return self.playback_offset + self.elapsed_timer.elapsed() / 1000.0
+            return self.playback_offset + speed.scale_elapsed(
+                self.elapsed_timer.elapsed() / 1000.0, self.speed
+            )
 
         # When paused, return the last stored playback position.
         return self.playback_offset
@@ -1511,6 +1554,15 @@ class MoviePlayer(BasePlayer):
             * The audio output device is ready to receive additional data.
         """
 
+        # Audio is only submitted at 1x. The samples are decoded at their native
+        # rate, so submitting them against a scaled video clock would drift
+        # steadily out of sync, and playing them faster without resampling would
+        # shift the pitch. Off-speed playback is therefore silent, which is what
+        # a reviewer expects when they shuttle -- and it keeps A/V sync honest.
+        if self.speed != constants.DEFAULT_PLAYBACK_SPEED:
+            self.audio_queue.clear()
+            return
+
         # Continue submitting audio frames while they are ready.
         while self.audio_queue:
 
@@ -1782,6 +1834,41 @@ class MoviePlayer(BasePlayer):
 
         self.loop_mode = mode
         self.loop_enabled = mode != loopmode.OFF
+
+    def set_speed(self, value):
+        """Set the playback speed multiplier.
+
+        Movie playback is clock-driven, so speed scales the elapsed playback
+        clock: more (or fewer) decoded frames fall due per tick. Presentation
+        stays timestamp-driven, so frames are still shown in order and none are
+        decoded twice.
+
+        Audio is dropped at any speed other than 1x -- see :meth:`play_audio`.
+
+        Args:
+            value (float):
+                Speed multiplier (1.0 is real time).
+        """
+
+        value = speed.normalize(value)
+        if value == self.speed:
+            return
+
+        # Re-anchor the clock BEFORE swapping the multiplier: bank the position
+        # already reached at the old speed and restart the elapsed timer, so the
+        # new multiplier applies only from here. Without this the whole elapsed
+        # span is retroactively rescaled and playback jumps.
+        if self.is_playing:
+            self.playback_offset = self.current_playback_time()
+            self.elapsed_timer.restart()
+
+        self.speed = value
+
+        # Drop buffered audio on the way out of 1x so stale samples are not
+        # submitted against the rescaled clock.
+        if self.speed != constants.DEFAULT_PLAYBACK_SPEED:
+            self.audio_queue.clear()
+            self.audio_player.flush()
 
     def volume_changed(self, value):
         """Update playback volume.
