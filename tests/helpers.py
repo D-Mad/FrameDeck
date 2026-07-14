@@ -67,25 +67,26 @@ def make_solid_mp4(path, frames=16, width=128, height=72, color=(200, 40, 40), f
 
 
 def make_png_sequence(directory, frames=4, width=64, height=64, start=1, pad=4, base="frame"):
-    """Write a numbered PNG sequence (``base.0001.png`` ...). Returns path list."""
-    import OpenImageIO as oiio
+    """Write a numbered PNG sequence (``base.0001.png`` ...). Returns path list.
+
+    PNGs are written with Qt rather than OpenImageIO: PNG is an optional OIIO
+    format, and common Windows builds ship without it (conda-forge's OIIO
+    reports openexr/tiff/jpeg/dpx but no png), which made the suite unrunnable
+    on the platform FrameDeck primarily ships to. Qt is already a hard
+    dependency of both the app and this harness, and always writes PNG.
+    """
+    from PySide6.QtGui import QColor, QImage
 
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     paths = []
     for i in range(frames):
         number = start + i
-        rgb = np.zeros((height, width, 3), dtype=np.uint8)
-        rgb[:, :] = (200, 40, (i * 30) % 256)
+        image = QImage(width, height, QImage.Format.Format_RGB888)
+        image.fill(QColor(200, 40, (i * 30) % 256))  # varies per frame
         out = directory / f"{base}.{number:0{pad}d}.png"
-        output = oiio.ImageOutput.create(str(out))
-        if output is None:  # pragma: no cover - only if OIIO lacks PNG support
-            raise RuntimeError("OpenImageIO could not create a PNG writer")
-        try:
-            output.open(str(out), oiio.ImageSpec(width, height, 3, "uint8"))
-            output.write_image(rgb)
-        finally:
-            output.close()
+        if not image.save(str(out), "PNG"):  # pragma: no cover - Qt always has PNG
+            raise RuntimeError(f"Qt could not write PNG: {out}")
         paths.append(out)
     return paths
 
