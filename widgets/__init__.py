@@ -523,6 +523,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionHelp.setShortcut(QtGui.QKeySequence("F2"))
         self.actionHelp.triggered.connect(self.help)
         help_menu.addAction(self.actionHelp)
+        self.actionCodecSupport = QtGui.QAction("Codec Support...", self)
+        self.actionCodecSupport.setIcon(NamePixmapIcon("display"))
+        self.actionCodecSupport.triggered.connect(self.show_codec_support)
+        help_menu.addAction(self.actionCodecSupport)
 
         self.reviewToolbar = QtWidgets.QToolBar("Review", self)
         self.reviewToolbar.setObjectName("ReviewToolbar")
@@ -2065,6 +2069,45 @@ class MainWindow(QtWidgets.QMainWindow):
             "Alt+Left / Alt+Right: Reorder selected shot\n"
             "Ctrl+Shift+E: Export high-quality MP4\n"
             "Ctrl+click two Sources: Compare A/B Wipe",
+        )
+
+    def show_codec_support(self):
+        """Show the FFmpeg/PyAV decoder coverage bundled with this build."""
+        import av
+
+        common = (
+            ("H.264 / AVC", "h264"),
+            ("H.265 / HEVC", "hevc"),
+            ("AV1", "av1"),
+            ("VP9", "vp9"),
+            ("MPEG-4", "mpeg4"),
+            ("Apple ProRes", "prores"),
+            ("DNxHD / DNxHR", "dnxhd"),
+            ("HAP", "hap"),
+            ("GoPro CineForm", "cfhd"),
+            ("VVC / H.266", "vvc"),
+            ("VC-1 / WMV", "vc1"),
+        )
+        lines = list()
+        for label, codec in common:
+            try:
+                av.codec.Codec(codec, "r")
+                state = "Available"
+            except (ValueError, av.error.FFmpegError):
+                state = "Unavailable in this build"
+            lines.append(f"{label}: {state}")
+
+        ffmpeg_version = av.library_versions.get("libavcodec", (0, 0, 0))
+        QtWidgets.QMessageBox.information(
+            self,
+            "FrameDeck Codec Support",
+            f"PyAV {av.__version__}  |  libavcodec "
+            f"{'.'.join(map(str, ffmpeg_version))}\n"
+            f"{len(av.codecs_available)} FFmpeg codec entries available\n\n"
+            + "\n".join(lines)
+            + "\n\nContainer support includes MP4, MOV, MXF, MKV, WebM, "
+            "MTS/M2TS, MPEG-TS, AVI, WMV, FLV, 3GP and others.\n"
+            "Proprietary camera SDK-only formats may still require a transcode.",
         )
 
 

@@ -39,6 +39,13 @@ App ho tro Compare Wipe/Overlay/Difference/Side-by-Side/Checker/Flicker,
 EXR/PNG/JPG sequence, AOV, OCIO user/studio,
 cache video server va preview 2K cho video 4K.
 
+Codec va container:
+- Ho tro FFmpeg/PyAV cho H.264, HEVC, AV1, VP9, MPEG-4, ProRes, DNxHD/DNxHR,
+  HAP, CineForm, VVC, VC-1/WMV va nhieu codec khac tuy build.
+- Import MP4, MOV, MXF, MKV, WebM, MTS/M2TS, MPEG-TS, AVI, WMV, FLV, 3GP...
+- Help > Codec Support de xem decoder thuc te co trong ban dang chay.
+- Neu metadata loi, source van duoc them va app hien loi probe/decode ro rang.
+
 Xuat MP4 chat luong cao:
 - File > Export High Quality MP4 hoac Ctrl+Shift+E.
 - MOV/video luon giu dung FPS nguon va co the giu audio AAC 320 kb/s.
