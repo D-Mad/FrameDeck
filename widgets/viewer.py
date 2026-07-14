@@ -1279,6 +1279,10 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         # untouched for caching, annotations, snapshots, and exports.
         self.gamma_check_enabled = False
         self.exposure_check_enabled = False
+
+        # Performance HUD, driven by MainWindow from PlaybackStats.
+        self.stats_hud_enabled = False
+        self.stats_rows = list()
         self.display_gamma = 1.0
         self.display_exposure = 0.0
         self.channel_view = "RGB"
@@ -1868,6 +1872,8 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
         )
         if self.gamma_check_enabled or self.exposure_check_enabled:
             self._draw_display_adjustment_hud(painter)
+        if self.stats_hud_enabled:
+            self._draw_stats_hud(painter)
         painter.end()
 
     @staticmethod
@@ -1882,6 +1888,76 @@ class ViewerWidget(QtOpenGLWidgets.QOpenGLWidget):
             QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft,
             metrics.elidedText(text, QtCore.Qt.TextElideMode.ElideMiddle, width - 18),
         )
+
+    def set_stats_hud(self, enabled):
+        """Show or hide the performance HUD."""
+        self.stats_hud_enabled = bool(enabled)
+        self.update()
+
+    def set_stats_rows(self, rows):
+        """Set the HUD contents as (label, value, ok) rows and repaint."""
+        self.stats_rows = list(rows or [])
+        if self.stats_hud_enabled:
+            self.update()
+
+    def _draw_stats_hud(self, painter):
+        """Draw the performance HUD in the top-left of the viewer."""
+        rows = self.stats_rows
+        if not rows:
+            return
+
+        painter.save()
+
+        font = QtGui.QFont("Consolas")
+        font.setStyleHint(QtGui.QFont.StyleHint.Monospace)
+        font.setPointSize(9)
+        painter.setFont(font)
+
+        metrics = painter.fontMetrics()
+        label_width = max(metrics.horizontalAdvance(row[0]) for row in rows)
+        value_width = max(metrics.horizontalAdvance(row[1]) for row in rows)
+
+        padding = 10
+        gap = 14
+        line_height = metrics.height() + 2
+
+        width = label_width + gap + value_width + padding * 2
+        height = line_height * len(rows) + padding * 2
+
+        rect = QtCore.QRectF(12, 12, width, height)
+        painter.fillRect(rect, QtGui.QColor(18, 21, 24, 225))
+        painter.setPen(QtGui.QPen(QtGui.QColor(224, 174, 74), 1.0))
+        painter.drawRect(rect)
+
+        y = rect.top() + padding
+        for label, value, ok in rows:
+            painter.setPen(QtGui.QColor(150, 158, 166))
+            painter.drawText(
+                QtCore.QRectF(rect.left() + padding, y, label_width, line_height),
+                QtCore.Qt.AlignmentFlag.AlignVCenter
+                | QtCore.Qt.AlignmentFlag.AlignLeft,
+                label,
+            )
+
+            # Only a genuinely bad reading is coloured, so the eye goes straight
+            # to the row that is actually wrong.
+            painter.setPen(
+                QtGui.QColor(238, 238, 238) if ok else QtGui.QColor(255, 92, 92)
+            )
+            painter.drawText(
+                QtCore.QRectF(
+                    rect.left() + padding + label_width + gap,
+                    y,
+                    value_width,
+                    line_height,
+                ),
+                QtCore.Qt.AlignmentFlag.AlignVCenter
+                | QtCore.Qt.AlignmentFlag.AlignLeft,
+                value,
+            )
+            y += line_height
+
+        painter.restore()
 
     def _draw_display_adjustment_hud(self, painter):
         """Draw a compact production-style status chip for image inspection."""
