@@ -55,7 +55,10 @@ def _round(value):
     """Round a normalized coordinate for display, or "" when absent."""
     if value is None:
         return ""
-    return round(float(value), 4)
+    try:
+        return round(float(value), 4)
+    except (TypeError, ValueError):
+        return ""
 
 
 def _stroke_anchor(stroke):
@@ -153,7 +156,8 @@ def write_csv(filepath, sketch, fps=0):
     rows = build_rows(sketch, fps)
 
     # newline="" is required on Windows, else csv writes \r\r\n line endings.
-    with open(filepath, "w", encoding="utf-8", newline="") as stream:
+    # utf-8-sig preserves non-ASCII review notes when opened directly in Excel.
+    with open(filepath, "w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=COLUMNS)
         writer.writeheader()
         writer.writerows(rows)

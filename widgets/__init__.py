@@ -2429,12 +2429,12 @@ class MainWindow(QtWidgets.QMainWindow):
             written = notescsv.write_csv(
                 filepath, annotations, self._current_fps()
             )
-        except OSError:
+        except (OSError, TypeError, ValueError):
             LOGGER.exception("Unable to write notes CSV")
             QtWidgets.QMessageBox.warning(
                 self,
                 "Export Notes as CSV",
-                "Could not write to:\n{0}".format(filepath),
+                "Could not export notes to:\n{0}".format(filepath),
             )
             return
 

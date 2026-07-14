@@ -171,7 +171,7 @@ def test_write_csv_round_trips_through_the_csv_module(tmp_path, qapp):
     written = notescsv.write_csv(str(path), _sketch(), fps=24)
     assert written == 5
 
-    with open(path, "r", encoding="utf-8", newline="") as stream:
+    with open(path, "r", encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
 
     assert len(rows) == 5
@@ -186,7 +186,7 @@ def test_written_csv_has_no_blank_lines(tmp_path, qapp):
     path = tmp_path / "notes.csv"
     notescsv.write_csv(str(path), _sketch(), fps=24)
 
-    with open(path, "r", encoding="utf-8", newline="") as stream:
+    with open(path, "r", encoding="utf-8-sig", newline="") as stream:
         text = stream.read()
 
     assert "\r\r\n" not in text
@@ -200,7 +200,7 @@ def test_commas_and_quotes_in_a_note_survive(tmp_path, qapp):
     path = tmp_path / "notes.csv"
     notescsv.write_csv(str(path), sketch, fps=24)
 
-    with open(path, "r", encoding="utf-8", newline="") as stream:
+    with open(path, "r", encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
 
     assert rows[0]["content"] == 'push the "hero" light, then warm it'
@@ -211,7 +211,36 @@ def test_empty_sketch_writes_a_header_only(tmp_path, qapp):
 
     assert notescsv.write_csv(str(path), Sketch(), fps=24) == 0
 
-    with open(path, "r", encoding="utf-8", newline="") as stream:
+    with open(path, "r", encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.reader(stream))
 
     assert rows == [notescsv.COLUMNS]
+
+
+def test_unicode_notes_are_excel_friendly(tmp_path, qapp):
+    sketch = Sketch()
+    sketch.add_comment(1, "Giảm sáng vùng trời, giữ chi tiết tóc")
+    path = tmp_path / "notes.csv"
+
+    notescsv.write_csv(str(path), sketch, fps=24)
+
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+    with open(path, "r", encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert rows[0]["content"] == "Giảm sáng vùng trời, giữ chi tiết tóc"
+
+
+def test_malformed_coordinate_degrades_to_blank(qapp):
+    sketch = Sketch()
+    sketch.strokes[1] = [
+        {
+            "id": "bad-coordinate",
+            "type": "rectangle",
+            "color": (255, 0, 0),
+            "start": ("not-a-number", object()),
+        }
+    ]
+
+    row = notescsv.build_rows(sketch, fps=24)[0]
+
+    assert (row["x"], row["y"]) == ("", "")
