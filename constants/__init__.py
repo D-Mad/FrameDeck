@@ -113,7 +113,7 @@ VL_TOOL_NAME = "FrameDeck"
 
 VL_TOOL_ICON = "framedeck"
 
-VL_VERSION = "0.0.1-beta.9"
+VL_VERSION = "0.0.1-beta.10"
 
 WINDOW_SIZE = [1400, 800]
 
