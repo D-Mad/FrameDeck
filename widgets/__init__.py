@@ -531,6 +531,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionExitCompare.setIcon(NamePixmapIcon("remove"))
         self.actionExitCompare.triggered.connect(self.exit_compare)
         compare_menu.addAction(self.actionExitCompare)
+        compare_menu.addSeparator()
+        self.actionAutoMatchBSide = QtGui.QAction(
+            "Auto-Match B-Side from Folder...", self
+        )
+        self.actionAutoMatchBSide.triggered.connect(self.auto_match_bside_from_folder)
+        compare_menu.addAction(self.actionAutoMatchBSide)
 
         self.actionOCIO = QtGui.QAction("OCIO Color Management...", self)
         self.actionOCIO.setIcon(NamePixmapIcon("ocio"))
@@ -1625,6 +1631,49 @@ class MainWindow(QtWidgets.QMainWindow):
         if was_active and hasattr(self, "sourceStatusLabel"):
             name = os.path.basename(self.current_source_filepath or "No Media")
             self.sourceStatusLabel.setText(f" SOURCE  |  {name} ")
+
+    def auto_match_bside_from_folder(self):
+        """Scan a folder for renders and load the best name-match as the B-side.
+
+        Uses utils.shot_match to normalize VFX names and score candidates, then
+        reuses the standard A/B compare path to load the winning render.
+        """
+        from utils import shot_match
+
+        if not self.current_source_filepath:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Auto-Match B-Side",
+                "Load a source first, then match a render folder against it.",
+            )
+            return
+
+        folder = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Choose a folder of renders to match against the current source",
+            self.browsepath or os.path.expanduser("~"),
+        )
+        if not folder:
+            return
+
+        renders = shot_match.scan_folder_for_media(folder)
+        matches = shot_match.match_renders_to_plates(
+            renders, [self.current_source_filepath]
+        )
+        match = matches.get(0)
+        if not match:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Auto-Match B-Side",
+                "No render in that folder matched the current source name.",
+            )
+            return
+
+        contexts = [
+            {"media": self.current_source_filepath, "code": "A"},
+            {"media": match, "code": "B"},
+        ]
+        self.start_compare(contexts)
 
     def apply_ocio(self, processor, input_space, display, view):
         self.player.set_ocio(processor, input_space, display, view)
