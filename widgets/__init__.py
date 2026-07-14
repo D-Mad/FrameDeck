@@ -916,7 +916,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return True
 
     def import_media_files(self, paths, autoplay=False):
-        """Add multiple videos to the local playlist and load the first new clip."""
+        """Import multiple sources and load the first without editing the playlist."""
         if isinstance(paths, str):
             paths = [paths]
         paths = list(paths)
@@ -945,7 +945,9 @@ class MainWindow(QtWidgets.QMainWindow):
         """Save shot order and the active review position to .fdplaylist."""
         if not self.playlistWidget.local_contexts:
             QtWidgets.QMessageBox.information(
-                self, "Save Playlist", "Import at least one shot before saving."
+                self,
+                "Save Playlist",
+                "Add at least one source to Shot Playlist before saving.",
             )
             return False
 

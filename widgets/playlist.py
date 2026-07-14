@@ -798,7 +798,12 @@ class PlaylistWidget(QtWidgets.QWidget):
         self._refresh_local_playlist()
 
     def add_local_media(self, paths):
-        """Append videos or collapsed EXR/JPG/PNG sequences."""
+        """Import videos or collapsed sequences into Sources only.
+
+        Importing keeps the editorial Shot Playlist empty.  A source becomes a
+        playlist occurrence only after the user explicitly chooses Add to
+        Playlist, which also allows the same source to be used more than once.
+        """
         if isinstance(paths, str):
             paths = [paths]
 
@@ -830,9 +835,6 @@ class PlaylistWidget(QtWidgets.QWidget):
             added.append(context)
             existing.add(os.path.normcase(path))
 
-        # Keep the convenient import-and-play workflow, while the source bin
-        # also lets users append selected clips (including repeat uses) later.
-        self.local_contexts.extend(self._playlist_context(context) for context in added)
         self._refresh_sources()
         self._refresh_local_playlist()
         return added
