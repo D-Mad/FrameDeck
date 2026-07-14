@@ -33,6 +33,7 @@ import resources
 import constants
 
 from utils import timecode
+from utils import notescsv
 
 from PySide6 import QtGui
 from PySide6 import QtCore
@@ -419,6 +420,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionExportNotes.setIcon(NamePixmapIcon("recaps"))
         self.actionExportNotes.triggered.connect(self.export_notes)
         file_menu.addAction(self.actionExportNotes)
+        self.actionExportNotesCsv = QtGui.QAction("Export Notes as CSV...", self)
+        self.actionExportNotesCsv.setIcon(NamePixmapIcon("export"))
+        self.actionExportNotesCsv.triggered.connect(self.export_notes_csv)
+        file_menu.addAction(self.actionExportNotesCsv)
         file_menu.addSeparator()
         self.actionExit = QtGui.QAction("Exit", self)
         self.actionExit.setIcon(NamePixmapIcon("remove"))
@@ -2386,6 +2391,59 @@ class MainWindow(QtWidgets.QMainWindow):
             parent=self,
         )
         dialog.exec()
+
+    def export_notes_csv(self):
+        """Write every comment and drawing to a CSV, one row per note."""
+        annotations = self.viewframe.viewer.annotations
+
+        if not annotations.annotated_frames():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Notes as CSV",
+                "There are no notes to export yet.",
+            )
+            return
+
+        default = "notes.csv"
+        if self.current_source_filepath:
+            default = "{0}_notes.csv".format(
+                os.path.splitext(os.path.basename(self.current_source_filepath))[0]
+            )
+
+        directory = self.browsepath or (
+            os.path.dirname(self.current_source_filepath)
+            if self.current_source_filepath
+            else ""
+        )
+
+        filepath, _selected = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export notes as CSV",
+            os.path.join(directory, default),
+            "CSV files (*.csv)",
+        )
+        if not filepath:
+            return
+
+        try:
+            written = notescsv.write_csv(
+                filepath, annotations, self._current_fps()
+            )
+        except OSError:
+            LOGGER.exception("Unable to write notes CSV")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Export Notes as CSV",
+                "Could not write to:\n{0}".format(filepath),
+            )
+            return
+
+        self.statusBar().showMessage(
+            "Exported {0} note{1} to {2}".format(
+                written, "" if written == 1 else "s", filepath
+            ),
+            5000,
+        )
 
     def export_notes(self):
         """Export every annotated frame as a PNG with notes burned in."""
