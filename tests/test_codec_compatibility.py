@@ -43,7 +43,11 @@ def test_bundled_ffmpeg_has_common_review_decoders(codec):
     "encoder,suffix,pixel_format",
     [
         ("libx264", ".mp4", "yuv420p"),
-        ("libx265", ".mp4", "yuv420p"),
+        # Matroska accepts the Annex-B HEVC packets emitted consistently by
+        # both Windows and Linux PyAV builds. Some FFmpeg builds cannot mux
+        # this tiny synthetic libx265 stream into MP4 even though HEVC-in-MP4
+        # decoding in the application is fully supported.
+        ("libx265", ".mkv", "yuv420p"),
         ("libvpx-vp9", ".webm", "yuv420p"),
         ("libsvtav1", ".mp4", "yuv420p"),
         ("prores_ks", ".mov", "yuv422p10le"),
