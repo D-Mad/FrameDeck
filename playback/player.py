@@ -62,6 +62,8 @@ import utils
 import logger
 import constants
 
+from playback import loopmode
+
 from collections import deque
 
 from PySide6 import QtCore
@@ -325,6 +327,18 @@ class MediaPlayer(BasePlayer):
         if self.player:
             self.player.set_loop(enabled)
 
+    def set_loop_mode(self, mode):
+        """Set the playback loop mode ("off", "loop" or "pingpong").
+
+        Args:
+            mode (str):
+                Loop mode. Ping-pong reverses at each end for image sequences;
+                movies fall back to a normal loop (see MoviePlayer).
+        """
+
+        if self.player:
+            self.player.set_loop_mode(mode)
+
     def seek(self, frame):
         """Seek to timeline frame.
 
@@ -435,6 +449,9 @@ class SequencePlayer(BasePlayer):
 
         # Playback State
         self.loop_enabled = False
+        self.loop_mode = loopmode.OFF
+        # +1 forward, -1 reverse (only ever reverses while ping-ponging).
+        self.playback_direction = 1
         self.is_playing = False
 
         # Active AOV
@@ -543,17 +560,19 @@ class SequencePlayer(BasePlayer):
         # Display Current Frame
         self.update_frame()
 
-        # Advance Timeline Frame
-        self.current_frame += 1
+        # Advance Timeline Frame (direction-aware: ping-pong reverses at the ends)
+        self.current_frame, self.playback_direction, finished = loopmode.advance(
+            self.current_frame,
+            self.start_frame,
+            self.end_frame,
+            self.playback_direction,
+            self.loop_mode,
+        )
 
         # Handle Playback End
-        if self.current_frame >= self.end_frame:
-            if self.loop_enabled:  # Loop Playback
-                self.current_frame = self.start_frame
-            else:  # Stop Playback
-                self.current_frame = self.end_frame - 1
-                self.pause()
-                self.playback_finished.emit()
+        if finished:
+            self.pause()
+            self.playback_finished.emit()
 
     def toggle_play_pause(self):
         """Toggle playback state.
@@ -641,8 +660,25 @@ class SequencePlayer(BasePlayer):
             >>> player.set_loop(True)
         """
 
-        # Update Loop State
-        self.loop_enabled = enabled
+        self.set_loop_mode(loopmode.LOOP if enabled else loopmode.OFF)
+
+    def set_loop_mode(self, mode):
+        """Set the playback loop mode.
+
+        Args:
+            mode (str):
+                "off", "loop" or "pingpong". Ping-pong reverses direction at
+                each end of the range instead of jumping back to the start.
+        """
+
+        if mode not in loopmode.MODES:
+            mode = loopmode.OFF
+
+        self.loop_mode = mode
+        self.loop_enabled = mode != loopmode.OFF
+
+        # Always resume forward when the mode changes.
+        self.playback_direction = 1
 
     def set_fps(self, fps):
         """Set playback FPS.
@@ -726,6 +762,9 @@ class SequencePlayer(BasePlayer):
             self.start_frame,
             min(int(frame), self.end_frame - 1),
         )
+
+        # A scrub always resumes forward, even mid ping-pong reverse.
+        self.playback_direction = 1
 
         # Refresh Viewer Frame
         self.update_frame()
@@ -901,12 +940,20 @@ class SequencePlayer(BasePlayer):
     def _queue_prefetch(self, anchor):
         if not self.reader or not self.decoder:
             return
-        for offset in range(1, constants.VL_SEQUENCE_PREFETCH_FRAMES + 1):
-            frame_number = int(anchor) + offset
-            if frame_number >= self.end_frame:
-                if not self.loop_enabled:
-                    break
-                frame_number = self.start_frame + (frame_number - self.end_frame)
+        frame_number = int(anchor)
+        direction = self.playback_direction
+        queued = set()
+        for _offset in range(1, constants.VL_SEQUENCE_PREFETCH_FRAMES + 1):
+            frame_number, direction, finished = loopmode.advance(
+                frame_number,
+                self.start_frame,
+                self.end_frame,
+                direction,
+                self.loop_mode,
+            )
+            if finished or frame_number in queued:
+                break
+            queued.add(frame_number)
             if self.cache.has_frame(frame_number):
                 continue
             self.decoder.request(
@@ -976,6 +1023,7 @@ class MoviePlayer(BasePlayer):
 
         # Loop playback state.
         self.loop_enabled = False
+        self.loop_mode = loopmode.OFF
 
         # Timeline start frame.
         self.start_frame = constants.VL_START_FRAME
@@ -1713,8 +1761,27 @@ class MoviePlayer(BasePlayer):
             update_playback()
         """
 
-        # Store the loop playback state.
-        self.loop_enabled = enabled
+        self.set_loop_mode(loopmode.LOOP if enabled else loopmode.OFF)
+
+    def set_loop_mode(self, mode):
+        """Set the playback loop mode.
+
+        Ping-pong is not supported for movies: playback here is time-driven and
+        audio-synchronized (packets are decoded forward into a queue against a
+        monotonic clock), so it cannot run in reverse without backward decoding
+        and breaking A/V sync. Ping-pong therefore behaves as a normal loop for
+        movies; it reverses as expected for image sequences.
+
+        Args:
+            mode (str):
+                "off", "loop" or "pingpong".
+        """
+
+        if mode not in loopmode.MODES:
+            mode = loopmode.OFF
+
+        self.loop_mode = mode
+        self.loop_enabled = mode != loopmode.OFF
 
     def volume_changed(self, value):
         """Update playback volume.

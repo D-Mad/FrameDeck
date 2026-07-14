@@ -126,6 +126,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # One shared loop state drives both the menu action and timeline button.
         # During playlist playback this loops the whole edit, never one clip.
         self.loop_enabled = False
+        self.loop_mode = "off"
         self._playlist_loading = False
         self.playlist_entries = list()
         self.playlist_entry_index = -1
@@ -504,6 +505,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionLoop.setIcon(NamePixmapIcon("loop"))
         self.actionLoop.toggled.connect(self.set_loop)
         playback_menu.addAction(self.actionLoop)
+        loop_mode_menu = playback_menu.addMenu("Loop Mode")
+        self.loopModeActionGroup = QtGui.QActionGroup(self)
+        self.loopModeActionGroup.setExclusive(True)
+        self.loopModeActions = {}
+        for mode, label in constants.LOOP_MODES:
+            action = QtGui.QAction(label, self, checkable=True)
+            action.setData(mode)
+            action.setChecked(mode == "off")
+            action.triggered.connect(
+                lambda _checked=False, selected=mode: self.set_loop_mode(selected)
+            )
+            self.loopModeActionGroup.addAction(action)
+            loop_mode_menu.addAction(action)
+            self.loopModeActions[mode] = action
 
         self.actionCompare = QtGui.QAction("Compare Selected A/B", self)
         self.actionCompare.setIcon(NamePixmapIcon("display"))
@@ -1141,9 +1156,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
 
         # Playlist entries must finish so playback_finished can advance to the
-        # next shot. Outside playlist mode, retain the user's loop preference.
-        self.player.set_loop(
-            False if self.playlist_playback_active else self.loop_enabled
+        # next shot. Outside playlist mode, retain the user's loop preference
+        # (including ping-pong) across media loads.
+        self.player.set_loop_mode(
+            "off" if self.playlist_playback_active else self.loop_mode
         )
 
         self.ocio_widget.set_current_media(
@@ -1298,6 +1314,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "active_media": self.playlistWidget.current_local_path,
             "current_frame": self.viewframe.timeline.current_frame,
             "shot_timeline_visible": self.shotSequenceWidget.isVisible(),
+            "loop_mode": self.loop_mode,
             "window": {"geometry": session.encode_geometry(self.saveGeometry())},
         }
         temporary = filepath + ".tmp"
@@ -1380,6 +1397,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionShotTimeline.setChecked(
             bool(document.get("shot_timeline_visible", True))
         )
+        self.set_loop_mode(document.get("loop_mode", "off"))
         saved_frame = int(document.get("current_frame") or constants.VL_START_FRAME)
         index, entry = self._playlist_entry_for_frame(saved_frame)
         if entry is None:
@@ -1549,6 +1567,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             secondary_path = self.media_cache.resolve(paths[1])
             self.compare_player.load(secondary_path)
+            self.compare_player.set_loop_mode(self.loop_mode)
             self.compare_player.volume_changed(0)
             self._configure_compare_color(
                 paths[1],
@@ -2099,12 +2118,27 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def set_loop(self, enabled):
         """
-        Toggle playback loop state.
+        Toggle playback loop state (the on/off form of set_loop_mode).
         """
-        self.loop_enabled = bool(enabled)
+        self.set_loop_mode("loop" if enabled else "off")
 
-        # Loop can be changed from either the Playback menu or the timeline
-        # button. Keep both controls synchronized without recursive signals.
+    def set_loop_mode(self, mode):
+        """
+        Set the playback loop mode: "off", "loop" or "pingpong".
+
+        Ping-pong reverses at each end of the range for image sequences. Movies
+        fall back to a normal loop -- their playback is time-driven and
+        audio-synchronized, so it cannot run in reverse (see MoviePlayer).
+        """
+        if mode not in dict(constants.LOOP_MODES):
+            mode = "off"
+
+        self.loop_mode = mode
+        self.loop_enabled = mode != "off"
+
+        # Loop can be changed from the Playback menu, the Loop Mode submenu or
+        # the timeline button. Keep them all synchronized without recursive
+        # signals.
         controls = [getattr(self, "actionLoop", None)]
         timeline_button = getattr(
             getattr(
@@ -2122,12 +2156,39 @@ class MainWindow(QtWidgets.QMainWindow):
                 control.setChecked(self.loop_enabled)
                 del blocker
 
+        for value, action in getattr(self, "loopModeActions", dict()).items():
+            if action.isChecked() != (value == mode):
+                blocker = QtCore.QSignalBlocker(action)
+                action.setChecked(value == mode)
+                del blocker
+
         # In playlist mode Loop means loop the whole edit, not one shot.
-        self.player.set_loop(
-            False if self.playlist_playback_active else self.loop_enabled
+        self.player.set_loop_mode(
+            "off" if self.playlist_playback_active else mode
         )
         if self.compare_active:
-            self.compare_player.set_loop(self.loop_enabled)
+            self.compare_player.set_loop_mode(mode)
+
+        label = dict(constants.LOOP_MODES)[mode]
+        if timeline_button is not None:
+            timeline_button.setToolTip(f"Loop Mode: {label}")
+        if mode == "pingpong" and self.playlist_playback_active:
+            message = (
+                "Ping-Pong applies to image sequences; Shot Playlist loops "
+                "the complete edit forward"
+            )
+        elif (
+            mode == "pingpong"
+            and self.player.reader is not None
+            and self.player.reader.media_type == "video"
+        ):
+            message = (
+                "Movie audio playback uses a forward loop; Ping-Pong reverses "
+                "image sequences"
+            )
+        else:
+            message = f"Playback mode: {label}"
+        self.statusBar().showMessage(message, 4500)
 
     def set_gamma_check(self, enabled):
         """Toggle temporary Y-drag gamma inspection in the viewer."""
