@@ -106,6 +106,7 @@ Notes:
 from __future__ import absolute_import
 
 import copy
+import math
 import uuid
 
 import constants
@@ -508,8 +509,8 @@ class Sketch(object):
         if self.tool == "pencil":
             stroke["points"] = [point]
 
-        # Rectangle / Ellipse
-        elif self.tool in ["rectangle", "ellipse"]:
+        # Rectangle / Ellipse / Arrow
+        elif self.tool in ["rectangle", "ellipse", "arrow"]:
             stroke["start"] = point
             stroke["end"] = point
 
@@ -559,8 +560,8 @@ class Sketch(object):
         if typed == "pencil":
             self.current_shape["points"].append(point)
 
-        # Rectangle / Ellipse
-        elif typed in ["rectangle", "ellipse"]:
+        # Rectangle / Ellipse / Arrow
+        elif typed in ["rectangle", "ellipse", "arrow"]:
             self.current_shape["end"] = point
 
     def mouseReleaseEvent(self, point):
@@ -604,7 +605,7 @@ class Sketch(object):
         if self.current_shape:
             typed = self.current_shape["type"]
 
-            if typed in ["rectangle", "ellipse"]:
+            if typed in ["rectangle", "ellipse", "arrow"]:
                 self.current_shape["end"] = point
 
             self._record_action(
@@ -671,6 +672,13 @@ class Sketch(object):
                 painter.setPen(pen)
 
                 self.draw_ellipse(painter, stroke, point_converter)
+
+            # Arrow
+            elif typed == "arrow":
+                pen = StrokePen(stroke["color"], thickness=stroke["thickness"])
+                painter.setPen(pen)
+                self.draw_arrow(painter, stroke, point_converter)
+
             # Text
             elif typed == "txt":
                 self.draw_text(painter, stroke, point_converter)
@@ -768,6 +776,61 @@ class Sketch(object):
         rect = QtCore.QRectF(point1, point2).normalized()
 
         painter.drawRect(rect)
+
+    def draw_arrow(self, painter, stroke, point_converter=None):
+        """
+        Draw an arrow: a straight shaft with a filled head at the end point.
+
+        The head is sized from the shaft length in device space, so it stays
+        proportional at any zoom level and never overwhelms a short arrow.
+
+        Args:
+            painter (QtGui.QPainter): Active painter.
+            stroke (dict): Stroke containing start/end points.
+            point_converter (callable, optional): Coordinate transform.
+
+        Returns:
+            None
+        """
+
+        point1 = stroke["start"]
+        point2 = stroke["end"]
+
+        if point_converter:
+            point1 = point_converter(point1)
+            point2 = point_converter(point2)
+
+        # Shaft
+        painter.drawLine(point1, point2)
+
+        delta_x = point2.x() - point1.x()
+        delta_y = point2.y() - point1.y()
+        length = math.hypot(delta_x, delta_y)
+
+        # Degenerate arrow (click without drag) has no direction to point in.
+        if length <= 0.0:
+            return
+
+        head = min(20.0, length * 0.3)
+        angle = math.atan2(delta_y, delta_x)
+        spread = math.radians(25.0)
+
+        left = QtCore.QPointF(
+            point2.x() - head * math.cos(angle - spread),
+            point2.y() - head * math.sin(angle - spread),
+        )
+        right = QtCore.QPointF(
+            point2.x() - head * math.cos(angle + spread),
+            point2.y() - head * math.sin(angle + spread),
+        )
+
+        path = QtGui.QPainterPath()
+        path.moveTo(point2)
+        path.lineTo(left)
+        path.lineTo(right)
+        path.closeSubpath()
+
+        painter.fillPath(path, QtGui.QColor(*stroke["color"]))
 
     def draw_text(self, painter, stroke, point_converter=None):
         """
@@ -869,6 +932,11 @@ class Sketch(object):
                 if not self.hit_ellipse(stroke, point):
                     new_strokes.append(stroke)
 
+            # Arrow
+            elif typed == "arrow":
+                if not self.hit_arrow(stroke, point):
+                    new_strokes.append(stroke)
+
             # Text
             elif typed == "txt":
                 if not self.hit_txt(stroke, point):
@@ -901,8 +969,8 @@ class Sketch(object):
         if typed == "pencil":
             stroke["points"] = [(x + dx, y + dy) for x, y in stroke["points"]]
 
-        # Shapes (Rectangle, Ellipse)
-        elif typed in ["rectangle", "ellipse"]:
+        # Shapes (Rectangle, Ellipse, Arrow)
+        elif typed in ["rectangle", "ellipse", "arrow"]:
             x1, y1 = stroke["start"]
             x2, y2 = stroke["end"]
 
@@ -945,8 +1013,8 @@ class Sketch(object):
 
             return rect
 
-        # Shapes (Rectangle, Ellipse)
-        elif stroke["type"] in ["rectangle", "ellipse"]:
+        # Shapes (Rectangle, Ellipse, Arrow)
+        elif stroke["type"] in ["rectangle", "ellipse", "arrow"]:
             p1 = stroke["start"]
             p2 = stroke["end"]
 
@@ -1284,10 +1352,52 @@ class Sketch(object):
                 if self.hit_ellipse(stroke, point):
                     return stroke
 
+            elif typed == "arrow":
+                if self.hit_arrow(stroke, point):
+                    return stroke
+
             elif typed == "pencil":
                 if self.hit_pencil_move(stroke, point):
                     return stroke
         return None
+
+    def hit_arrow(self, stroke, point, radius=0.01):
+        """
+        Hit-test an arrow by proximity to its shaft.
+
+        Measures the distance from *point* to the arrow's line segment (not its
+        bounding box), so a diagonal arrow is only picked near the line itself.
+
+        Args:
+            stroke (dict): Arrow stroke with start/end points.
+            point (tuple): Cursor position.
+            radius (float): Pick tolerance in normalized units.
+
+        Returns:
+            bool: True if the point lies within *radius* of the shaft.
+        """
+
+        x1, y1 = stroke["start"]
+        x2, y2 = stroke["end"]
+        px, py = point[0], point[1]
+
+        delta_x = x2 - x1
+        delta_y = y2 - y1
+        length_squared = delta_x * delta_x + delta_y * delta_y
+
+        if length_squared <= 0.0:
+            # Degenerate arrow: fall back to a point check.
+            return ((px - x1) ** 2 + (py - y1) ** 2) <= radius * radius
+
+        # Project onto the segment, clamped so the ends do not extend the pick.
+        along = ((px - x1) * delta_x + (py - y1) * delta_y) / length_squared
+        along = max(0.0, min(1.0, along))
+
+        nearest_x = x1 + along * delta_x
+        nearest_y = y1 + along * delta_y
+
+        distance_squared = (px - nearest_x) ** 2 + (py - nearest_y) ** 2
+        return distance_squared <= radius * radius
 
     def hit_pencil_move(self, stroke, point):
         """
@@ -1327,7 +1437,18 @@ class Sketch(object):
         if self.current_frame is None:
             return
 
-        # Safely remove frame entry if it exists
+        frame_strokes = self.strokes.get(self.current_frame)
+        if not frame_strokes:
+            return
+
+        # Treat Clear Notes on Frame like an erase so it can be undone/redone.
+        self._record_action(
+            {
+                "type": "erase",
+                "frame": self.current_frame,
+                "strokes": copy.deepcopy(frame_strokes),
+            }
+        )
         self.strokes.pop(self.current_frame, None)
 
     def clear_all(self):
@@ -1341,6 +1462,10 @@ class Sketch(object):
         """
 
         self.strokes.clear()
+        # A source change calls clear_all(); history from the previous source
+        # must never be able to restore notes into the newly opened source.
+        self.undo_history.clear()
+        self.redo_history.clear()
 
     def draw_overlays(self, painter, rect):
         """

@@ -66,3 +66,28 @@ def test_erase_undo_and_redo(qapp):
     assert _ids(sketch, 3) == ["x"]
     sketch.redo()  # re-applies the erase
     assert sketch.strokes.get(3) == []
+
+
+def test_clear_frame_is_undoable(qapp):
+    sketch = Sketch()
+    sketch.current_frame = 4
+    sketch.strokes[4] = [{"id": "note", "type": "pencil"}]
+    sketch.clear()
+    assert 4 not in sketch.strokes
+    sketch.undo()
+    assert _ids(sketch, 4) == ["note"]
+    sketch.redo()
+    assert 4 not in sketch.strokes
+
+
+def test_clear_all_resets_history_between_sources(qapp):
+    sketch = Sketch()
+    _add_created_stroke(sketch, 1, "old-source")
+    sketch.undo()
+    assert sketch.redo_history
+    sketch.clear_all()
+    assert sketch.strokes == {}
+    assert sketch.undo_history == []
+    assert sketch.redo_history == []
+    sketch.redo()
+    assert sketch.strokes == {}

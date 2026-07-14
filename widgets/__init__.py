@@ -32,6 +32,8 @@ import logger
 import resources
 import constants
 
+from utils import timecode
+
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
@@ -400,7 +402,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionUndo.triggered.connect(self.viewframe.viewer.undo_strokes)
         edit_menu.addAction(self.actionUndo)
         self.actionRedo = QtGui.QAction("Redo Note", self)
-        self.actionRedo.setIcon(NamePixmapIcon("loop"))
+        self.actionRedo.setIcon(NamePixmapIcon("redo"))
         self.actionRedo.setShortcuts(
             [QtGui.QKeySequence("Ctrl+Shift+Z"), QtGui.QKeySequence("Ctrl+Y")]
         )
@@ -523,6 +525,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionHelp.setShortcut(QtGui.QKeySequence("F2"))
         self.actionHelp.triggered.connect(self.help)
         help_menu.addAction(self.actionHelp)
+        self.actionCodecSupport = QtGui.QAction("Codec Support...", self)
+        self.actionCodecSupport.setIcon(NamePixmapIcon("display"))
+        self.actionCodecSupport.triggered.connect(self.show_codec_support)
+        help_menu.addAction(self.actionCodecSupport)
 
         self.reviewToolbar = QtWidgets.QToolBar("Review", self)
         self.reviewToolbar.setObjectName("ReviewToolbar")
@@ -576,6 +582,9 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         self.reviewToolbar.addWidget(spacer)
+        self.timecodeStatusLabel = QtWidgets.QLabel(" TC  |  --:--:--:-- ")
+        self.timecodeStatusLabel.setObjectName("TimecodeStatusLabel")
+        self.reviewToolbar.addWidget(self.timecodeStatusLabel)
         self.colorStatusLabel = QtWidgets.QLabel(" COLOR  |  Auto ")
         self.colorStatusLabel.setObjectName("ColorStatusLabel")
         self.reviewToolbar.addWidget(self.colorStatusLabel)
@@ -634,7 +643,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background: #3b4046;
                 border-color: #d3a347;
             }
-            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel {
+            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel, QLabel#TimecodeStatusLabel {
                 background: #15171a;
                 border: 1px solid #30343a;
                 color: #c8cbce;
@@ -801,6 +810,26 @@ class MainWindow(QtWidgets.QMainWindow):
             return len(self.playlist_entries) - 1, self.playlist_entries[-1]
         return -1, None
 
+    def _current_fps(self):
+        """Frame rate used for timecode: the player's rate, else the source's."""
+        fps = getattr(self.player, "fps", None)
+        if not fps and getattr(self.player, "reader", None) is not None:
+            try:
+                fps = self.player.reader.get_fps()
+            except Exception:
+                fps = None
+        return fps or 0
+
+    def _update_timecode_status(self):
+        """Refresh the toolbar TC readout from the current timeline frame."""
+        if not hasattr(self, "timecodeStatusLabel"):
+            return
+        frame = int(self.viewframe.timeline.current_frame)
+        # The timeline is 1-based; timecode counts from frame 0.
+        zero_based = max(0, frame - constants.VL_START_FRAME)
+        code = timecode.frame_to_timecode(zero_based, self._current_fps())
+        self.timecodeStatusLabel.setText(f" TC  |  {code}   F {frame} ")
+
     def _on_primary_frame_changed(self, local_frame):
         if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
             entry = self.playlist_entries[self.playlist_entry_index]
@@ -810,6 +839,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             self.viewframe.timeline.set_current_frame(local_frame)
+        self._update_timecode_status()
 
     def _on_primary_cache_changed(self, local_frames):
         if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
@@ -1264,6 +1294,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "sourceStatusLabel"):
             self.sourceStatusLabel.setText(" SOURCE  |  No Media ")
             self.colorStatusLabel.setText(" COLOR  |  Auto ")
+            self.timecodeStatusLabel.setText(" TC  |  --:--:--:-- ")
 
     def cache_current_media(self):
         if not self.current_source_filepath:
@@ -2093,6 +2124,45 @@ class MainWindow(QtWidgets.QMainWindow):
             "Alt+Left / Alt+Right: Reorder selected shot\n"
             "Ctrl+Shift+E: Export high-quality MP4\n"
             "Ctrl+click two Sources: Compare A/B Wipe",
+        )
+
+    def show_codec_support(self):
+        """Show the FFmpeg/PyAV decoder coverage bundled with this build."""
+        import av
+
+        common = (
+            ("H.264 / AVC", "h264"),
+            ("H.265 / HEVC", "hevc"),
+            ("AV1", "av1"),
+            ("VP9", "vp9"),
+            ("MPEG-4", "mpeg4"),
+            ("Apple ProRes", "prores"),
+            ("DNxHD / DNxHR", "dnxhd"),
+            ("HAP", "hap"),
+            ("GoPro CineForm", "cfhd"),
+            ("VVC / H.266", "vvc"),
+            ("VC-1 / WMV", "vc1"),
+        )
+        lines = list()
+        for label, codec in common:
+            try:
+                av.codec.Codec(codec, "r")
+                state = "Available"
+            except (ValueError, av.error.FFmpegError):
+                state = "Unavailable in this build"
+            lines.append(f"{label}: {state}")
+
+        ffmpeg_version = av.library_versions.get("libavcodec", (0, 0, 0))
+        QtWidgets.QMessageBox.information(
+            self,
+            "FrameDeck Codec Support",
+            f"PyAV {av.__version__}  |  libavcodec "
+            f"{'.'.join(map(str, ffmpeg_version))}\n"
+            f"{len(av.codecs_available)} FFmpeg codec entries available\n\n"
+            + "\n".join(lines)
+            + "\n\nContainer support includes MP4, MOV, MXF, MKV, WebM, "
+            "MTS/M2TS, MPEG-TS, AVI, WMV, FLV, 3GP and others.\n"
+            "Proprietary camera SDK-only formats may still require a transcode.",
         )
 
 
