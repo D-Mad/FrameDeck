@@ -12,10 +12,10 @@ release builds.
 
 | Platform | Direct download | How to run |
 | --- | --- | --- |
-| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.11/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
-| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.11/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
+| Windows 10/11 x64 | **[Download FrameDeck-Windows-x64.zip](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.12/FrameDeck-Windows-x64.zip)** | Extract the complete ZIP, then double-click `FrameDeck.exe`. |
+| Ubuntu x86_64 | **[Download FrameDeck-Ubuntu-x86_64.AppImage](https://github.com/D-Mad/FrameDeck/releases/download/v0.0.1-beta.12/FrameDeck-Ubuntu-x86_64.AppImage)** | Mark the AppImage executable, then run it. |
 
-[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.11).
+[View the release page, notes, file sizes, and checksums](https://github.com/D-Mad/FrameDeck/releases/tag/v0.0.1-beta.12).
 
 ## Highlights
 
@@ -37,6 +37,11 @@ release builds.
 - Local media/proxy cache for server sources and color-aware 2K EXR previews.
 - Broad FFmpeg/PyAV movie decoding for MP4/MOV/MXF/MKV/WebM/MTS and other
   professional containers, with codec metadata and visible probe diagnostics.
+- SMPTE timecode including correct 29.97/59.94 drop-frame display.
+- Persistent frame comments with viewer pins, open/resolved filters, frame
+  navigation, and a dedicated professional review sidebar.
+- Ping-Pong playback for image sequences and VFX shot-name matching for quickly
+  finding related plate/comp versions in A/B Compare.
 - Full-resolution JPG/PNG extraction and high-quality MP4 export.
 - Portable Windows build and Ubuntu AppImage release automation.
 
@@ -79,7 +84,12 @@ expanded production workflow:
 - Server-media background caching with progress, configurable limits, cache
   inspection, multi-shot caching, and safe cache clearing.
 - MOV thumbnail support, audio decode/output, mute and volume controls.
-- MP4/MOV/AVI playback plus numbered EXR/JPG/PNG sequences and EXR AOVs.
+- H.264/AVC, H.265/HEVC, AV1, VP8/VP9, ProRes and other decoders exposed by the
+  bundled FFmpeg/PyAV runtime, across MP4, MOV, MXF, MKV, WebM, MTS/M2TS, TS,
+  AVI, MPEG, WMV/ASF, FLV, OGV, 3GP and other supported containers.
+- Numbered EXR/DPX/JPG/PNG/TIFF sequences, EXR AOVs, bounded corruption
+  recovery, VFR frame-rate fallback, and detailed errors for unsupported or
+  damaged streams.
 
 ### Color management
 
@@ -98,8 +108,12 @@ expanded production workflow:
 
 - Synchronized A/B review with vertical/horizontal wipe, opacity overlay,
   difference, side-by-side, checkerboard, A-only, B-only, and flicker modes.
-- Per-frame Pencil and Text annotations, Navigate/Esc tool exit, undo/erase,
-  and export of all annotated frames.
+- Per-frame Pencil, Text and Arrow annotations, Navigate/Esc tool exit,
+  undo/redo/erase, automatic note sidecars, and export of annotated frames.
+- Per-frame review comments with optional on-image pins, open/resolved state,
+  All/Current Frame filters, frame jumping, deletion and immediate persistence.
+- Ping-Pong image-sequence review and automatic VFX shot/version matching for
+  fast A/B source setup.
 
 ### Export and delivery
 
@@ -125,6 +139,7 @@ expanded production workflow:
 | Esc | Exit full screen or annotation mode |
 | Alt+Left / Alt+Right | Reorder selected playlist shot |
 | Ctrl+Shift+S / Ctrl+Shift+O | Save / open `.fdplaylist` |
+| Ctrl+Enter | Add the current review comment |
 
 ## Build from source
 
