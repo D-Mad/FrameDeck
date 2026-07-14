@@ -32,6 +32,8 @@ import logger
 import resources
 import constants
 
+from utils import timecode
+
 from PySide6 import QtGui
 from PySide6 import QtCore
 from PySide6 import QtWidgets
@@ -569,6 +571,9 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         self.reviewToolbar.addWidget(spacer)
+        self.timecodeStatusLabel = QtWidgets.QLabel(" TC  |  --:--:--:-- ")
+        self.timecodeStatusLabel.setObjectName("TimecodeStatusLabel")
+        self.reviewToolbar.addWidget(self.timecodeStatusLabel)
         self.colorStatusLabel = QtWidgets.QLabel(" COLOR  |  Auto ")
         self.colorStatusLabel.setObjectName("ColorStatusLabel")
         self.reviewToolbar.addWidget(self.colorStatusLabel)
@@ -627,7 +632,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background: #3b4046;
                 border-color: #d3a347;
             }
-            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel {
+            QLabel#SourceStatusLabel, QLabel#ColorStatusLabel, QLabel#TimecodeStatusLabel {
                 background: #15171a;
                 border: 1px solid #30343a;
                 color: #c8cbce;
@@ -794,6 +799,26 @@ class MainWindow(QtWidgets.QMainWindow):
             return len(self.playlist_entries) - 1, self.playlist_entries[-1]
         return -1, None
 
+    def _current_fps(self):
+        """Frame rate used for timecode: the player's rate, else the source's."""
+        fps = getattr(self.player, "fps", None)
+        if not fps and getattr(self.player, "reader", None) is not None:
+            try:
+                fps = self.player.reader.get_fps()
+            except Exception:
+                fps = None
+        return fps or 0
+
+    def _update_timecode_status(self):
+        """Refresh the toolbar TC readout from the current timeline frame."""
+        if not hasattr(self, "timecodeStatusLabel"):
+            return
+        frame = int(self.viewframe.timeline.current_frame)
+        # The timeline is 1-based; timecode counts from frame 0.
+        zero_based = max(0, frame - constants.VL_START_FRAME)
+        code = timecode.frame_to_timecode(zero_based, self._current_fps())
+        self.timecodeStatusLabel.setText(f" TC  |  {code}   F {frame} ")
+
     def _on_primary_frame_changed(self, local_frame):
         if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
             entry = self.playlist_entries[self.playlist_entry_index]
@@ -803,6 +828,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             self.viewframe.timeline.set_current_frame(local_frame)
+        self._update_timecode_status()
 
     def _on_primary_cache_changed(self, local_frames):
         if self.playlist_playback_active and 0 <= self.playlist_entry_index < len(self.playlist_entries):
@@ -1252,6 +1278,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "sourceStatusLabel"):
             self.sourceStatusLabel.setText(" SOURCE  |  No Media ")
             self.colorStatusLabel.setText(" COLOR  |  Auto ")
+            self.timecodeStatusLabel.setText(" TC  |  --:--:--:-- ")
 
     def cache_current_media(self):
         if not self.current_source_filepath:
