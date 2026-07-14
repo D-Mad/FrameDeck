@@ -130,9 +130,23 @@ SMALL_FONT_SIZE = 8
 
 DEFAULT_SKETCH_COLOR = (255, 170, 0)
 
-OPEN_EXTENSIONS = [
-    "exr", "png", "jpg", "jpeg", "mp4", "mov", "avi", "fdplaylist"
+# Container support is provided by the FFmpeg libraries bundled with PyAV.
+# Keep these lists centralized so import, drag/drop and reader selection never
+# disagree about a valid movie. Codec support is detected from the stream, not
+# guessed from the filename extension.
+VIDEO_EXTENSIONS = [
+    "mp4", "mov", "m4v", "mxf", "mkv", "avi", "webm",
+    "mts", "m2ts", "ts", "mpg", "mpeg", "m2v", "m1v",
+    "wmv", "asf", "flv", "f4v", "ogv", "3gp", "3g2",
+    "vob", "dv", "cine", "ivf",
 ]
+
+IMAGE_EXTENSIONS = [
+    "exr", "dpx", "png", "jpg", "jpeg", "tif", "tiff",
+    "bmp", "tga", "webp", "hdr",
+]
+
+OPEN_EXTENSIONS = IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + ["fdplaylist"]
 
 COMPARE_MODES = (
     ("wipe_vertical", "Vertical Wipe"),
