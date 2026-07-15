@@ -33,6 +33,8 @@ import resources
 import constants
 
 from utils import timecode
+
+from playback import speed as speedmath
 from utils import notescsv
 
 from PySide6 import QtGui
@@ -128,6 +130,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # During playlist playback this loops the whole edit, never one clip.
         self.loop_enabled = False
         self.loop_mode = "off"
+        self.playback_speed = constants.DEFAULT_PLAYBACK_SPEED
         self._playlist_loading = False
         self.playlist_entries = list()
         self.playlist_entry_index = -1
@@ -321,6 +324,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewframe.timelineToolbarLayout.trigger_timeline.connect(self.trigger_timeline)
         self.viewframe.timelineToolbarLayout.fps_chanaged.connect(self.update_fps)
         self.viewframe.timelineToolbarLayout.volume_changed.connect(self.player.volume_changed)
+        self.viewframe.timelineToolbarLayout.speed_changed.connect(
+            self.set_playback_speed
+        )
         # Keyboard Shortcuts
         # Play / Pause
         self.playShortcut = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
@@ -524,6 +530,36 @@ class MainWindow(QtWidgets.QMainWindow):
             self.loopModeActionGroup.addAction(action)
             loop_mode_menu.addAction(action)
             self.loopModeActions[mode] = action
+
+        speed_menu = playback_menu.addMenu("Speed")
+        self.speedActionGroup = QtGui.QActionGroup(self)
+        self.speedActionGroup.setExclusive(True)
+        self.speedActions = {}
+        for value in constants.PLAYBACK_SPEEDS:
+            action = QtGui.QAction(speedmath.label_for(value), self, checkable=True)
+            action.setData(float(value))
+            action.setChecked(value == constants.DEFAULT_PLAYBACK_SPEED)
+            action.triggered.connect(
+                lambda _checked=False, selected=value: self.set_playback_speed(selected)
+            )
+            self.speedActionGroup.addAction(action)
+            speed_menu.addAction(action)
+            self.speedActions[float(value)] = action
+
+        self.actionSpeedDown = QtGui.QAction("Slower", self)
+        self.actionSpeedDown.setShortcut(QtGui.QKeySequence("Ctrl+["))
+        self.actionSpeedDown.triggered.connect(lambda: self.step_playback_speed(-1))
+        playback_menu.addAction(self.actionSpeedDown)
+        self.actionSpeedUp = QtGui.QAction("Faster", self)
+        self.actionSpeedUp.setShortcut(QtGui.QKeySequence("Ctrl+]"))
+        self.actionSpeedUp.triggered.connect(lambda: self.step_playback_speed(1))
+        playback_menu.addAction(self.actionSpeedUp)
+        self.actionSpeedReset = QtGui.QAction("Normal Speed", self)
+        self.actionSpeedReset.setShortcut(QtGui.QKeySequence("Ctrl+\\"))
+        self.actionSpeedReset.triggered.connect(
+            lambda: self.set_playback_speed(constants.DEFAULT_PLAYBACK_SPEED)
+        )
+        playback_menu.addAction(self.actionSpeedReset)
 
         self.actionCompare = QtGui.QAction("Compare Selected A/B", self)
         self.actionCompare.setIcon(NamePixmapIcon("display"))
@@ -1320,6 +1356,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "current_frame": self.viewframe.timeline.current_frame,
             "shot_timeline_visible": self.shotSequenceWidget.isVisible(),
             "loop_mode": self.loop_mode,
+            "playback_speed": self.playback_speed,
             "window": {"geometry": session.encode_geometry(self.saveGeometry())},
         }
         temporary = filepath + ".tmp"
@@ -1403,6 +1440,9 @@ class MainWindow(QtWidgets.QMainWindow):
             bool(document.get("shot_timeline_visible", True))
         )
         self.set_loop_mode(document.get("loop_mode", "off"))
+        self.set_playback_speed(
+            document.get("playback_speed", constants.DEFAULT_PLAYBACK_SPEED)
+        )
         saved_frame = int(document.get("current_frame") or constants.VL_START_FRAME)
         index, entry = self._playlist_entry_for_frame(saved_frame)
         if entry is None:
@@ -2194,6 +2234,61 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             message = f"Playback mode: {label}"
         self.statusBar().showMessage(message, 4500)
+
+    def set_playback_speed(self, value):
+        """Set the playback speed multiplier on both players.
+
+        Speed can be changed from the timeline combobox, the Playback > Speed
+        submenu, or the Ctrl+[ / Ctrl+] shortcuts, so every control is synced
+        here without letting the signals loop back on each other.
+        """
+
+        value = speedmath.normalize(value)
+        self.playback_speed = value
+
+        self.player.set_speed(value)
+        # Store the setting on B even before Compare is active, so a later
+        # compare load inherits the same clock multiplier as A.
+        self.compare_player.set_speed(value)
+
+        combobox = getattr(
+            getattr(
+                getattr(self, "viewframe", None), "timelineToolbarLayout", None
+            ),
+            "speedCombobox",
+            None,
+        )
+        if combobox is not None:
+            combobox.setValue(value)
+
+        for speed_value, action in getattr(self, "speedActions", dict()).items():
+            selected = speed_value == value
+            if action.isChecked() != selected:
+                blocker = QtCore.QSignalBlocker(action)
+                action.setChecked(selected)
+                del blocker
+
+        label = speedmath.label_for(value)
+        if value == constants.DEFAULT_PLAYBACK_SPEED:
+            message = "Playback speed: {0}".format(label)
+        else:
+            # Audio is dropped off 1x rather than being resampled; say so once
+            # rather than letting the reviewer wonder why the sound vanished.
+            message = "Playback speed: {0} (audio silent off 1x)".format(label)
+        self.statusBar().showMessage(message, 4500)
+
+    def step_playback_speed(self, direction):
+        """Move to the next/previous preset speed (Ctrl+] / Ctrl+[)."""
+        speeds = list(constants.PLAYBACK_SPEEDS)
+
+        current = getattr(self, "playback_speed", constants.DEFAULT_PLAYBACK_SPEED)
+
+        # The current speed may have come from somewhere other than the presets,
+        # so land on the nearest preset before stepping off it.
+        nearest = min(range(len(speeds)), key=lambda i: abs(speeds[i] - current))
+        index = max(0, min(len(speeds) - 1, nearest + (1 if direction > 0 else -1)))
+
+        self.set_playback_speed(speeds[index])
 
     def set_gamma_check(self, enabled):
         """Toggle temporary Y-drag gamma inspection in the viewer."""

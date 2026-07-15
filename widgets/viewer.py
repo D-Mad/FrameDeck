@@ -170,6 +170,7 @@ from widgets.labels import ToolNameLabel
 
 from widgets.comboboxs import FbsCombobox
 from widgets.comboboxs import AovsCombobox
+from widgets.comboboxs import SpeedCombobox
 
 from widgets.timeline import TimelineWidget
 
@@ -985,6 +986,9 @@ class TimelineToolbarLayout(HorizontalLayout):
     # Signal emitted when volume value changes
     volume_changed = QtCore.Signal(float)
 
+    # Signal emitted when the playback speed multiplier changes
+    speed_changed = QtCore.Signal(float)
+
     def __init__(self, parent, *args, **kwargs):
         """
         Initialize timeline toolbar layout.
@@ -1020,6 +1024,11 @@ class TimelineToolbarLayout(HorizontalLayout):
         # Listen for FPS changes
         self.fpsCombobox.fps_changed.connect(self.update_fps)
         self.addWidget(self.fpsCombobox)
+
+        # Playback speed multiplier
+        self.speedCombobox = SpeedCombobox(None)
+        self.speedCombobox.speed_changed.connect(self.speed_changed.emit)
+        self.addWidget(self.speedCombobox)
 
         # Loop playback button
         self.loopButton = LoopButton(
