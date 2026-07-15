@@ -120,6 +120,8 @@ expanded production workflow:
 - Full-resolution JPG/PNG extraction from the current display view.
 - Excel-friendly UTF-8 CSV export for comments, text and drawing notes,
   including frame, SMPTE timecode, normalized pin position and resolved state.
+- Searchable PDF review reports with a shot cover, annotated full-resolution
+  frames, wrapped comments, matching pin numbers and per-frame timecode.
 - High-quality MP4 conversion from movies or image sequences, preserving movie
   FPS/audio and allowing user-defined image-sequence FPS.
 - PyInstaller-based Windows portable packaging and Ubuntu AppImage packaging.
