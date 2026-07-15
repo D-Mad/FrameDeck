@@ -103,6 +103,10 @@ class TimelineWidget(QtWidgets.QWidget):
         # Cached frame storage
         self.cached_frames = set()
 
+        # Annotated frame storage, in timeline (not player-local) frames.
+        self.comment_frames = set()
+        self.drawing_frames = set()
+
         self.setMouseTracking(True)
 
     def set_range(self, start, end):
@@ -153,6 +157,72 @@ class TimelineWidget(QtWidgets.QWidget):
 
         # Refresh widget
         self.update()
+
+    def set_annotated_frames(self, comment_frames, drawing_frames):
+        """
+        Update the annotation markers.
+
+        A frame carrying both a comment and a drawing counts as a comment: the
+        words are the reviewable part, and the marker should not hide them.
+
+        Args:
+            comment_frames (iterable[int]):
+                Timeline frames holding at least one comment.
+
+            drawing_frames (iterable[int]):
+                Timeline frames holding at least one stroke.
+        """
+
+        self.comment_frames = set(int(frame) for frame in comment_frames or [])
+        self.drawing_frames = set(
+            int(frame) for frame in drawing_frames or []
+        ) - self.comment_frames
+
+        # Refresh widget
+        self.update()
+
+    def draw_annotation_markers(self, painter, height):
+        """
+        Draw a tick on the timeline for every annotated frame.
+
+        Args:
+            painter (QtGui.QPainter):
+                Active painter.
+
+            height (int):
+                Widget height.
+        """
+
+        if not self.comment_frames and not self.drawing_frames:
+            return
+
+        # Sit below the frame-number labels, above the playhead readout. The
+        # playhead is drawn afterwards so it always stays legible on top.
+        top = int(height * 0.45)
+        marker_height = max(10, int(height * 0.45))
+        width = constants.TIMELINE_MARKER_WIDTH
+
+        painter.save()
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+
+        for frames, color in (
+            (self.drawing_frames, constants.TIMELINE_DRAWING_MARKER_COLOR),
+            (self.comment_frames, constants.TIMELINE_COMMENT_MARKER_COLOR),
+        ):
+            painter.setBrush(QtGui.QColor(*color))
+            for frame in frames:
+                if frame < self.start_frame or frame > self.end_frame:
+                    continue
+                x = self.frame_to_pos(frame)
+                painter.drawRoundedRect(
+                    QtCore.QRectF(
+                        x - (width / 2.0), top, width, marker_height
+                    ),
+                    1,
+                    1,
+                )
+
+        painter.restore()
 
     def paintEvent(self, event):
         """
@@ -214,6 +284,10 @@ class TimelineWidget(QtWidgets.QWidget):
             x = int(self.timeline_margin + ((frame - self.start_frame) * pixels_per_frame))
             painter.drawLine(x, 0, x, 25)
             painter.drawText(x + 2, 40, str(frame))
+
+        # Annotation markers sit under the playhead, so a note never hides the
+        # frame the reviewer is actually on.
+        self.draw_annotation_markers(painter, height)
 
         # Calculate playhead position
         current_x = int(

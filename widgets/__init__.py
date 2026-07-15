@@ -321,6 +321,11 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.viewframe.viewer.fullscreen_requested.connect(self.toggle_fullscreen)
         self.viewframe.viewer.comment_pin_clicked.connect(self.add_pinned_comment)
+        # Drawing a stroke changes what the timeline should show, and the viewer
+        # is the only thing that knows it happened.
+        self.viewframe.viewer.annotations_changed.connect(
+            self.refresh_timeline_markers
+        )
         self.commentSidebar.add_requested.connect(self.add_frame_comment)
         self.commentSidebar.pin_requested.connect(self.begin_pinned_comment)
         self.commentSidebar.pin_cancel_requested.connect(self.cancel_pinned_comment)
@@ -929,6 +934,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def set_current_project(self, project):
         self.current_project = project
         self.viewframe.viewer.clear()
+        self.viewframe.timeline.set_annotated_frames([], [])
 
     @staticmethod
     def _playlist_frame_count(context):
@@ -990,6 +996,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.viewframe.timeline.set_range(
                     constants.VL_START_FRAME, constants.VL_START_FRAME
                 )
+        if hasattr(self, "viewframe"):
+            self.refresh_timeline_markers()
 
     def _playlist_entry_for_context(self, context):
         instance = context.get("playlist_instance_id")
@@ -1222,6 +1230,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Clear current viewer frame
         self.viewframe.viewer.clear()
+        self.viewframe.timeline.set_annotated_frames([], [])
         self.viewframe.viewer.reset_view()
         self.commentSidebar.set_source_available(False)
         self.commentSidebar.refresh()
@@ -1532,6 +1541,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.media_cache.set_active(None)
         self.primary_compare_frame = None
         self.viewframe.viewer.clear()
+        self.viewframe.timeline.set_annotated_frames([], [])
         self.viewframe.viewer.reset_view()
         self.commentSidebar.set_source_available(False)
         self.commentSidebar.refresh()
@@ -1871,6 +1881,61 @@ class MainWindow(QtWidgets.QMainWindow):
             return entry["start"] + int(local_frame) - constants.VL_START_FRAME
         return int(local_frame)
 
+    def refresh_timeline_markers(self):
+        """Redraw note markers for the current source or complete playlist.
+
+        Annotations are keyed by the player's LOCAL frame, but the timeline is a
+        global range while a playlist is playing. The active source is read from
+        memory so unsaved edits appear immediately; other shots are inspected
+        through their lightweight note sidecars.
+        """
+        annotations = self.viewframe.viewer.annotations
+        memory_comments = set(annotations.commented_frames())
+        memory_drawings = {
+            int(frame) for frame, strokes in annotations.strokes.items() if strokes
+        }
+
+        if not self.playlist_playback_active or not self.playlist_entries:
+            self.viewframe.timeline.set_annotated_frames(
+                memory_comments, memory_drawings
+            )
+            return
+
+        from widgets import notestore
+
+        current_source = self.current_source_filepath
+        current_identity = (
+            os.path.normcase(os.path.abspath(str(current_source)))
+            if current_source
+            else None
+        )
+        comments = set()
+        drawings = set()
+        for entry in self.playlist_entries:
+            source = entry["context"].get("media")
+            identity = (
+                os.path.normcase(os.path.abspath(str(source))) if source else None
+            )
+            if identity is not None and identity == current_identity:
+                local_comments, local_drawings = memory_comments, memory_drawings
+            else:
+                local_comments, local_drawings = notestore.annotation_frames(source)
+
+            first = constants.VL_START_FRAME
+            last = first + entry["count"] - 1
+            offset = entry["start"] - first
+            comments.update(
+                int(frame) + offset
+                for frame in local_comments
+                if first <= int(frame) <= last
+            )
+            drawings.update(
+                int(frame) + offset
+                for frame in local_drawings
+                if first <= int(frame) <= last
+            )
+        self.viewframe.timeline.set_annotated_frames(comments, drawings)
+
     def add_frame_comment(self, text):
         """Add an unpinned comment to the viewer's current local frame."""
         frame = self.viewframe.viewer.annotations.current_frame
@@ -1881,6 +1946,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._save_current_notes()
         self.commentSidebar.clear_editor()
         self.commentSidebar.refresh()
+        self.refresh_timeline_markers()
         self.viewframe.viewer.update()
         self.statusBar().showMessage(f"Comment added at frame {frame}", 2500)
 
@@ -1908,6 +1974,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._save_current_notes()
             self.commentSidebar.clear_editor()
             self.commentSidebar.refresh()
+            self.refresh_timeline_markers()
             self.viewframe.viewer.update()
             self.statusBar().showMessage(f"Pinned comment added at frame {frame}", 2500)
         self.viewframe.viewer.set_comment_pin_mode(False)
@@ -1926,6 +1993,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._save_current_notes()
         self.commentSidebar.refresh()
+        self.refresh_timeline_markers()
         self.viewframe.viewer.update()
 
     def delete_comment(self, frame, comment_id):
@@ -1933,12 +2001,14 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._save_current_notes()
         self.commentSidebar.refresh()
+        self.refresh_timeline_markers()
         self.viewframe.viewer.update()
 
     def annotation_state_changed(self):
         """Persist and refresh after a toolbar/menu Clear Notes action."""
         self._save_current_notes()
         self.commentSidebar.refresh()
+        self.refresh_timeline_markers()
         self.viewframe.viewer.update()
 
     def jump_to_annotation(self, step):
@@ -2027,6 +2097,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.commentSidebar.set_current_frame(
                 self.viewframe.viewer.annotations.current_frame
             )
+            self.refresh_timeline_markers()
             self.viewframe.viewer.update()
         except Exception:
             LOGGER.exception("Unable to load annotation notes")
