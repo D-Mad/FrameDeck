@@ -55,6 +55,7 @@ Notes:
 
 from __future__ import absolute_import
 
+import time
 import numpy
 import threading
 
@@ -81,7 +82,8 @@ LOGGER = logger.getLogger(__name__)
 class SequenceDecodeThread(QtCore.QThread):
     """Bounded EXR/image decoder queue modeled after a media decoder FIFO."""
 
-    decoded = QtCore.Signal(int, object, int, str)
+    # frame_number, image, generation, error, decode_milliseconds
+    decoded = QtCore.Signal(int, object, int, str, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -147,6 +149,7 @@ class SequenceDecodeThread(QtCore.QThread):
             reader, frame_number, aov, processor, generation, _key = task
             error = ""
             image = None
+            started = time.perf_counter()
             try:
                 image = reader.get_frame(
                     frame_number,
@@ -158,7 +161,10 @@ class SequenceDecodeThread(QtCore.QThread):
             finally:
                 with self._condition:
                     self._inflight_key = None
-            self.decoded.emit(frame_number, image, generation, error)
+            # Timed here rather than on the GUI thread: this is the decode, and
+            # the queue wait in front of it is not the decoder's fault.
+            decode_ms = (time.perf_counter() - started) * 1000.0
+            self.decoded.emit(frame_number, image, generation, error, decode_ms)
 
 
 class BasePlayer(QtCore.QObject):
@@ -222,6 +228,9 @@ class MediaPlayer(BasePlayer):
         # silently reset the speed while the UI still shows the old value.
         self.playback_speed = constants.DEFAULT_PLAYBACK_SPEED
 
+        # Optional PlaybackStats shared with whichever implementation is live.
+        self.stats = None
+
         # Active OCIO processor
         self.ocio_processor = None
 
@@ -265,6 +274,10 @@ class MediaPlayer(BasePlayer):
             self.player = SequencePlayer()
 
         self.player.set_speed(self.playback_speed)
+
+        # load() rebuilds the implementation, so the stats object has to be
+        # re-attached or the HUD silently goes dead on the next source.
+        self.player.stats = self.stats
 
         if self.ocio_processor:
             self.player.set_ocio(self.ocio_processor, self.input_space, self.display, self.view)
@@ -370,6 +383,12 @@ class MediaPlayer(BasePlayer):
         if self.player and hasattr(self.player, "set_speed"):
             self.player.set_speed(self.playback_speed)
 
+    def set_stats(self, stats):
+        """Attach a PlaybackStats collector (None disables measurement)."""
+        self.stats = stats
+        if self.player is not None:
+            self.player.stats = stats
+
     def set_aov(self, aov):
         """Set active AOV.
 
@@ -472,6 +491,9 @@ class SequencePlayer(BasePlayer):
         # Playback speed multiplier. Scales the timer interval, so the sequence
         # still shows every frame -- it just steps through them faster/slower.
         self.speed = constants.DEFAULT_PLAYBACK_SPEED
+
+        # Optional PlaybackStats, assigned by MediaPlayer when the HUD is on.
+        self.stats = None
 
         # Active AOV
         self.current_aov = "rgb"
@@ -959,7 +981,7 @@ class SequencePlayer(BasePlayer):
             priority=True,
         )
 
-    def _frame_decoded(self, frame_number, frame, generation, error):
+    def _frame_decoded(self, frame_number, frame, generation, error, decode_ms=0.0):
         if generation != self.decode_generation or self.reader is None:
             return
         if error:
@@ -967,6 +989,8 @@ class SequencePlayer(BasePlayer):
             return
         if frame is None:
             return
+        if self.stats is not None:
+            self.stats.record_decode(decode_ms)
         self.cache.add(frame_number, frame)
         self.cache_changed.emit(self.cache.cached_frames())
         if frame_number == self.display_request_frame:
@@ -1064,6 +1088,9 @@ class MoviePlayer(BasePlayer):
 
         # Playback speed multiplier, applied to the elapsed playback clock.
         self.speed = constants.DEFAULT_PLAYBACK_SPEED
+
+        # Optional PlaybackStats, assigned by MediaPlayer when the HUD is on.
+        self.stats = None
 
         # Timeline start frame.
         self.start_frame = constants.VL_START_FRAME
@@ -1429,6 +1456,7 @@ class MoviePlayer(BasePlayer):
         # Consume all ready frames, but render only the newest. If decoding or
         # painting falls behind, displaying stale frames makes the lag worse.
         ready_frame = None
+        ready_count = 0
         while self.video_queue:
 
             # Peek at the next decoded frame.
@@ -1446,8 +1474,11 @@ class MoviePlayer(BasePlayer):
             self.video_queue.popleft()
 
             ready_frame = frame
+            ready_count += 1
 
         if ready_frame is not None:
+            if self.stats is not None and ready_count > 1:
+                self.stats.record_dropped(ready_count - 1)
             self.display_video_frame(ready_frame)
 
     def display_video_frame(self, frame):
@@ -1478,6 +1509,8 @@ class MoviePlayer(BasePlayer):
             Timeline frame numbers are calculated from the movie presentation timestamp (PTS) rather than decoder order,
             ensuring accurate synchronization with playback time.
         """
+
+        started = time.perf_counter()
 
         frame_time = frame.time
         if frame_time is None and frame.pts is not None:
@@ -1519,6 +1552,12 @@ class MoviePlayer(BasePlayer):
             self.start_frame,
             min(frame_number, self.start_frame + self.frame_count - 1),
         )
+
+        # The proxy scale, RGB conversion and OCIO transform are what stand
+        # between a decoded packet and the screen, so that is the cost the HUD
+        # reports for movies.
+        if self.stats is not None:
+            self.stats.record_decode((time.perf_counter() - started) * 1000.0)
 
         # Send the image to the viewer.
         self.frame_ready.emit(image)
