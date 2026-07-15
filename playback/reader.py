@@ -47,6 +47,9 @@ from collections import deque
 
 import utils
 import constants
+
+from playback import proxy
+
 from ocio import apply_cpu_processor
 
 
@@ -795,9 +798,9 @@ class SequenceReader(object):
         # renders can then avoid decompressing the full 4K/8K level entirely.
         mip_level = 0
         spec = input_file.spec(0, 0)
-        while self.review_proxy and (
-            spec.width > constants.VL_SEQUENCE_PROXY_MAX_WIDTH
-            or spec.height > constants.VL_SEQUENCE_PROXY_MAX_HEIGHT
+        proxy_limits = proxy.limits() if self.review_proxy else None
+        while proxy_limits and (
+            spec.width > proxy_limits[0] or spec.height > proxy_limits[1]
         ):
             candidate = input_file.spec(0, mip_level + 1)
             if candidate.width <= 0 or candidate.height <= 0:
@@ -854,11 +857,7 @@ class SequenceReader(object):
         # display transform. This cuts 4K/8K OCIO cost and bounds each cached
         # review frame to roughly 7 MB at 2048x1152.
         scale = (
-            min(
-                1.0,
-                constants.VL_SEQUENCE_PROXY_MAX_WIDTH / max(1, image.shape[1]),
-                constants.VL_SEQUENCE_PROXY_MAX_HEIGHT / max(1, image.shape[0]),
-            )
+            proxy.scale_for(image.shape[1], image.shape[0])
             if self.review_proxy
             else 1.0
         )
@@ -908,6 +907,10 @@ class SequenceReader(object):
 
     def _preview_cache_path(self, source_path, aov, ocio_processor):
         """Return a persistent display-proxy key for one source frame."""
+        # Full Resolution is an inspection mode. Do not silently substitute a
+        # lossy JPEG preview when the user is checking grain or edge detail.
+        if self.review_proxy and not proxy.enabled():
+            return None
         try:
             stat = os.stat(source_path)
         except OSError:
@@ -925,8 +928,8 @@ class SequenceReader(object):
                 str(stat.st_mtime_ns),
                 str(aov),
                 str(color_key),
-                f"{constants.VL_SEQUENCE_PROXY_MAX_WIDTH}x"
-                f"{constants.VL_SEQUENCE_PROXY_MAX_HEIGHT}",
+                # Keeps a 720p frame from being served to a viewer asking for 2K.
+                proxy.cache_token(),
             )
         )
         digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()

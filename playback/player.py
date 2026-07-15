@@ -64,6 +64,7 @@ import constants
 
 from playback import loopmode
 from playback import speed
+from playback import proxy
 
 from collections import deque
 
@@ -531,19 +532,12 @@ class SequencePlayer(BasePlayer):
         self.end_frame = self.start_frame + (self.frame_count)
         self.current_aov = "rgb"
 
-        # Reset Cache
-        proxy_pixels = min(
-            self.reader.width,
-            constants.VL_SEQUENCE_PROXY_MAX_WIDTH,
-        ) * min(
-            self.reader.height,
-            constants.VL_SEQUENCE_PROXY_MAX_HEIGHT,
+        # Reset Cache. Cache depth follows the proxy size: Full 4K/8K frames
+        # must not retain the same count as a small 720p review proxy.
+        proxy_width, proxy_height = proxy.fit(
+            self.reader.width, self.reader.height, even=False
         )
-        self.cache.max_size = (
-            constants.VL_SEQUENCE_2K_CACHE_FRAMES
-            if proxy_pixels >= 1920 * 1080
-            else constants.VL_FRAME_CACHE_MAX_SIZE
-        )
+        self.cache.max_size = proxy.frame_capacity(proxy_width, proxy_height)
         self.cache.clear()
         self.cache_changed.emit([])
 
@@ -1495,14 +1489,10 @@ class MoviePlayer(BasePlayer):
         # memory than converting the full 4K frame and resizing in the widget.
         source_width = frame.width
         source_height = frame.height
-        scale = min(
-            1.0,
-            constants.VL_VIDEO_PROXY_MAX_WIDTH / source_width,
-            constants.VL_VIDEO_PROXY_MAX_HEIGHT / source_height,
-        )
-        if scale < 1.0:
-            proxy_width = max(2, int(source_width * scale) // 2 * 2)
-            proxy_height = max(2, int(source_height * scale) // 2 * 2)
+        if proxy.scale_for(source_width, source_height) < 1.0:
+            # Even dimensions are mandatory here: yuv420 subsamples chroma by
+            # two, so an odd proxy size is not representable.
+            proxy_width, proxy_height = proxy.fit(source_width, source_height)
             frame = frame.reformat(
                 width=proxy_width,
                 height=proxy_height,
