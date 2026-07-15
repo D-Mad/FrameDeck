@@ -532,17 +532,12 @@ class SequencePlayer(BasePlayer):
         self.end_frame = self.start_frame + (self.frame_count)
         self.current_aov = "rgb"
 
-        # Reset Cache. Cache depth follows the proxy size: bigger review frames
-        # mean fewer of them fit in the same memory budget.
+        # Reset Cache. Cache depth follows the proxy size: Full 4K/8K frames
+        # must not retain the same count as a small 720p review proxy.
         proxy_width, proxy_height = proxy.fit(
             self.reader.width, self.reader.height, even=False
         )
-        proxy_pixels = proxy_width * proxy_height
-        self.cache.max_size = (
-            constants.VL_SEQUENCE_2K_CACHE_FRAMES
-            if proxy_pixels >= 1920 * 1080
-            else constants.VL_FRAME_CACHE_MAX_SIZE
-        )
+        self.cache.max_size = proxy.frame_capacity(proxy_width, proxy_height)
         self.cache.clear()
         self.cache_changed.emit([])
 

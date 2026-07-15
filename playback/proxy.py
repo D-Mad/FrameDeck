@@ -27,6 +27,13 @@ PROXY_LEVELS = (
 
 DEFAULT_LEVEL = "2k"
 
+# Approximate upper bound for decoded RGBA frames held in the sequence cache.
+# Capacity is derived from the selected proxy size so Full 4K/8K cannot retain
+# dozens of huge frames and exhaust the review workstation's memory.
+SEQUENCE_CACHE_BUDGET_BYTES = 512 * 1024 * 1024
+MIN_SEQUENCE_CACHE_FRAMES = 2
+MAX_SEQUENCE_CACHE_FRAMES = 200
+
 _LIMITS = {key: limits for key, _label, limits in PROXY_LEVELS}
 _LABELS = {key: label for key, label, _limits in PROXY_LEVELS}
 
@@ -137,6 +144,22 @@ def cache_token(key=None):
         return "full"
 
     return "{0}x{1}".format(bounds[0], bounds[1])
+
+
+def frame_capacity(width, height, bytes_per_pixel=4):
+    """Return a memory-bounded sequence cache depth for a decoded frame size."""
+    try:
+        frame_bytes = max(1, int(width)) * max(1, int(height)) * max(
+            1, int(bytes_per_pixel)
+        )
+    except (TypeError, ValueError):
+        return MIN_SEQUENCE_CACHE_FRAMES
+
+    capacity = SEQUENCE_CACHE_BUDGET_BYTES // frame_bytes
+    return max(
+        MIN_SEQUENCE_CACHE_FRAMES,
+        min(MAX_SEQUENCE_CACHE_FRAMES, int(capacity)),
+    )
 
 
 if __name__ == "__main__":

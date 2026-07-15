@@ -141,3 +141,26 @@ def test_preview_cache_path_changes_with_the_proxy_level(tmp_path, monkeypatch):
 
     assert at_2k is not None and at_720 is not None
     assert at_2k != at_720
+
+
+def test_full_resolution_bypasses_lossy_jpeg_preview_cache(tmp_path):
+    from playback.reader import SequenceReader
+
+    source = tmp_path / "plate.1001.exr"
+    source.write_bytes(b"only the path is needed")
+    reader = SequenceReader.__new__(SequenceReader)
+    reader.review_proxy = True
+
+    proxy.set_level("full")
+
+    assert reader._preview_cache_path(str(source), "rgb", None) is None
+
+
+def test_sequence_cache_depth_is_bounded_by_frame_memory():
+    at_720p = proxy.frame_capacity(1280, 720)
+    at_4k = proxy.frame_capacity(3840, 2160)
+    at_8k = proxy.frame_capacity(7680, 4320)
+
+    assert at_720p > at_4k > at_8k
+    assert at_8k >= proxy.MIN_SEQUENCE_CACHE_FRAMES
+    assert at_720p <= proxy.MAX_SEQUENCE_CACHE_FRAMES

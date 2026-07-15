@@ -907,6 +907,10 @@ class SequenceReader(object):
 
     def _preview_cache_path(self, source_path, aov, ocio_processor):
         """Return a persistent display-proxy key for one source frame."""
+        # Full Resolution is an inspection mode. Do not silently substitute a
+        # lossy JPEG preview when the user is checking grain or edge detail.
+        if self.review_proxy and not proxy.enabled():
+            return None
         try:
             stat = os.stat(source_path)
         except OSError:
