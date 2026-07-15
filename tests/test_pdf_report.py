@@ -115,6 +115,23 @@ def test_comments_survive_into_the_pdf_text(tmp_path, qapp, qfont):
     assert "soften the matte edge" in text
 
 
+def test_long_comments_wrap_without_losing_the_tail(tmp_path, qapp, qfont):
+    path = tmp_path / "long-note.pdf"
+    long_note = (
+        "Reduce the bright edge around the foreground character and preserve "
+        "the fine hair detail through the final delivery render."
+    )
+
+    pdfreport.build_report(
+        path,
+        [_page(12, comments=[_comment(long_note)])],
+        meta={"shot": "KP_010_020"},
+    )
+
+    _reader, text = _read(path)
+    assert "fine hair detail through the final delivery render" in text
+
+
 def test_the_cover_identifies_the_shot_and_counts_the_notes(tmp_path, qapp, qfont):
     path = tmp_path / "cover.pdf"
 

@@ -27,6 +27,7 @@ from __future__ import absolute_import
 import os
 import json
 import datetime
+import numpy
 
 import utils
 import logger
@@ -2733,6 +2734,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 else MovieReader(source)
             )
             fps = max(0.001, reader.get_fps())
+            ocio_processor = self.player.ocio_processor
+            active_aov = getattr(self.player.player, "current_aov", "rgb")
 
             for index, frame_number in enumerate(frames, start=1):
                 if progress.wasCanceled():
@@ -2741,28 +2744,42 @@ class MainWindow(QtWidgets.QMainWindow):
                 progress.setValue(index - 1)
                 QtWidgets.QApplication.processEvents()
 
-                if reader.media_type == "sequence":
-                    image = reader.get_frame(frame_number, aov="rgb")
-                else:
-                    seconds = (frame_number - constants.VL_START_FRAME) / fps
-                    video_frame = reader.seek_time(seconds)
-                    image = (
-                        video_frame.to_ndarray(format="rgb24")
-                        if video_frame is not None
-                        else None
+                rendered = None
+                try:
+                    if reader.media_type == "sequence":
+                        image = reader.get_frame(
+                            frame_number,
+                            aov=active_aov,
+                            ocio_processor=ocio_processor,
+                        )
+                    else:
+                        seconds = (frame_number - constants.VL_START_FRAME) / fps
+                        video_frame = reader.seek_time(seconds)
+                        image = (
+                            video_frame.to_ndarray(format="rgb24")
+                            if video_frame is not None
+                            else None
+                        )
+                        if image is not None and ocio_processor is not None:
+                            image = image.astype(numpy.float32) / 255.0
+                            image = ocio_processor.process_image(image)
+                            image = (
+                                numpy.clip(image, 0.0, 1.0) * 255.0
+                            ).astype(numpy.uint8)
+
+                    rendered = self.viewframe.viewer.render_annotated_frame(
+                        image, frame_number
+                    )
+                except Exception:
+                    LOGGER.exception(
+                        "Unable to render PDF frame %s", frame_number
                     )
 
-                if image is None:
-                    failed.append(frame_number)
-                    continue
-
-                rendered = self.viewframe.viewer.render_annotated_frame(
-                    image, frame_number
-                )
                 if rendered is None:
                     failed.append(frame_number)
-                    continue
 
+                # Keep the review note even when its picture cannot be decoded;
+                # silently dropping the entire page loses the handoff content.
                 pages.append(
                     {
                         "frame": frame_number,

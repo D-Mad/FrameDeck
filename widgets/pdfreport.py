@@ -176,6 +176,26 @@ def _first_comment(page):
     return comments[0].get("text", "") if comments else ""
 
 
+def _comment_text(comment):
+    text = str(comment.get("text", ""))
+    if comment.get("done"):
+        text = "{0}   [resolved]".format(text)
+    return text
+
+
+def _comment_height(font, text, width):
+    """Return enough vertical space to preserve a wrapped review comment."""
+    flags = (
+        int(QtCore.Qt.AlignmentFlag.AlignLeft)
+        | int(QtCore.Qt.AlignmentFlag.AlignTop)
+        | int(QtCore.Qt.TextFlag.TextWordWrap)
+    )
+    bounds = QtGui.QFontMetricsF(font).boundingRect(
+        QtCore.QRectF(0, 0, max(1.0, width), 10000), flags, text
+    )
+    return max(26.0, bounds.height() + 8.0)
+
+
 def _draw_frame_page(painter, rect, meta, page, number, total):
     """Draw one annotated frame with its notes underneath."""
     y = _draw_header(
@@ -190,11 +210,19 @@ def _draw_frame_page(painter, rect, meta, page, number, total):
 
     comments = page.get("comments") or []
 
-    # The notes get the room they need; the frame takes what is left. A report
-    # whose text is cut off is worse than one whose image is a little smaller.
+    # The notes get the room they need; the frame takes what is left. Measure
+    # wrapped text instead of assuming every note fits on one 24-pixel line.
+    note_font = _font(9)
+    comment_width = rect.width() - 32
+    comment_heights = [
+        _comment_height(note_font, _comment_text(comment), comment_width)
+        for comment in comments
+    ]
+    available_height = rect.bottom() - FOOTER_HEIGHT - 20 - y
+    desired_note_height = 30 + sum(comment_heights) if comments else 0
     note_height = min(
-        rect.height() * 0.4,
-        30 + len(comments) * 30 if comments else 0,
+        max(0.0, available_height - 60.0),
+        desired_note_height,
     )
     image_area = QtCore.QRectF(
         rect.left(),
@@ -232,10 +260,15 @@ def _draw_frame_page(painter, rect, meta, page, number, total):
         )
         y += 26
 
-        painter.setFont(_font(9))
+        painter.setFont(note_font)
         pin = 0
-        for comment in comments:
-            if y > rect.bottom() - FOOTER_HEIGHT:
+        text_flags = (
+            int(QtCore.Qt.AlignmentFlag.AlignLeft)
+            | int(QtCore.Qt.AlignmentFlag.AlignTop)
+            | int(QtCore.Qt.TextFlag.TextWordWrap)
+        )
+        for comment, row_height in zip(comments, comment_heights):
+            if y + row_height > rect.bottom() - FOOTER_HEIGHT:
                 break
 
             pinned = "x" in comment and "y" in comment
@@ -247,22 +280,18 @@ def _draw_frame_page(painter, rect, meta, page, number, total):
             marker = "{0}.".format(pin) if pinned else "-"
             painter.setPen(ACCENT if pinned else MUTED)
             painter.drawText(
-                QtCore.QRectF(rect.left(), y, 30, 24),
-                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+                QtCore.QRectF(rect.left(), y, 30, row_height),
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
                 marker,
             )
 
-            text = comment.get("text", "")
-            if comment.get("done"):
-                text = "{0}   [resolved]".format(text)
-
             painter.setPen(INK)
             painter.drawText(
-                QtCore.QRectF(rect.left() + 32, y, rect.width() - 32, 24),
-                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
-                text,
+                QtCore.QRectF(rect.left() + 32, y, comment_width, row_height),
+                text_flags,
+                _comment_text(comment),
             )
-            y += 26
+            y += row_height
 
     _draw_footer(painter, rect, "Page {0} of {1}".format(number, total))
 
