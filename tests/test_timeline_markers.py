@@ -5,11 +5,15 @@ actual pixels -- the assertions are about what a reviewer sees, not about what
 the widget believes it stored.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 import constants
 
 from tests.helpers import probe_pixel
+from widgets import MainWindow, notestore
+from widgets.annotations import Sketch
 from widgets.timeline import TimelineWidget
 
 
@@ -34,6 +38,35 @@ def _marker_color(widget, frame):
     image = widget.grab().toImage()
     x = int(widget.frame_to_pos(frame))
     return probe_pixel(image, x, MARKER_Y)[:3]
+
+
+class _MarkerSink:
+    def set_annotated_frames(self, comments, drawings):
+        self.comment_frames = set(comments)
+        self.drawing_frames = set(drawings)
+
+
+def _window_controller(source, sketch, entries):
+    """Build only the controller surface refresh_timeline_markers requires."""
+    timeline = _MarkerSink()
+    window = SimpleNamespace(
+        viewframe=SimpleNamespace(
+            viewer=SimpleNamespace(annotations=sketch), timeline=timeline
+        ),
+        playlist_playback_active=True,
+        playlist_entries=entries,
+        current_source_filepath=source,
+    )
+    return window, timeline
+
+
+def _entry(source, start, count):
+    return {
+        "context": {"media": source},
+        "start": start,
+        "end": start + count - 1,
+        "count": count,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -113,6 +146,49 @@ def test_markers_accept_any_iterable(timeline):
 
     assert timeline.comment_frames == {5, 6}
     assert timeline.drawing_frames == {9, 10}
+
+
+def test_playlist_timeline_aggregates_active_memory_and_other_sidecars(
+    tmp_path, monkeypatch, qapp
+):
+    monkeypatch.setenv("FRAMEDECK_PROFILE_ROOT", str(tmp_path))
+    active_source = str(tmp_path / "active.mov")
+    other_source = str(tmp_path / "other.mov")
+
+    active = Sketch()
+    active.comments[2] = [{"id": "active", "text": "memory edit"}]
+    active.strokes[4] = [{"id": "draw-active", "type": "pencil"}]
+    other = Sketch()
+    other.comments[3] = [{"id": "other", "text": "saved note"}]
+    other.strokes[8] = [{"id": "draw-other", "type": "pencil"}]
+    notestore.save_notes(other_source, other)
+
+    window, sink = _window_controller(
+        active_source,
+        active,
+        [_entry(active_source, 1, 10), _entry(other_source, 11, 10)],
+    )
+    MainWindow.refresh_timeline_markers(window)
+
+    assert sink.comment_frames == {2, 13}
+    assert sink.drawing_frames == {4, 18}
+
+
+def test_duplicate_playlist_shots_each_receive_the_source_markers(qapp):
+    source = "same-shot.mov"
+    sketch = Sketch()
+    sketch.comments[2] = [{"id": "review", "text": "same source"}]
+    sketch.strokes[6] = [{"id": "draw", "type": "pencil"}]
+    window, sink = _window_controller(
+        source,
+        sketch,
+        [_entry(source, 1, 10), _entry(source, 11, 10)],
+    )
+
+    MainWindow.refresh_timeline_markers(window)
+
+    assert sink.comment_frames == {2, 12}
+    assert sink.drawing_frames == {6, 16}
 
 
 # --------------------------------------------------------------------------- #

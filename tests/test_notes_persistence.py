@@ -67,6 +67,46 @@ def test_notestore_save_and_load_roundtrip(tmp_path, monkeypatch, qapp):
     assert loaded_sketch.strokes == original.strokes
 
 
+def test_notestore_reads_marker_frames_without_mutating_a_sketch(
+    tmp_path, monkeypatch, qapp
+):
+    monkeypatch.setenv("FRAMEDECK_PROFILE_ROOT", str(tmp_path))
+    source = str(tmp_path / "SHOT_020_comp_v002.mov")
+    sketch = _sketch_with_strokes()
+    sketch.add_comment(5, "Check edge")
+    sketch.comments[12] = []
+    notestore.save_notes(source, sketch)
+
+    comments, drawings = notestore.annotation_frames(source)
+
+    assert comments == {5}
+    assert drawings == {5, 9}
+
+
+def test_notestore_marker_frames_reject_corrupt_or_foreign_sidecars(
+    tmp_path, monkeypatch, qapp
+):
+    monkeypatch.setenv("FRAMEDECK_PROFILE_ROOT", str(tmp_path))
+    source = str(tmp_path / "shot.mov")
+    path = notestore.notes_path_for(source)
+    path.parent.mkdir(parents=True)
+    path.write_text("{broken", encoding="utf-8")
+    assert notestore.annotation_frames(source) == (set(), set())
+
+    path.write_text(
+        json.dumps(
+            {
+                "schema": notestore.SCHEMA,
+                "source": str(tmp_path / "other.mov"),
+                "annotations": {"5": [{"type": "pencil"}]},
+                "comments": {"9": [{"text": "note"}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert notestore.annotation_frames(source) == (set(), set())
+
+
 def test_notestore_empty_removes_sidecar(tmp_path, monkeypatch, qapp):
     monkeypatch.setenv("FRAMEDECK_PROFILE_ROOT", str(tmp_path))
     source = str(tmp_path / "clip.mov")

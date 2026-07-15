@@ -43,6 +43,67 @@ def _clear(sketch):
     sketch.deserialize_comments({})
 
 
+def _read_document(source):
+    """Return a validated note document for *source*, or ``None``.
+
+    Keeping validation in one place lets lightweight timeline queries inspect
+    sidecars without constructing or mutating a :class:`Sketch` instance.
+    """
+    if not source:
+        return None
+
+    path = notes_path_for(source)
+    if not path.exists():
+        return None
+
+    try:
+        with open(path, "r", encoding="utf-8") as stream:
+            document = json.load(stream)
+    except (OSError, ValueError):
+        return None
+
+    if not isinstance(document, dict) or document.get("schema") != SCHEMA:
+        return None
+
+    saved_source = document.get("source")
+    if not saved_source or os.path.normcase(os.path.abspath(str(saved_source))) != (
+        os.path.normcase(os.path.abspath(str(source)))
+    ):
+        return None
+    return document
+
+
+def _populated_frame_keys(records):
+    """Return integer frame keys whose record list is non-empty and valid."""
+    frames = set()
+    if not isinstance(records, dict):
+        return frames
+    for frame, items in records.items():
+        if not isinstance(items, list) or not items:
+            continue
+        try:
+            frames.add(int(frame))
+        except (TypeError, ValueError):
+            continue
+    return frames
+
+
+def annotation_frames(source):
+    """Return ``(comment_frames, drawing_frames)`` without loading a sketch.
+
+    Missing, corrupt, or foreign sidecars safely read as two empty sets. This is
+    used to populate a playlist-wide timeline while only the active shot's full
+    annotation payload remains in memory.
+    """
+    document = _read_document(source)
+    if document is None:
+        return set(), set()
+    return (
+        _populated_frame_keys(document.get("comments")),
+        _populated_frame_keys(document.get("annotations")),
+    )
+
+
 def save_notes(source, sketch):
     """Write *sketch*'s strokes and comments to *source*'s sidecar.
 
@@ -97,26 +158,8 @@ def load_notes(source, sketch):
         _clear(sketch)
         return False
 
-    path = notes_path_for(source)
-    if not path.exists():
-        _clear(sketch)
-        return False
-
-    try:
-        with open(path, "r", encoding="utf-8") as stream:
-            document = json.load(stream)
-    except (OSError, ValueError):
-        _clear(sketch)
-        return False
-
-    if not isinstance(document, dict) or document.get("schema") != SCHEMA:
-        _clear(sketch)
-        return False
-
-    saved_source = document.get("source")
-    if not saved_source or os.path.normcase(os.path.abspath(str(saved_source))) != (
-        os.path.normcase(os.path.abspath(str(source)))
-    ):
+    document = _read_document(source)
+    if document is None:
         _clear(sketch)
         return False
 

@@ -934,6 +934,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def set_current_project(self, project):
         self.current_project = project
         self.viewframe.viewer.clear()
+        self.viewframe.timeline.set_annotated_frames([], [])
 
     @staticmethod
     def _playlist_frame_count(context):
@@ -995,6 +996,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.viewframe.timeline.set_range(
                     constants.VL_START_FRAME, constants.VL_START_FRAME
                 )
+        if hasattr(self, "viewframe"):
+            self.refresh_timeline_markers()
 
     def _playlist_entry_for_context(self, context):
         instance = context.get("playlist_instance_id")
@@ -1227,6 +1230,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Clear current viewer frame
         self.viewframe.viewer.clear()
+        self.viewframe.timeline.set_annotated_frames([], [])
         self.viewframe.viewer.reset_view()
         self.commentSidebar.set_source_available(False)
         self.commentSidebar.refresh()
@@ -1537,6 +1541,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.media_cache.set_active(None)
         self.primary_compare_frame = None
         self.viewframe.viewer.clear()
+        self.viewframe.timeline.set_annotated_frames([], [])
         self.viewframe.viewer.reset_view()
         self.commentSidebar.set_source_available(False)
         self.commentSidebar.refresh()
@@ -1877,24 +1882,58 @@ class MainWindow(QtWidgets.QMainWindow):
         return int(local_frame)
 
     def refresh_timeline_markers(self):
-        """Redraw the timeline's annotation markers from the current sketch.
+        """Redraw note markers for the current source or complete playlist.
 
         Annotations are keyed by the player's LOCAL frame, but the timeline is a
-        global range while a playlist is playing, so every frame has to be
-        mapped across or the markers land on the wrong shot.
+        global range while a playlist is playing. The active source is read from
+        memory so unsaved edits appear immediately; other shots are inspected
+        through their lightweight note sidecars.
         """
         annotations = self.viewframe.viewer.annotations
+        memory_comments = set(annotations.commented_frames())
+        memory_drawings = {
+            int(frame) for frame, strokes in annotations.strokes.items() if strokes
+        }
 
-        comments = [
-            self._timeline_frame_for_local(frame)
-            for frame in annotations.commented_frames()
-        ]
-        drawings = [
-            self._timeline_frame_for_local(frame)
-            for frame, strokes in annotations.strokes.items()
-            if strokes
-        ]
+        if not self.playlist_playback_active or not self.playlist_entries:
+            self.viewframe.timeline.set_annotated_frames(
+                memory_comments, memory_drawings
+            )
+            return
 
+        from widgets import notestore
+
+        current_source = self.current_source_filepath
+        current_identity = (
+            os.path.normcase(os.path.abspath(str(current_source)))
+            if current_source
+            else None
+        )
+        comments = set()
+        drawings = set()
+        for entry in self.playlist_entries:
+            source = entry["context"].get("media")
+            identity = (
+                os.path.normcase(os.path.abspath(str(source))) if source else None
+            )
+            if identity is not None and identity == current_identity:
+                local_comments, local_drawings = memory_comments, memory_drawings
+            else:
+                local_comments, local_drawings = notestore.annotation_frames(source)
+
+            first = constants.VL_START_FRAME
+            last = first + entry["count"] - 1
+            offset = entry["start"] - first
+            comments.update(
+                int(frame) + offset
+                for frame in local_comments
+                if first <= int(frame) <= last
+            )
+            drawings.update(
+                int(frame) + offset
+                for frame in local_drawings
+                if first <= int(frame) <= last
+            )
         self.viewframe.timeline.set_annotated_frames(comments, drawings)
 
     def add_frame_comment(self, text):
