@@ -1456,6 +1456,7 @@ class MoviePlayer(BasePlayer):
         # Consume all ready frames, but render only the newest. If decoding or
         # painting falls behind, displaying stale frames makes the lag worse.
         ready_frame = None
+        ready_count = 0
         while self.video_queue:
 
             # Peek at the next decoded frame.
@@ -1473,8 +1474,11 @@ class MoviePlayer(BasePlayer):
             self.video_queue.popleft()
 
             ready_frame = frame
+            ready_count += 1
 
         if ready_frame is not None:
+            if self.stats is not None and ready_count > 1:
+                self.stats.record_dropped(ready_count - 1)
             self.display_video_frame(ready_frame)
 
     def display_video_frame(self, frame):

@@ -142,6 +142,20 @@ def test_reset_forgets_everything():
     assert stats.dropped == 0
 
 
+def test_new_playback_window_keeps_decode_history():
+    stats, clock = _stats()
+    stats.record_decode(12.0)
+    stats.record_frame()
+    clock.advance(0.04)
+    stats.record_frame()
+
+    stats.reset_frame_timing()
+
+    assert stats.measured_fps() == 0.0
+    assert stats.stalled() is False
+    assert stats.average_decode_ms() == 12.0
+
+
 # --------------------------------------------------------------------------- #
 # Decode timing
 # --------------------------------------------------------------------------- #
@@ -184,6 +198,19 @@ def test_realtime_allows_a_small_shortfall():
         clock.advance(1 / 23.5)
 
     assert stats.is_realtime(24) is True
+
+
+@pytest.mark.parametrize(
+    "fps,multiplier,expected",
+    [(24, 0.5, 12.0), (24, 2.0, 48.0), (23.976, 1.0, 23.976)],
+)
+def test_effective_target_fps_follows_transport_speed(fps, multiplier, expected):
+    assert statsmath.effective_target_fps(fps, multiplier) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("fps,multiplier", [(0, 1), (24, 0), (None, 1), (24, "fast")])
+def test_effective_target_fps_survives_bad_metadata(fps, multiplier):
+    assert statsmath.effective_target_fps(fps, multiplier) == 0.0
 
 
 @pytest.mark.parametrize("target", [0, None, "", "unknown"])
@@ -282,3 +309,27 @@ def test_hud_reports_dropped_frames_only_when_there_are_some():
     rows = _rows_by_label(statsmath.hud_lines(stats))
 
     assert rows["DROPPED"] == ("4", False)
+
+
+def test_movie_queue_counts_frames_skipped_to_catch_up(qapp):
+    from playback.player import MoviePlayer
+
+    class _Frame:
+        def __init__(self, frame_time):
+            self.time = frame_time
+            self.pts = None
+
+    player = MoviePlayer()
+    player.stats = PlaybackStats()
+    displayed = []
+    player.display_video_frame = displayed.append
+    for frame_time in (0.0, 0.04, 0.08):
+        player.video_queue.append(_Frame(frame_time))
+
+    player.display_video(0.1)
+
+    assert len(displayed) == 1
+    assert displayed[0].time == 0.08
+    assert player.stats.dropped == 2
+    player.timer.stop()
+    player.audio_player.stop()

@@ -342,9 +342,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player.set_stats(self.playback_stats)
         # A frame reaching the viewer is the only honest definition of a
         # displayed frame, so the rate is measured there and not at the timer.
-        self.player.frame_ready.connect(
-            lambda _image: self.playback_stats.record_frame()
-        )
+        self.player.frame_ready.connect(self.record_playback_frame)
         self.statsHudTimer = QtCore.QTimer(self)
         self.statsHudTimer.setInterval(250)
         self.statsHudTimer.timeout.connect(self.refresh_stats_hud)
@@ -2159,6 +2157,12 @@ class MainWindow(QtWidgets.QMainWindow):
         Toggle playback state.
         """
 
+        starting_playback = not self.player.is_playing
+        if starting_playback:
+            # Do not carry a stale pre-pause window into a new playback run;
+            # decode averages remain useful and are intentionally preserved.
+            self.playback_stats.reset_frame_timing()
+
         if self.playlist_playback_active and self.player.player is None:
             self.start_playlist_playback()
         elif self.compare_active and self.compare_player.player is not None:
@@ -2381,6 +2385,11 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.statsHudTimer.stop()
 
+    def record_playback_frame(self, _image=None):
+        """Measure presentation frames only while transport is running."""
+        if self.player.is_playing:
+            self.playback_stats.record_frame()
+
     def refresh_stats_hud(self):
         """Rebuild the HUD rows from the current measurements."""
         if not self.stats_hud_enabled:
@@ -2394,13 +2403,18 @@ class MainWindow(QtWidgets.QMainWindow):
         if implementation is not None and hasattr(implementation, "cache"):
             cached = len(implementation.cache.cached_frames())
 
+        target_fps = statsmath.effective_target_fps(
+            self._current_fps(), self.playback_speed
+        )
+        proxy_label = proxy.label_for().split(" (", 1)[0]
         rows = statsmath.hud_lines(
             self.playback_stats,
-            target_fps=self._current_fps(),
+            target_fps=target_fps,
             playing=bool(self.player.is_playing),
             frame=self.viewframe.timeline.current_frame,
             frame_count=self.player.frame_count,
             resolution=resolution,
+            proxy_label=proxy_label,
             cached=cached,
         )
         self.viewframe.viewer.set_stats_rows(rows)

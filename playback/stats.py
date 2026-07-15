@@ -56,6 +56,11 @@ class PlaybackStats(object):
         self.dropped = 0
         self.frames_seen = 0
 
+    def reset_frame_timing(self):
+        """Start a fresh FPS window without discarding recent decode cost."""
+        self.frame_times.clear()
+        self.frames_seen = 0
+
     def record_frame(self):
         """Record that a frame reached the screen."""
         now = self.clock()
@@ -195,6 +200,18 @@ def hud_lines(stats, target_fps=0, playing=False, frame=None, frame_count=None,
         rows.append(("DROPPED", str(stats.dropped), False))
 
     return rows
+
+
+def effective_target_fps(source_fps, playback_speed=1.0):
+    """Return the displayed FPS expected at the selected transport speed."""
+    try:
+        rate = float(source_fps)
+        multiplier = float(playback_speed)
+    except (TypeError, ValueError):
+        return 0.0
+    if rate <= 0 or multiplier <= 0 or rate != rate or multiplier != multiplier:
+        return 0.0
+    return rate * multiplier
 
 
 if __name__ == "__main__":
