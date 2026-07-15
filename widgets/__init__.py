@@ -1356,6 +1356,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "current_frame": self.viewframe.timeline.current_frame,
             "shot_timeline_visible": self.shotSequenceWidget.isVisible(),
             "loop_mode": self.loop_mode,
+            "playback_speed": self.playback_speed,
             "window": {"geometry": session.encode_geometry(self.saveGeometry())},
         }
         temporary = filepath + ".tmp"
@@ -1439,6 +1440,9 @@ class MainWindow(QtWidgets.QMainWindow):
             bool(document.get("shot_timeline_visible", True))
         )
         self.set_loop_mode(document.get("loop_mode", "off"))
+        self.set_playback_speed(
+            document.get("playback_speed", constants.DEFAULT_PLAYBACK_SPEED)
+        )
         saved_frame = int(document.get("current_frame") or constants.VL_START_FRAME)
         index, entry = self._playlist_entry_for_frame(saved_frame)
         if entry is None:
@@ -2243,8 +2247,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.playback_speed = value
 
         self.player.set_speed(value)
-        if self.compare_active:
-            self.compare_player.set_speed(value)
+        # Store the setting on B even before Compare is active, so a later
+        # compare load inherits the same clock multiplier as A.
+        self.compare_player.set_speed(value)
 
         combobox = getattr(
             getattr(

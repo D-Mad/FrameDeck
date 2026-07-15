@@ -216,6 +216,11 @@ class MediaPlayer(BasePlayer):
         # Active player implementation.
         self.player = None
 
+        # Keep transport state at this wrapper level so replacing the concrete
+        # movie/sequence player during a source or playlist change does not
+        # silently reset the speed while the UI still shows the old value.
+        self.playback_speed = constants.DEFAULT_PLAYBACK_SPEED
+
         # Active OCIO processor
         self.ocio_processor = None
 
@@ -257,6 +262,8 @@ class MediaPlayer(BasePlayer):
             self.player = MoviePlayer()
         else:
             self.player = SequencePlayer()
+
+        self.player.set_speed(self.playback_speed)
 
         if self.ocio_processor:
             self.player.set_ocio(self.ocio_processor, self.input_space, self.display, self.view)
@@ -357,9 +364,10 @@ class MediaPlayer(BasePlayer):
             self.player.set_fps(fps)
 
     def set_speed(self, value):
-        """Set the playback speed multiplier on the active implementation."""
+        """Store and apply the playback speed multiplier."""
+        self.playback_speed = speed.normalize(value)
         if self.player and hasattr(self.player, "set_speed"):
-            self.player.set_speed(value)
+            self.player.set_speed(self.playback_speed)
 
     def set_aov(self, aov):
         """Set active AOV.

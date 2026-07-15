@@ -263,3 +263,46 @@ def test_movie_audio_still_plays_at_real_time(movie_player):
     player.play_audio(current_time=10.0)
 
     assert written == [frame]
+
+
+def test_media_player_speed_survives_player_replacement(monkeypatch):
+    """Changing sources must not leave the UI at 2x while playback resets to 1x."""
+    from playback import player as player_module
+
+    created = []
+
+    class _Signal:
+        def connect(self, _callback):
+            pass
+
+    class _ConcretePlayer:
+        def __init__(self):
+            self.speed = 1.0
+            self.frame_ready = _Signal()
+            self.frame_changed = _Signal()
+            self.cache_changed = _Signal()
+            self.timeline_actived = _Signal()
+            self.playback_finished = _Signal()
+            created.append(self)
+
+        def set_speed(self, value):
+            self.speed = value
+
+        def load(self, _path):
+            pass
+
+        def reset(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr(player_module, "MoviePlayer", _ConcretePlayer)
+
+    wrapper = player_module.MediaPlayer()
+    wrapper.set_speed(2.0)
+    wrapper.load("first.mp4")
+    wrapper.load("second.mp4")
+
+    assert len(created) == 2
+    assert [concrete.speed for concrete in created] == [2.0, 2.0]
